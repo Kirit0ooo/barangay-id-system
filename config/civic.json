@@ -1,0 +1,11 @@
+{
+  "_comment": "F15: operator-editable civic overrides. Partial JSON merged over built-in defaults in src-tauri/src/config.rs. Keep inside project (isolated).",
+  "republic": "Republic of the Philippines",
+  "province_line": "Province of Samar • Municipality of Basey",
+  "barangay_full": "BARANGAY (NOUVELAS OCCIDENTAL) BALUD",
+  "barangay_short": "BALUD",
+  "city_line": "Basey, Samar",
+  "card_title": "BARANGAY RESIDENT'S CARD",
+  "punong_name": "RAYMUND ROSILLER R. DE VEYRA",
+  "punong_title": "PUNONG BARANGAY"
+}

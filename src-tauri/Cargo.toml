@@ -1,0 +1,33 @@
+[package]
+name = "barangay-id-system"
+version = "1.0.0"
+description = "Barangay Resident ID Card Registration System"
+authors = ["Barangay IT"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+tauri = { version = "1.5", features = [ "fs-write-file", "fs-read-dir", "fs-remove-file", "fs-remove-dir", "fs-read-file", "fs-create-dir", "fs-copy-file", "fs-rename-file", "fs-exists", "dialog-all", "shell-open", "window-all"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite", "macros", "chrono"] }
+tokio = { version = "1", features = ["full"] }
+thiserror = "1"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-appender = "0.2"
+image = { version = "0.24", features = ["jpeg", "png"] } # photo ingest: EXIF orient + resize + JPEG encode (preview/print path, NOT pdf-only)
+# F-clean: genpdf removed (unused). printpdf removed (PDF generation deleted; print is HTML-only via card-template.html).
+rust_xlsxwriter = "0.78"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+calamine = "0.24" # Excel import (export.rs); kept, PDF-independent
+base64 = "0.21"
+qrcode = { version = "0.13", features = ["image"] } # preview QR data-URL (get_qr_data_url); kept, PDF-independent
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

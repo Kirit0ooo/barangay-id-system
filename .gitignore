@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+.npm-cache/
+
+# Build outputs
+src-tauri/target/
+dist/
+
+# Local data - kept inside project per isolation requirement
+# Do NOT ignore data/ itself structure, but ignore generated DB
+data/residents.db
+data/residents.db-journal
+data/residents.db-wal
+data/residents.db-shm
+data/photos/*
+!data/photos/.gitkeep
+data/backups/*
+!data/backups/.gitkeep
+# P2-11: data/id_cards/ + Documents/PDF/ entries removed — PDF-era dirs the
+# app never creates anymore (print is HTML-only; see Documents/README.md).
+Documents/Excel/*
+!Documents/Excel/.gitkeep
+!Documents/README.md
+tmp/
+logs/*.log
+logs/*.log.*
+!logs/.gitkeep
+*.log
+.DS_Store
+Thumbs.db
+
+# Keep installer artifacts isolated
+src-tauri/target/release/bundle/

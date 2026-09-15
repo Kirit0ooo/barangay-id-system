@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="barangay.ico" type="image/x-icon">
+<title>Barangay Resident's Card - Official Template (CR100 98.6x66.8mm)</title>
+<!--
+  OFFICIAL Barangay Resident's Card template — portable, offline-first. CR100.
+  - No CDN, no tracking, no external fonts: all CSS inlined.
+    Type: "Source Serif Pro", Georgia, serif (civic display) + "Work Sans",
+    "Segoe UI", Arial (body/data) with system fallbacks so print works offline.
+  - Logos resolve to local isolated assets: ./assets/BALUD.png and
+    ./assets/bagong-pilipinas.png (transparent PNGs seated directly on the
+    lime header — no medallion, no circle crop, art blends into the green).
+  - Dynamic slots use data-field="<name>"; opener (js/app.js renderCardTemplate)
+    or window.__renderCard(payload) fills them, then window.print().
+  - Geometry: card is exactly 98.6mm × 66.8mm (CR100 3.88×2.63in).
+    Screen shows a 3mm bleed frame + crop marks; safe area = 3mm inset.
+    Print: @page is A4 portrait with front over back (preview order) and a
+    1in top margin — each CR100 card keeps a dashed cut outline at its edge.
+  /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 */
+-->
+<style>
+  :root{
+    --lime:#FF2B00; --lime-dark:#CC2200;
+    --gold:#C79C14;
+    --navy:#0F2B5E; --navy-2:#0F2B5E;
+    --red:#e41119;
+    --ink:#111827; --muted:#475569; --line:#d1d5db; --label-bg:#e5e7eb;
+    --font-display:"Source Serif Pro",Georgia,"Times New Roman",serif;
+    --font-body:"Work Sans","Segoe UI",Arial,Helvetica,sans-serif;
+    --font-data:"Work Sans","Segoe UI",Arial,Helvetica,sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{background:#e8eaf0; font-family:var(--font-body); color:var(--ink);}
+  body{padding:18px 10px 40px; -webkit-print-color-adjust:exact; print-color-adjust:exact;}
+  .page-label{text-align:center; font-size:9px; font-weight:800; letter-spacing:1px; color:var(--muted); margin:14px 0 8px; text-transform:uppercase;}
+  .page-label:first-child{margin-top:0;}
+  .page-label .dim{font-weight:600; letter-spacing:.4px; text-transform:none;}
+
+  .sheet{max-width:210mm; margin:0 auto;}
+
+  /* ---- bleed frame (screen + print guides) ---- */
+  .bleed{width:104.6mm; margin:0 auto; padding:3mm; position:relative;
+    background:#fff; border:.3mm dashed #9ca3af;}
+  .bleed .crop{position:absolute; width:5mm; height:5mm; border:0 solid #111827;}
+  .bleed .crop.tl{top:-.2mm; left:-.2mm; border-top-width:.4mm; border-left-width:.4mm;}
+  .bleed .crop.tr{top:-.2mm; right:-.2mm; border-top-width:.4mm; border-right-width:.4mm;}
+  .bleed .crop.bl{bottom:-.2mm; left:-.2mm; border-bottom-width:.4mm; border-left-width:.4mm;}
+  .bleed .crop.br{bottom:-.2mm; right:-.2mm; border-bottom-width:.4mm; border-right-width:.4mm;}
+
+  /* ---- Polished vector card — no hardcoded image URLs ---- */
+  /* Base .card is pure vector (lime #8BD600 header, navy #0F2B5E ribbon, grey labels). */
+  /* When an operator sets config/civic.json card_template_front/back, the app injects */
+  /* a data-URL background via inline style — no hardcoded URL probing. */
+
+  /* ---- CR100 card: exactly 98.6mm x 66.8mm ---- */
+  .card{width:98.6mm; height:66.8mm; margin:0 auto; background:#fff;
+    border:.35mm solid var(--line); border-radius:2.4mm; overflow:hidden;
+    display:flex; flex-direction:column;
+    box-shadow:0 2px 10px rgba(0,0,0,.14); position:relative;}
+
+  /* ---- FRONT header (lime, transparent dual logos, no medallion) ---- */
+  .front-hdr{background:var(--lime); display:flex; align-items:center; gap:2.6mm;
+    padding:2mm 2.8mm 1.8mm; border-bottom:.45mm solid var(--lime-dark);}
+  .medal{width:12mm; height:12mm; background:transparent; border:none;
+    box-shadow:none; display:flex; align-items:center; justify-content:center;
+    flex-shrink:0; overflow:visible;}
+  .medal img{width:100%; height:100%; object-fit:contain; display:block;
+    filter:drop-shadow(0 .35mm .7mm rgba(0,0,0,.35));}
+  .front-hdr .mid{flex:1; text-align:center; line-height:1.25; min-width:0;}
+  .front-hdr .r1{font-family:var(--font-display); font-size:2.1mm; letter-spacing:.2mm; color:#1a1a1a; font-weight:700;}
+  .front-hdr .r2{font-family:var(--font-display); font-size:2.1mm; color:#1a1a1a;}
+  .front-hdr .brgy{font-family:var(--font-display); font-size:2.5mm; font-weight:800; color:var(--ink);}
+  /* Specimen title: plain white masthead title (no ribbon pill). */
+  /* Card title: strictly one line — sized to clear both logos. */
+  .title-ribbon{display:inline-block; max-width:100%; color:#fff;
+    font-family:var(--font-display); font-size:3.4mm; font-weight:800; letter-spacing:.25mm;
+    margin-top:1mm; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+
+  /* ---- FRONT body ---- */
+  .front-body{flex:1; display:flex; gap:2.2mm; padding:1.6mm 2.8mm; background:#f8fafc; min-height:0; position:relative;}
+  .photo-col{width:20.9mm; flex-shrink:0; display:flex; flex-direction:column; gap:1.2mm;}
+  .photo-box{width:20.9mm; height:20.9mm; background:#fff; border:.4mm solid var(--ink);
+    border-radius:1mm; overflow:hidden; display:flex; align-items:center; justify-content:center; position:relative;}
+  .photo-box img{width:100%; height:100%; object-fit:cover; display:block;}
+  .photo-box img[src=""]{visibility:hidden;}
+  /* Resident ID at true 1:1 directly above the signature line (CR100 fit). */
+  /* Signature + ID sit slightly lower in the photo seat (global rule so
+     preview and print stay identical). */
+  .sigbox{text-align:center; padding-top:.8mm; margin-top:1mm; max-width:100%; overflow:hidden;}
+  /* Full resident ID lives in the wide strip (see below), never in the
+     20.9mm signature seat: ~92mm fits 35+ chars one-line, in-flow so it
+     can neither clip nor overlay. */
+  /* Resident ID under the signature: caption + number share one mono face
+     at one size (both 15 chars, so equal length), fitted to the photo seat. */
+  .idunder{margin-top:1.2mm; border-top:.3mm solid var(--line); padding-top:1mm; min-width:0;}
+  .idunder .idcap{font-family:Consolas,"Courier New",monospace; font-size:2mm; font-weight:800;
+    letter-spacing:.05mm; color:#374151; white-space:nowrap;}
+  .idunder .idno{font-size:2mm; font-weight:800; color:var(--red);
+    font-family:Consolas,"Courier New",monospace; letter-spacing:.05mm;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .sigbox .sig-line{border-top:.3mm solid var(--ink); width:100%; margin-top:1.5mm;}
+  .sigbox .cap{font-size:1.7mm; color:#555; letter-spacing:.15mm; font-weight:600; padding-top:.8mm; white-space:nowrap;}
+
+  /* Tight vertical rhythm so the address always fits: savings stay above
+     the bottom row, which never moves down. */
+  .fields{flex:1; display:flex; flex-direction:column; gap:1mm; min-width:0;}
+  /* Boxes stay content-sized and identical: the middle stack (Civil Status +
+     ID number) must not stretch its neighbors. */
+  .row3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:1.6mm; align-items:start;}
+  .fg{background:#fff; border:.3mm solid var(--line); border-radius:1mm; overflow:hidden; min-width:0;}
+  .fg .fl{background:var(--label-bg); color:#374151; font-size:1.7mm; font-weight:800;
+    letter-spacing:.2mm; text-align:center; padding:.7mm 0; text-transform:uppercase; white-space:nowrap;}
+  .fg .fv{color:var(--ink); font-family:var(--font-data); font-size:2.3mm; font-weight:700; text-align:center;
+    padding:.9mm .6mm; text-transform:uppercase; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    font-variant-numeric:tabular-nums;}
+  .fg.addr .fv{font-size:2mm; letter-spacing:.05mm;}
+  .front-bottom{display:grid; grid-template-columns:11mm 1fr; gap:2mm; align-items:end;}
+  /* QR: borderless 11mm so the bottom row stays
+     inside the fixed 66.8mm card instead of clipping in CR100 view. */
+  .qr-box{width:11mm; height:11mm; flex-shrink:0; background:transparent;
+    border:none; padding:0; display:flex; align-items:center; justify-content:center;}
+  .qr-box img{width:100%; height:100%; object-fit:contain; display:block;}
+  .qr-box img[src=""]{visibility:hidden;}
+  /* Punong Barangay signature seat: fixed 45mm box, clamped inside the card. */
+  .officer{text-align:center; padding-bottom:.5mm; min-width:0; max-width:45mm; width:100%; justify-self:end;
+    display:flex; flex-direction:column; align-items:center; justify-content:flex-end; overflow:hidden;}
+  .officer .sig-line{width:45mm; max-width:100%; height:4mm; border-bottom:.3mm solid var(--ink); flex-shrink:0;}
+  .officer .name{font-size:2.1mm; font-weight:800; text-transform:uppercase; line-height:1.2;
+    max-width:100%; text-align:center; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+    overflow:hidden; text-overflow:ellipsis; overflow-wrap:anywhere;}
+  .officer .role{font-size:2.2mm; color:#374151; letter-spacing:.2mm; margin-top:.5mm; font-weight:600; white-space:nowrap;}
+
+  .watermark{position:absolute; right:16mm; top:8mm; width:30mm; height:30mm; opacity:.08;
+    object-fit:contain; pointer-events:none;}
+
+  /* ---- BACK ---- */
+  .back-hdr{background:var(--navy); color:#fff; text-align:center; padding:2.6mm 1mm; border-bottom:.4mm solid var(--gold);}
+  .back-hdr .t{font-family:var(--font-display); font-size:3.8mm; font-weight:800; letter-spacing:.4mm;}
+  .back-body{flex:1; padding:2.6mm 4mm; display:flex; flex-direction:column; justify-content:center; background:#fff;}
+  /* Specimen back: single-column colon ledger (no boxed cards). */
+  .back-grid{display:grid; grid-template-columns:1fr; gap:2.2mm;}
+  .bk{display:flex; align-items:baseline; gap:2mm; min-width:0;}
+  .bk.addr{grid-column:1 / -1;}
+  .bk .bl{font-family:var(--font-display); font-size:2.7mm; font-weight:800; color:var(--ink);
+    letter-spacing:.15mm; text-transform:uppercase; min-width:32mm; flex-shrink:0;}
+  .bk .bl::after{content:":"; margin-left:2mm;}
+  .bk .bv{font-family:var(--font-display); font-size:2.7mm; font-weight:700; color:var(--ink);
+    text-transform:uppercase; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;}
+  .bk.addr .bv{white-space:normal; line-height:1.35;}
+  /* Specimen validity: red serif bar on white (no black box). */
+  .valid-bar{background:#fff; color:var(--red); text-align:center;
+    font-family:var(--font-display); font-size:3.4mm; font-weight:800;
+    letter-spacing:.3mm; padding:2.4mm 1mm; border-top:.35mm solid var(--ink);}
+
+  /* ---- cut guides ---- */
+  .cutline{width:98.6mm; margin:2mm auto 0; border-top:.3mm dashed #6b7280; position:relative;}
+  .cutline .sc{position:absolute; top:-2.6mm; font-size:3mm; color:#374151;}
+  .cutline .sc.l{left:-5mm;} .cutline .sc.r{right:-5mm;}
+
+  /* Print footer note: hidden on screen, shown on the A4 below the cards. */
+  .print-note{display:none;}
+  .toolbar{max-width:210mm; margin:0 auto 14px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap;}
+  .toolbar button{font:600 13px/1 "Segoe UI",Arial,sans-serif; padding:9px 18px; border-radius:9px;
+    border:1px solid #cbd5e1; background:#fff; color:#0f172a; cursor:pointer;}
+  .toolbar button.primary{background:#0f172a; color:#fff; border-color:#0f172a;}
+
+  @media print{
+    @page{size:A4 portrait; margin:25.4mm 0 0;}
+    html,body{background:#fff;}
+    body{padding:0;}
+    .toolbar,.page-label,.cutline{display:none !important;}
+    .print-note{display:block; width:101.7mm; margin:8mm auto 0; text-align:center; color:#111827;}
+    .pn-title{font-family:var(--font-display); font-size:4mm; font-weight:800; letter-spacing:.3mm;}
+    .pn-time{font-size:2.6mm; color:#475569; margin-top:1mm;}
+    .pn-list{list-style:none; margin:3mm 0 0; padding:3mm 0 0; border-top:.3mm solid #9ca3af;
+      text-align:left; font-size:2.6mm; line-height:1.5;}
+    .pn-list li{margin-top:1mm;}
+    .pn-list li::before{content:"\2022  "; color:#0F2B5E; font-weight:800;}
+    .no-print{display:none !important;}
+    /* Print: front over back — same up-down order as preview — on one
+       portrait A4 with a 1in top margin; each resident keeps its page. */
+    .sheet{max-width:none; transform:none !important; display:block;}
+    /* Bulk: one resident pair per A4 page. */
+    .sheet>div:not(.bleed):not(.cutline):not(.page-label):not(.toolbar):not(.no-print):not(.print-note){page-break-after:always;}
+    .sheet>div:not(.bleed):not(.cutline):not(.page-label):not(.toolbar):not(.no-print):not(.print-note):last-child{page-break-after:auto;}
+    /* 1:1 fit: bleed is the cut guide — a real bordered box (always fully
+       painted) holding the exact-CR100 card 1.2mm clear of the dashes. */
+    .bleed{padding:1.2mm; margin:0 auto; width:101.7mm; border:.35mm dashed #4b5563; background:#fff;}
+    .bleed .crop{display:none;}
+    /* WYSIWYG: screen card (98.6x66.8, exact seats/colors) == printed card */
+    .card{width:98.6mm; height:66.8mm; box-shadow:none; border:.35mm solid var(--line); border-radius:2.4mm;
+      box-sizing:border-box;
+      -webkit-print-color-adjust:exact; print-color-adjust:exact;}
+    .back-bleed{page-break-before:auto; margin-top:6mm;}
+  }
+</style>
+</head>
+<body>
+  <div class="toolbar no-print">
+    <button class="primary" onclick="window.print()">Print (A4 · front over back)</button>
+    <button onclick="window.__zoom(1)">100%</button>
+    <button onclick="window.__zoom(0)">Fit width</button>
+    <button onclick="window.close()">Close</button>
+  </div>
+
+  <div class="sheet">
+    <div class="page-label">Front — Barangay Resident's Card · 98.6 × 66.8 mm (CR100) <span class="dim">· 3mm bleed · safe 3mm</span></div>
+    <div class="bleed" aria-hidden="false">
+      <span class="crop tl"></span><span class="crop tr"></span>
+      <span class="crop bl"></span><span class="crop br"></span>
+    <section class="card" id="front-card" aria-label="Barangay Resident Card front">
+      <header class="front-hdr">
+        <span class="medal"><img data-field="seal" src="./assets/BALUD.png" alt="Barangay seal"></span>
+        <div class="mid">
+          <div class="r1" data-field="republic">Republic of the Philippines</div>
+          <div class="r2" data-field="province">Province of Samar</div>
+          <div class="r2" data-field="municipality">Municipality of Basey</div>
+          <div class="brgy" data-field="barangay">BARANGAY (NOUVELAS OCCIDENTAL) BALUD</div>
+          <div><span class="title-ribbon" data-field="card_title">BARANGAY RESIDENT'S CARD</span></div>
+        </div>
+        <span class="medal"><img data-field="emblem" src="./assets/bagong-pilipinas.png" alt="Bagong Pilipinas emblem"></span>
+      </header>
+      <div class="front-body">
+        <img class="watermark" src="./assets/BALUD.png" alt="" aria-hidden="true">
+        <div class="photo-col">
+          <div class="photo-box">
+            <img data-field="photo" src="" alt="Resident photo" onerror="this.onerror=null;this.src=''">
+          </div>
+          <div class="sigbox id-and-signature">
+            <div class="sig-line" aria-hidden="true"></div>
+            <div class="cap">RESIDENT SIGNATURE</div>
+            <div class="idunder"><div class="idcap">RESIDENT ID NO.</div><div class="idno" data-field="resident_id">BRGY-2026-00000</div></div>
+          </div>
+        </div>
+        <div class="fields">
+          <div class="row3">
+            <div class="fg"><div class="fl">Last Name</div><div class="fv" data-field="last_name">—</div></div>
+            <div class="fg"><div class="fl">First Name</div><div class="fv" data-field="first_name">—</div></div>
+            <div class="fg"><div class="fl">Middle Name</div><div class="fv" data-field="middle_name">—</div></div>
+          </div>
+          <div class="row3">
+            <div class="fg"><div class="fl">Date of Birth</div><div class="fv" data-field="dob">—</div></div>
+            <div class="fg"><div class="fl">Civil Status</div><div class="fv" data-field="civil_status">—</div></div>
+            <div class="fg"><div class="fl">Gender</div><div class="fv" data-field="gender">—</div></div>
+          </div>
+          <div class="fg addr"><div class="fl">Address</div><div class="fv" data-field="address">—</div></div>
+          <div class="front-bottom">
+            <div class="qr-box"><img data-field="qr" src="" alt="Verification QR"></div>
+            <div class="officer">
+              <div class="sig-line" aria-hidden="true"></div>
+              <div class="name" data-field="punong_name">RAYMUND ROSILLER R. DE VEYRA</div>
+              <div class="role" data-field="punong_title">PUNONG BARANGAY</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    </div>
+    <div class="cutline" aria-hidden="true"><span class="sc l">✂</span><span class="sc r">✂</span></div>
+
+    <div class="page-label">Back — Emergency · 98.6 × 66.8 mm (CR100) <span class="dim">· 3mm bleed · safe 3mm</span></div>
+    <div class="bleed back-bleed">
+      <span class="crop tl"></span><span class="crop tr"></span>
+      <span class="crop bl"></span><span class="crop br"></span>
+    <section class="card" id="emergency-card" aria-label="Barangay Resident Card back">
+      <div class="back-hdr">
+        <div class="t"><span data-field="emergency_title">IN CASE OF EMERGENCY NOTIFY:</span></div>
+      </div>
+      <div class="back-body">
+        <div class="back-grid">
+          <div class="bk"><div class="bl">Name</div><div class="bv" data-field="emer_name">—</div></div>
+          <div class="bk"><div class="bl">Relationship</div><div class="bv" data-field="emer_relation">—</div></div>
+          <div class="bk addr"><div class="bl">Address</div><div class="bv" data-field="emer_address">—</div></div>
+          <div class="bk"><div class="bl">Contact No.</div><div class="bv" data-field="emer_contact">—</div></div>
+        </div>
+      </div>
+      <div class="valid-bar" data-field="valid_until">THIS ID IS VALID UNTIL —</div>
+    </section>
+    </div>
+    <div class="cutline" aria-hidden="true"><span class="sc l">✂</span><span class="sc r">✂</span></div>
+    <div class="print-note">
+      <div class="pn-title">Barangay Resident ID Registration System</div>
+      <div class="pn-time" data-field="printed_at">Printed on —</div>
+      <ul class="pn-list">
+        <li>Verify this card by scanning the QR code on the front.</li>
+        <li>This ID is valid until the date printed on the front of the card.</li>
+        <li>Report a lost or damaged card to the Barangay Hall for re-issue.</li>
+      </ul>
+    </div>
+  </div>
+
+<script>
+/* Data-injection bridge — no external deps, no network calls.
+   window.__renderCard(payload): fills every [data-field] slot.
+   payload keys: republic, province, municipality, barangay, card_title,
+   photo, last_name, first_name, middle_name, dob, civil_status, gender,
+   address, resident_id, qr, punong_name, punong_title, emergency_title,
+   emer_name, emer_relation, emer_address, emer_contact, valid_until,
+   seal, emblem (optional overrides). Set window.__autoPrint=true before
+   calling to print immediately after fill. */
+(function () {
+  var IMG_FIELDS = { photo: 1, qr: 1, seal: 1, emblem: 1 };
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  // No hardcoded template background — pure vector by default. Operator template
+  // via config/civic.json is injected as inline data-URL style by the app when present.
+  window.__renderCard = function (payload) {
+    payload = payload || {};
+    document.querySelectorAll("[data-field]").forEach(function (el) {
+      var key = el.getAttribute("data-field");
+      if (!(key in payload) || payload[key] == null || payload[key] === "") return;
+      if (IMG_FIELDS[key] && el.tagName === "IMG") {
+        el.setAttribute("src", payload[key]);
+      } else {
+        el.textContent = payload[key];
+      }
+    });
+    if (payload.resident_id) {
+      document.title = "ID Card - " + payload.resident_id;
+    }
+    if (window.__autoPrint) {
+      setTimeout(function () { window.print(); }, 250);
+    }
+    return true;
+  };
+  window.__zoom = function (mode) {
+    var s = document.querySelector('.sheet');
+    if (!s) return;
+    if (mode === 1) { s.style.transform = ''; return; }
+    var w = s.scrollWidth || 794;
+    var avail = document.documentElement.clientWidth - 20;
+    var k = Math.min(1, avail / w);
+    s.style.transformOrigin = 'top center';
+    s.style.transform = 'scale(' + k + ')';
+  };
+  window.__esc = esc;
+  /* Print timestamp (DD-MM-YYYY, card convention) stamped at open + print. */
+  window.__stampPrintTime = function () {
+    var el = document.querySelector(".print-note .pn-time");
+    if (!el) return;
+    var d = new Date(), h = d.getHours(), ap = h >= 12 ? "PM" : "AM";
+    h = h % 12; if (h === 0) h = 12;
+    function pad(n) { return (n < 10 ? "0" : "") + n; }
+    el.textContent = "Printed on " + pad(d.getDate()) + "-" + pad(d.getMonth() + 1) + "-" + d.getFullYear() +
+      " at " + pad(h) + ":" + pad(d.getMinutes()) + " " + ap;
+  };
+  window.__stampPrintTime();
+  window.addEventListener("beforeprint", window.__stampPrintTime);
+  try {
+    if (location.hash === "#print" || /(?:\?|&)print=1/.test(location.search)) {
+      window.__autoPrint = true;
+    }
+  } catch (e) { /* file:// sandbox — ignore */ }
+})();
+</script>
+</body>
+</html>

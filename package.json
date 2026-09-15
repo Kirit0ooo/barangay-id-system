@@ -1,0 +1,15 @@
+{
+  "name": "barangay-id-system",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "check:css": "node tools/check-css.mjs",
+    "stamp:css": "node tools/check-css.mjs --update",
+    "test": "node --test tests/smoke.test.js tests/regression.test.js tests/golden-card.test.js tests/bulk-progress.test.js tests/logic.test.js"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^1.5"
+  }
+}
