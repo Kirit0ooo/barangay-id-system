@@ -31,3 +31,4 @@ Thumbs.db
 
 # Keep installer artifacts isolated
 src-tauri/target/release/bundle/
+data/.last_optimize
