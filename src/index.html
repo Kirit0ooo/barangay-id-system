@@ -13,7 +13,7 @@
 </head>
 <body class="min-h-screen text-slate-900 antialiased selection:bg-amber-200 selection:text-slate-900">
  <a href="#main-content" class="skip-link">Skip to content</a>
- <div id="app" x-data="app()" x-init="init()">
+ <div id="app" x-data="app()" x-init="init()" @keydown.escape.window="if (currentView === 'detail') closeDetail()">
  
  <!-- NAV — 70/20/10 restrained: navy + solid gold rule, no blur, no gradient -->
  <nav class="sticky top-0 z-50 border-b border-slate-800 bg-[#0F2B5E] text-white" aria-label="Primary">
@@ -31,10 +31,6 @@
  <button role="tab" :aria-selected="currentView === 'search'" @click="await searchResidents(); currentView='search'" :class="currentView === 'search' ? 'bg-white text-[#0F2B5E] shadow-sm ring-2 ring-[#C79C14]' : 'bg-white/10 text-white hover:bg-white/20'" class="px-3.5 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 whitespace-nowrap">Search</button>
  <button role="tab" :aria-selected="currentView === 'settings'" @click="await loadCivicConfig(); currentView = 'settings'" :class="currentView === 'settings' ? 'bg-white text-[#0F2B5E] shadow-sm ring-2 ring-[#C79C14]' : 'bg-white/10 text-white hover:bg-white/20'" class="px-3 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 whitespace-nowrap">Settings</button>
  </div>
- <!-- Detail view back button (shown only in detail view) -->
- <div x-show="currentView === 'detail'" class="ml-auto flex items-center">
- <button @click="closeDetail()" class="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 whitespace-nowrap" aria-label="Back to previous view"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg><span class="hidden sm:inline">Back</span></button>
- </div>
  </div>
  <div class="h-[3px] bg-[#C79C14]" aria-hidden="true"></div>
  </nav>
@@ -43,15 +39,11 @@
  <main id="main-content" tabindex="-1" class="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 focus:outline-none">
  
  <!-- DASHBOARD — premium -->
- <div x-show="currentView === 'dashboard'" class="space-y-6" x-transition.opacity>
+ <div x-show="currentView === 'dashboard'" x-cloak class="space-y-6" x-transition.opacity>
  <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
  <div>
  <div class="flex items-baseline gap-3 mt-1">
- <h2 class="text-2xl sm:text-[28px] font-extrabold tracking-tight text-slate-900">Dashboard</h2>
- <span class="hidden sm:inline-flex items-center gap-1.5 bg-white text-slate-700 border border-slate-200 px-2.5 py-1 rounded-full text-[11px] font-semibold tracking-wide">
- <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full" aria-hidden="true"></span>
- <span x-text="stats.total + ' residents'">0 residents</span>
- </span>
+ <h2 class="text-2xl sm:text-[28px] font-extrabold tracking-tight text-slate-900 view-title">Dashboard</h2>
  </div>
  </div>
  <div class="flex gap-2">
@@ -63,41 +55,86 @@
  </div>
  </div>
  
- <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
- <!-- Total Residents -- Primary -->
- <div class="stat-card stat-card--primary" role="region" aria-label="Total Residents">
+ <!-- Population hero — totals flank the pie: Total | donut | This Year -->
+ <div class="stat-card stat-hero" role="region" aria-label="Population overview">
+ <div class="stat-hero__layout">
+ <div class="stat-hero__side stat-hero__side--left">
+ <div class="stat-hero__stat stat-hero__stat--total">
  <div class="stat-card__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
  <div class="stat-card__label"><span>Total Residents</span></div>
  <div class="stat-card__value" x-text="stats.total">0</div>
  <div class="stat-card__meta">All registered (active)</div>
  </div>
-
- <!-- This Year -- Secondary -->
- <div class="stat-card stat-card--secondary" role="region" aria-label="This Year">
+ <div class="stat-hero__stat stat-hero__stat--year">
  <div class="stat-card__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"/></svg></div>
  <div class="stat-card__label"><span>This Year</span><template x-if="stats.thisYear > 0"><span class="text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full ml-2">new</span></template></div>
  <div class="stat-card__value" x-text="stats.thisYear">0</div>
  <div class="stat-card__meta">Registered <span x-text="new Date().getFullYear()">2026</span> · soft-delete safe</div>
  </div>
-
- <!-- Male -- Ratio -->
- <div class="stat-card stat-card--ratio stat-card--male" role="region" aria-label="Male residents">
- <div class="stat-card__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg></div>
- <div class="stat-card__label"><span>Male</span></div>
- <div class="stat-card__value" x-text="stats.male">0</div>
- <div class="stat-card__ratio" x-text="stats.total ? Math.round(stats.male/stats.total*100)+'%' : '0%'">0%</div>
- <div class="stat-card__bar"><div class="stat-card__bar-fill" :style="'width:' + (stats.total ? (stats.male/stats.total*100) : 0) + '%'" aria-hidden="true" role="img" :aria-label="'Male: ' + (stats.total ? Math.round(stats.male/stats.total*100) : 0) + '%'"></div></div>
- <div class="stat-card__meta" x-text="stats.male + ' of ' + stats.total + ' residents'">0 of 0 residents</div>
+ </div>
+ <div class="stat-hero__divider" aria-hidden="true"></div>
+ <div class="stat-hero__chart">
+ <div class="pie-wrap">
+ <svg class="pie" viewBox="0 0 140 126" role="img" :aria-label="'Male ' + stats.male + ', Female ' + stats.female">
+ <defs><filter id="pieSoft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="2"/></filter><radialGradient id="pieGradMale" cx="0.5" cy="0.5" r="0.8"><stop offset="0" stop-color="#8ab6fa"/><stop offset="1" stop-color="#2563eb"/></radialGradient><radialGradient id="pieGradFemale" cx="0.5" cy="0.5" r="0.8"><stop offset="0" stop-color="#f5a3c7"/><stop offset="1" stop-color="#ec4899"/></radialGradient></defs>
+ <ellipse cx="70" cy="116" rx="42" ry="6" class="pie-shadow" filter="url(#pieSoft)" aria-hidden="true"/>
+ <circle cx="70" cy="58" r="45" fill="none" stroke="#e8edf3" stroke-width="22" aria-hidden="true"/>
+ <circle cx="70" cy="58" r="56.5" fill="none" stroke="#dbe2ea" stroke-width="1.5" aria-hidden="true"/>
+ <circle cx="70" cy="58" r="33.5" fill="none" stroke="#dbe2ea" stroke-width="1.5" aria-hidden="true"/>
+ <template x-for="i in [5,4,3,2,1]" :key="i">
+ <g aria-hidden="true">
+ <circle cx="70" :cy="58 + i" r="45" fill="none" stroke="#1e40af" stroke-width="22" pathLength="100" :stroke-dasharray="pieSeg(stats.male) + ' 100'" :transform="'rotate(-90 70 ' + (58 + i) + ')'" :opacity="0.35 + i * 0.06"/>
+ <circle cx="70" :cy="58 + i" r="45" fill="none" stroke="#be185d" stroke-width="22" pathLength="100" :stroke-dasharray="pieSeg(stats.female) + ' 100'" :stroke-dashoffset="pieOff()" :transform="'rotate(-90 70 ' + (58 + i) + ')'" :opacity="0.35 + i * 0.06"/>
+ </g>
+ </template>
+ <circle cx="70" cy="58" r="45" fill="none" stroke="url(#pieGradMale)" stroke-width="22" pathLength="100" :stroke-dasharray="pieSeg(stats.male) + ' 100'" transform="rotate(-90 70 58)" stroke-linecap="round"/>
+ <circle cx="70" cy="58" r="45" fill="none" stroke="url(#pieGradFemale)" stroke-width="22" pathLength="100" :stroke-dasharray="pieSeg(stats.female) + ' 100'" :stroke-dashoffset="pieOff()" transform="rotate(-90 70 58)" stroke-linecap="round"/>
+ <template x-if="pieBoth()">
+ <g stroke="#ffffff" stroke-width="3" stroke-linecap="round" aria-hidden="true">
+ <line x1="70" y1="1" x2="70" y2="25"/>
+ <line x1="70" y1="1" x2="70" y2="25" :transform="'rotate(' + pieSpan() + ' 70 58)'"/>
+ </g>
+ </template>
+ </svg>
+ <div class="pie-center" aria-hidden="true">
+ <span class="pie-center__value" x-text="stats.total">0</span>
+ <span class="pie-center__label">residents</span>
+ </div>
+ </div>
+ <div class="pie-legend">
+ <div class="pie-legend__row"><span class="pie-dot pie-dot--male" aria-hidden="true"></span><span>Male</span><span class="pie-legend__count" x-text="stats.male">0</span><span class="pie-legend__pct pie-legend__pct--male" x-text="stats.total ? Math.round(stats.male/stats.total*100)+'%' : '—'">—</span><div class="pie-legend__bar stat-card__bar" aria-hidden="true"><div class="stat-card__bar-fill pie-legend__fill--male" :style="'width:' + (stats.total ? (stats.male/stats.total*100) : 0) + '%'"></div></div></div>
+ <div class="pie-legend__row"><span class="pie-dot pie-dot--female" aria-hidden="true"></span><span>Female</span><span class="pie-legend__count" x-text="stats.female">0</span><span class="pie-legend__pct pie-legend__pct--female" x-text="stats.total ? Math.round(stats.female/stats.total*100)+'%' : '—'">—</span><div class="pie-legend__bar stat-card__bar" aria-hidden="true"><div class="stat-card__bar-fill pie-legend__fill--female" :style="'width:' + (stats.total ? (stats.female/stats.total*100) : 0) + '%'"></div></div></div>
+ </div>
  </div>
 
- <!-- Female -- Ratio -->
- <div class="stat-card stat-card--ratio stat-card--female" role="region" aria-label="Female residents">
- <div class="stat-card__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg></div>
- <div class="stat-card__label"><span>Female</span></div>
- <div class="stat-card__value" x-text="stats.female">0</div>
- <div class="stat-card__ratio" x-text="stats.total ? Math.round(stats.female/stats.total*100)+'%' : '0%'">0%</div>
- <div class="stat-card__bar"><div class="stat-card__bar-fill" :style="'width:' + (stats.total ? (stats.female/stats.total*100) : 0) + '%'" aria-hidden="true" role="img" :aria-label="'Female: ' + (stats.total ? Math.round(stats.female/stats.total*100) : 0) + '%'"></div></div>
- <div class="stat-card__meta" x-text="stats.female + ' of ' + stats.total + ' residents'">0 of 0 residents</div>
+ </div>
+ </div>
+
+ <!-- Card Status counts -- Active / Renew / Lost / Damage -->
+ <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+ <div class="stat-card stat-card--active" role="region" aria-label="Active cards">
+ <div class="stat-card__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 6L9 17l-5-5"/></svg></div>
+ <div class="stat-card__label"><span>Active</span></div>
+ <div class="stat-card__value" x-text="stats.active">0</div>
+ <div class="stat-card__meta">Valid cards in circulation</div>
+ </div>
+ <div class="stat-card stat-card--renew" role="region" aria-label="Renew cards">
+ <div class="stat-card__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a9 9 0 11-2.6-6.4"/><path d="M21 3v6h-6"/></svg></div>
+ <div class="stat-card__label"><span>Renew</span></div>
+ <div class="stat-card__value" x-text="stats.renew">0</div>
+ <div class="stat-card__meta">Marked for renewal</div>
+ </div>
+ <div class="stat-card stat-card--lost" role="region" aria-label="Lost cards">
+ <div class="stat-card__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg></div>
+ <div class="stat-card__label"><span>Lost</span></div>
+ <div class="stat-card__value" x-text="stats.lost">0</div>
+ <div class="stat-card__meta">Reported lost</div>
+ </div>
+ <div class="stat-card stat-card--damage" role="region" aria-label="Damage cards">
+ <div class="stat-card__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg></div>
+ <div class="stat-card__label"><span>Damage</span></div>
+ <div class="stat-card__value" x-text="stats.damage">0</div>
+ <div class="stat-card__meta">Reported damaged</div>
  </div>
  </div>
 
@@ -154,22 +191,25 @@
  </div>
 
  <!-- REGISTER — premium form system -->
- <div x-show="currentView === 'register'" class="space-y-5" x-transition.opacity>
+ <div x-show="currentView === 'register'" x-cloak class="register-view space-y-5" x-transition.opacity>
  <div class="flex items-center justify-between gap-4">
  <div>
- <h2 class="text-2xl font-extrabold tracking-tight text-slate-900" x-text="editingResident ? 'Edit Resident' : 'Register New Resident'">Register New Resident</h2>
+ <h2 class="text-2xl font-extrabold tracking-tight text-slate-900 view-title" x-text="editingResident ? 'Edit Resident' : 'Register New Resident'">Register New Resident</h2>
  </div>
- <button @click="clearForm" class="action-btn action-btn--secondary">Clear Form</button>
+ <button x-show="!editingResident" @click="clearForm" class="action-btn action-btn--secondary">Clear Form</button>
+ <button x-show="editingResident" @click="goBackFromEdit()" class="action-btn action-btn--secondary" aria-label="Back to resident details"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back</button>
  </div>
 
  <form @submit.prevent="saveResident" class="space-y-5">
  
  <!-- Photo + ID — hero card -->
- <div class="card">
+ <div class="card register-hero">
+ <div class="register-hero__band"></div>
+ <div class="register-hero__inner">
  <div class="flex flex-col lg:flex-row gap-6">
  <div class="flex-shrink-0 mx-auto lg:mx-0 text-center lg:text-left">
  <label for="photo-upload" class="form-field__label">Photo · 1×1 White Background</label>
- <div class="w-[160px] aspect-square bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl flex items-center justify-center overflow-hidden relative group hover:border-slate-400 hover:bg-slate-100 transition upload-focus mx-auto lg:mx-0">
+ <div class="w-[160px] aspect-square bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl flex items-center justify-center overflow-hidden relative group hover:border-slate-400 hover:bg-slate-100 transition upload-focus mx-auto lg:mx-0 register-photo">
  <img x-show="form.photoData || editPhotoUrl" x-cloak :src="form.photoData || editPhotoUrl" alt="Resident photo preview" class="max-w-full max-h-full object-contain">
  <div x-show="!form.photoData && !editPhotoUrl" x-cloak class="text-center px-3">
  <div class="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center mx-auto text-slate-400" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 19a7 7 0 1 0 0-14 7 7 0 0 0 0 14z"/><path d="M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M12 16.5v3"/></svg></div>
@@ -183,7 +223,7 @@
  <div class="flex-1 space-y-4">
  <div class="grid sm:grid-cols-2 gap-4">
  <div class="sm:col-span-2">
- <label for="resident-id" class="form-field__label">Resident ID No.</label>
+ <label for="resident-id" class="form-field__label">Resident ID No. <span class="form-field__req" aria-hidden="true">*</span></label>
  <div class="flex gap-2">
  <input id="resident-id" type="text" x-model="form.resident_id" @input="onInputUpper($event, 'resident_id')" required placeholder="BRGY-2026-00001" autocomplete="off" spellcheck="false" aria-describedby="resident-id-help" class="form-field__input font-mono text-sm bg-slate-50" aria-describedby="resident-id-help">
  <button type="button" @click="generateID" aria-label="Generate next resident ID" class="shrink-0 action-btn action-btn--primary">Generate</button>
@@ -193,28 +233,30 @@
  </div>
  </div>
  </div>
+ </div>
+ </div>
 
  <!-- Personal Information -->
  <div class="form-section">
  <div class="form-section__head">
- <span class="form-section__number">1</span>
+ <span class="form-section__number register-number">1</span>
  <h3 class="form-section__title">Personal Information</h3>
  <span class="ml-auto text-xs text-slate-500 hidden sm:block">* required</span>
  </div>
  <div class="form-section__body">
  <div class="form-grid form-grid--4">
- <div class="form-field"><label for="inp-last" class="form-field__label">Last Name *</label><input id="inp-last" type="text" x-model="form.last_name" @input="onInputUpper($event, 'last_name')" required autocomplete="family-name" class="form-field__input uppercase field-upper"></div>
- <div class="form-field"><label for="inp-first" class="form-field__label">First Name *</label><input id="inp-first" type="text" x-model="form.first_name" @input="onInputUpper($event, 'first_name')" required autocomplete="given-name" class="form-field__input uppercase field-upper"></div>
+ <div class="form-field"><label for="inp-last" class="form-field__label">Last Name <span class="form-field__req" aria-hidden="true">*</span></label><input id="inp-last" type="text" x-model="form.last_name" @input="onInputUpper($event, 'last_name')" required autocomplete="family-name" class="form-field__input uppercase field-upper"></div>
+ <div class="form-field"><label for="inp-first" class="form-field__label">First Name <span class="form-field__req" aria-hidden="true">*</span></label><input id="inp-first" type="text" x-model="form.first_name" @input="onInputUpper($event, 'first_name')" required autocomplete="given-name" class="form-field__input uppercase field-upper"></div>
  <div class="form-field"><label for="inp-middle" class="form-field__label">Middle Name</label><input id="inp-middle" type="text" x-model="form.middle_name" @input="onInputUpper($event, 'middle_name')" autocomplete="additional-name" class="form-field__input uppercase field-upper"></div>
  <div class="form-field"><label for="inp-suffix" class="form-field__label">Suffix</label><select id="inp-suffix" x-model="form.suffix" class="form-field__select"><option value="">None</option><option value="JR.">Jr.</option><option value="SR.">Sr.</option><option>II</option><option>III</option><option>IV</option></select></div>
- <div class="form-field"><label for="inp-bdate" class="form-field__label">Birth Date *</label><input id="inp-bdate" type="date" x-model="form.birth_date" required autocomplete="bday" min="1900-01-01" :max="todayISO()" title="YYYY-MM-DD" class="form-field__input"><p class="form-field__help" x-show="form.birth_date" x-text="birthDateHelper()"></p></div>
+ <div class="form-field"><label for="inp-bdate" class="form-field__label">Birth Date <span class="form-field__req" aria-hidden="true">*</span></label><input id="inp-bdate" type="date" x-model="form.birth_date" required autocomplete="bday" min="1900-01-01" :max="todayISO()" title="YYYY-MM-DD" class="form-field__input"><p class="form-field__help" x-show="form.birth_date" x-text="birthDateHelper()"></p></div>
  <div class="form-field"><label for="inp-bplace" class="form-field__label">Birth Place</label><input id="inp-bplace" type="text" x-model="form.birth_place" @input="onInputUpper($event, 'birth_place')" class="form-field__input uppercase field-upper"></div>
- <div class="form-field"><label for="inp-gender" class="form-field__label">Gender *</label><select id="inp-gender" x-model="form.gender" required class="form-field__select"><option value="">Select...</option><option value="MALE">Male</option><option value="FEMALE">Female</option></select></div>
+ <div class="form-field"><label for="inp-gender" class="form-field__label">Gender <span class="form-field__req" aria-hidden="true">*</span></label><select id="inp-gender" x-model="form.gender" required class="form-field__select"><option value="">Select...</option><option value="MALE">Male</option><option value="FEMALE">Female</option></select></div>
  <div class="form-field"><label for="inp-civil" class="form-field__label">Civil Status</label><select id="inp-civil" x-model="form.civil_status" class="form-field__select"><option value="">Select...</option><option value="SINGLE">Single</option><option value="MARRIED">Married</option><option value="WIDOWED">Widowed</option><option value="SEPARATED">Separated</option><option value="DIVORCED">Divorced</option></select></div>
  <div class="form-field"><label for="inp-citizen" class="form-field__label">Citizenship</label><input id="inp-citizen" type="text" x-model="form.citizenship" @input="onInputUpper($event, 'citizenship')" autocomplete="off" class="form-field__input uppercase field-upper"></div>
  <div class="form-field"><label for="inp-occup" class="form-field__label">Occupation</label><input id="inp-occup" type="text" x-model="form.occupation" @input="onInputUpper($event, 'occupation')" autocomplete="organization-title" class="form-field__input uppercase field-upper"></div>
  <div class="form-field"><label for="inp-religion" class="form-field__label">Religion</label><input id="inp-religion" type="text" x-model="form.religion" @input="onInputUpper($event, 'religion')" autocomplete="off" class="form-field__input uppercase field-upper"></div>
- <div class="form-field"><label for="inp-contact" class="form-field__label">Contact Number</label><input id="inp-contact" type="tel" x-model="form.contact_number" placeholder="09XX-XXX-XXXX" autocomplete="tel" inputmode="tel" class="form-field__input"></div>
+ <div class="form-field"><label for="inp-contact" class="form-field__label">Contact Number</label><input id="inp-contact" type="tel" x-model="form.contact_number" @input="onContactInput($event, 'contact_number')" placeholder="09XX-XXX-XXXX" autocomplete="tel" inputmode="numeric" maxlength="13" class="form-field__input"></div>
  </div>
  </div>
  </div>
@@ -222,13 +264,13 @@
  <!-- Address -->
  <div class="form-section">
  <div class="form-section__head">
- <span class="form-section__number">2</span>
+ <span class="form-section__number register-number">2</span>
  <h3 class="form-section__title">Address</h3>
  </div>
  <div class="form-section__body">
  <div class="form-grid form-grid--4">
- <div class="form-field"><label for="inp-purok" class="form-field__label">Purok *</label><select id="inp-purok" x-model="form.address_purok" required class="form-field__select"><option value="">Select Purok...</option><option>AVOCADO</option><option>RIMAS</option><option>PASAYAN</option><option>BUBUNAO</option><option>ASLUM</option></select></div>
- <div class="form-field"><label for="inp-brgy" class="form-field__label">Barangay</label><input id="inp-brgy" type="text" x-model="form.address_barangay" @input="onInputUpper($event, 'address_barangay')" autocomplete="address-level3" class="form-field__input uppercase field-upper"></div>
+ <div class="form-field"><label for="inp-purok" class="form-field__label">Purok <span class="form-field__req" aria-hidden="true">*</span></label><select id="inp-purok" x-model="form.address_purok" required class="form-field__select"><option value="">Select Purok...</option><option>AVOCADO</option><option>RIMAS</option><option>PASAYAN</option><option>BUBUNAO</option><option>ASLUM</option></select></div>
+ <div class="form-field"><label for="inp-brgy" class="form-field__label">Barangay</label><input id="inp-brgy" type="text" x-model="form.address_barangay" @input="onInputUpper($event, 'address_barangay')" autocomplete="address-level3" class="form-field__input uppercase field-upper" value="(NOUVELAS OCCIDENTAL) BALUD"></div>
  <div class="form-field"><label for="inp-city" class="form-field__label">City/Municipality <span class="font-normal text-slate-500">· default BASEY, editable</span></label><input id="inp-city" type="text" x-model="form.address_city" @input="onInputUpper($event, 'address_city')" placeholder="BASEY" autocomplete="address-level2" class="form-field__input uppercase field-upper"></div>
  <div class="form-field"><label for="inp-prov" class="form-field__label">Province <span class="font-normal text-slate-500">· default SAMAR, editable</span></label><input id="inp-prov" type="text" x-model="form.address_province" @input="onInputUpper($event, 'address_province')" placeholder="SAMAR" autocomplete="address-level1" class="form-field__input uppercase field-upper"></div>
  </div>
@@ -238,14 +280,14 @@
  <!-- Emergency -->
  <div class="form-section">
  <div class="form-section__head">
- <span class="form-section__number">3</span>
+ <span class="form-section__number register-number">3</span>
  <h3 class="form-section__title">Emergency Contact</h3>
  </div>
  <div class="form-section__body">
  <div class="form-grid form-grid--3">
  <div class="form-field"><label for="inp-emer-name" class="form-field__label">Contact Person Name</label><input id="inp-emer-name" type="text" x-model="form.emergency_contact_name" @input="onInputUpper($event, 'emergency_contact_name')" autocomplete="off" class="form-field__input uppercase field-upper"></div>
  <div class="form-field"><label for="inp-emer-rel" class="form-field__label">Relationship</label><input id="inp-emer-rel" type="text" x-model="form.emergency_contact_relation" @input="onInputUpper($event, 'emergency_contact_relation')" autocomplete="off" class="form-field__input uppercase field-upper"></div>
- <div class="form-field"><label for="inp-emer-tel" class="form-field__label">Contact Number</label><input id="inp-emer-tel" type="tel" x-model="form.emergency_contact_number" autocomplete="tel" inputmode="tel" class="form-field__input"></div>
+ <div class="form-field"><label for="inp-emer-tel" class="form-field__label">Contact Number</label><input id="inp-emer-tel" type="tel" x-model="form.emergency_contact_number" @input="onContactInput($event, 'emergency_contact_number')" placeholder="09XX-XXX-XXXX" autocomplete="tel" inputmode="numeric" maxlength="20" class="form-field__input"></div>
  <div class="form-field sm:col-span-2"><label for="inp-emer-addr" class="form-field__label">Address</label><input id="inp-emer-addr" type="text" x-model="form.emergency_contact_address" @input="onInputUpper($event, 'emergency_contact_address')" autocomplete="off" class="form-field__input uppercase field-upper"></div>
  </div>
  </div>
@@ -254,7 +296,7 @@
  <!-- Card Status -->
  <div class="form-section">
  <div class="form-section__body">
- <label class="form-field__label">Card Status *</label>
+ <label class="form-field__label">Card Status <span class="form-field__req" aria-hidden="true">*</span></label>
  <div class="flex gap-2 flex-wrap mb-4" role="radiogroup" aria-label="Card status">
  <template x-for="opt in ['ACTIVE','RENEW','LOST','DAMAGE']" :key="opt">
  <button type="button" role="radio" @click="form.remarks = opt" :aria-pressed="form.remarks === opt" :class="form.remarks === opt ? 'action-btn action-btn--primary' : 'action-btn action-btn--secondary'" x-text="opt"></button>
@@ -268,8 +310,8 @@
  </div>
 
  <!-- Actions -->
- <div class="flex justify-end gap-3 pt-2">
- <button type="button" @click="clearForm" :disabled="saving" :class="['action-btn', 'action-btn--secondary', { 'opacity-55 cursor-not-allowed': saving }]">Cancel</button>
+ <div class="register-actions">
+ <button type="button" x-show="!editingResident" @click="clearForm" :disabled="saving" :class="['action-btn', 'action-btn--secondary', { 'opacity-55 cursor-not-allowed': saving }]" title="Clear the form">Cancel</button>
  <button type="submit" :disabled="saving" :class="['action-btn', 'action-btn--primary', { 'opacity-55 cursor-not-allowed': saving }]" style="min-width: 160px;">
  <svg x-show="saving" class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/><path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75"/></svg>
  <span x-text="saving ? 'Saving...' : (editingResident ? 'Update Resident' : 'Register Resident')">Register Resident</span>
@@ -279,9 +321,9 @@
  </div>
 
  <!-- Search View — premium filter + table -->
- <div x-show="currentView === 'search'" x-init="searchResidents()" class="space-y-5">
+ <div x-show="currentView === 'search'" x-cloak x-init="searchResidents()" class="space-y-5">
  <div>
- <h2 class="text-2xl font-extrabold tracking-tight text-slate-900">Search Residents</h2>
+ <h2 class="text-2xl font-extrabold tracking-tight text-slate-900 view-title">Search Residents</h2>
  </div>
  
  <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
@@ -368,18 +410,18 @@
  <div x-show="totalSearchPages() > 1" class="flex items-center justify-between gap-3 px-5 py-3 border-t border-slate-100">
  <span class="text-xs text-slate-500" x-text="searchRangeText()"></span>
  <div class="flex items-center gap-2">
- <button @click="prevSearchPage()" :disabled="searchPage <= 1" aria-label="Previous page" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition min-h-[32px] disabled:opacity-50 disabled:cursor-not-allowed">Prev</button>
+ <button @click="prevSearchPage()" :disabled="searchPage <= 1" aria-label="Previous page" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition min-h-[40px] disabled:opacity-50 disabled:cursor-not-allowed">Prev</button>
  <span class="text-xs font-semibold text-slate-700" x-text="'Page ' + searchPage + ' of ' + totalSearchPages()"></span>
- <button @click="nextSearchPage()" :disabled="searchPage >= totalSearchPages()" aria-label="Next page" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition min-h-[32px] disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
+ <button @click="nextSearchPage()" :disabled="searchPage >= totalSearchPages()" aria-label="Next page" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition min-h-[40px] disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
  </div>
  </div>
  </div>
  </div>
 
  <!-- Settings View — semantic card sections -->
- <div x-show="currentView === 'settings'" class="space-y-5">
+ <div x-show="currentView === 'settings'" x-cloak class="space-y-5">
  <div>
- <h2 class="text-2xl font-extrabold tracking-tight text-slate-900">Settings</h2>
+ <h2 class="text-2xl font-extrabold tracking-tight text-slate-900 view-title">Settings</h2>
  </div>
  
  <div class="card">
@@ -406,18 +448,19 @@
  <div class="section-head__title">Data & Maintenance</div>
  </div>
  <div class="p-5 sm:p-6">
- <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
- <button @click="exportAllExcel" class="action-btn action-btn--secondary flex flex-col items-center gap-2 p-4" style="min-height: 100px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg><span class="text-xs font-bold text-slate-700">Export All to Excel</span></button>
- <button @click="importExcel" class="action-btn action-btn--secondary flex flex-col items-center gap-2 p-4" style="min-height: 100px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg><span class="text-xs font-bold text-slate-700">Import from Excel</span></button>
- <button @click="backupDB" class="action-btn action-btn--secondary flex flex-col items-center gap-2 p-4" style="min-height: 100px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 2l9 4.5v9L12 20 3 15.5v-9L12 2z"/><path d="M12 12L3 7.5M12 12l9-4.5M12 12v8"/></svg><span class="text-xs font-bold text-slate-700">Backup Database</span></button>
- <label class="action-btn action-btn--secondary flex items-center gap-2 p-4 cursor-pointer flex-col items-center" style="min-height: 100px;" title="Run the daily automatic backup right now (saves a copy to the backups folder)">
+ <div class="flex flex-wrap gap-3">
+ <button @click="exportAllExcel" class="action-btn action-btn--secondary action-chip"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg><span class="text-xs font-bold text-slate-700">Export All to Excel</span></button>
+ <button @click="importExcel" class="action-btn action-btn--secondary action-chip"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg><span class="text-xs font-bold text-slate-700">Import from Excel</span></button>
+ <button @click="backupDB" class="action-btn action-btn--secondary action-chip"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 2l9 4.5v9L12 20 3 15.5v-9L12 2z"/><path d="M12 12L3 7.5M12 12l9-4.5M12 12v8"/></svg><span class="text-xs font-bold text-slate-700">Backup Database</span></button>
+ <label class="action-btn action-btn--secondary action-chip" title="Run the daily automatic backup right now (saves a copy to the backups folder)">
  <input type="checkbox" x-model="backupRunScheduled" class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" aria-label="Run scheduled backup now">
  <span class="text-xs font-bold text-slate-700">Run daily backup now</span>
  </label>
- <button @click="restoreDB" class="action-btn action-btn--secondary flex flex-col items-center gap-2 p-4" style="min-height: 100px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M21 12a9 9 0 11-2.6-6.4"/><path d="M21 3v6h-6"/></svg><span class="text-xs font-bold text-slate-700">Restore from Backup</span></button>
- <button @click="scanPhotos()" class="action-btn action-btn--secondary flex flex-col items-center gap-2 p-4" style="min-height: 100px;" x-ref="scanPhotosBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><circle cx="8" cy="13" r="1.5"/></svg><span class="text-xs font-bold text-slate-700">Check Photos</span></button>
+ <button @click="restoreDB" class="action-btn action-btn--secondary action-chip"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M21 12a9 9 0 11-2.6-6.4"/><path d="M21 3v6h-6"/></svg><span class="text-xs font-bold text-slate-700">Restore from Backup</span></button>
+ <button @click="scanPhotos()" class="action-btn action-btn--secondary action-chip" x-ref="scanPhotosBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><circle cx="8" cy="13" r="1.5"/></svg><span class="text-xs font-bold text-slate-700">Check Photos</span></button>
  </div>
- <div x-show="photoScanResult" class="mt-3 p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm">
+ <template x-if="photoScanResult">
+ <div class="mt-3 p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm">
  <div class="flex items-center justify-between mb-2">
  <span class="font-semibold text-slate-700">Photo Check Results</span>
  <button @click="photoScanResult = null" class="text-slate-400 hover:text-slate-600" aria-label="Dismiss">×</button>
@@ -427,11 +470,12 @@
  <div>In use: <span class="font-mono text-slate-900" x-text="photoScanResult.referenced"></span></div>
  <div>Unused: <span class="font-mono text-red-600" x-text="photoScanResult.orphan_count"></span></div>
  </div>
- <template x-if="photoScanResult.orphan_count > 0">
- <button @click="cleanOrphans()" class="action-btn action-btn--warning w-full" style="background:#FFFBEB; border-color:#FDE68A; color:#92400E;">Delete Unused Photos</button>
+ <template x-if="photoScanResult && photoScanResult.orphan_count > 0">
+ <button @click="cleanOrphans()" class="action-btn action-btn--warning w-full">Delete Unused Photos</button>
  <p class="text-xs text-slate-500 mt-1 text-center">This cannot be undone.</p>
  </template>
  </div>
+ </template>
  <div x-show="bulkProgress.inProgress || bulkProgress.total > 0" class="mt-3 border-t border-slate-100 pt-3">
  <div class="flex items-center justify-between text-xs font-semibold text-slate-600">
  <span x-text="bulkProgress.inProgress ? ('Printing ' + bulkProgress.current + ' of ' + (bulkProgress.total || '…')) : ('Done: ' + bulkProgress.current + ' of ' + bulkProgress.total + (bulkProgress.failures ? ' · ' + bulkProgress.failures + ' failed' : ' · all successful'))"></span>
@@ -440,7 +484,7 @@
  <div class="w-full bg-gray-200 h-2 rounded mt-1.5 overflow-hidden"><div class="bg-blue-600 h-2 rounded transition-all" :style="'width:'+bulkProgress.percent+'%'"></div></div>
  <ul class="mt-1.5 space-y-0.5 max-h-24 overflow-y-auto text-xs font-mono text-slate-500">
  <template x-for="item in bulkProgress.recent.slice().reverse()" :key="item.file + item.status">
- <li :class="item.status === 'failed' ? 'text-red-600' : 'text-slate-500'" x-text="(item.status === 'failed' ? '✗ ' : '✓ ') + item.file"></li>
+ <li class="flex items-center gap-1.5" :class="item.status === 'failed' ? 'text-red-600' : 'text-slate-500'"><template x-if="item.status === 'failed'"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></template><template x-if="item.status !== 'failed'"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg></template><span x-text="item.file"></span></li>
  </template>
  </ul>
  </div>
@@ -453,8 +497,8 @@
  <div class="section-head__title">Printing</div>
  </div>
  <div class="p-5 sm:p-6">
- <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
- <button @click="printAllCards" class="action-btn action-btn--secondary flex flex-col items-center gap-2 p-4" style="min-height: 100px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="7"/></svg><span class="text-xs font-bold text-slate-700">Print All ID Cards</span></button>
+ <div class="flex flex-wrap gap-3">
+ <button @click="printAllCards" class="action-btn action-btn--secondary action-chip"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="7"/></svg><span class="text-xs font-bold text-slate-700">Print All ID Cards</span></button>
  </div>
  <p class="text-xs text-slate-500 mt-3">Prints one card per active resident. Opens your browser's print dialog — choose "Save as PDF" to create a digital copy.</p>
  </div>
@@ -490,86 +534,92 @@
  <p class="text-xs text-slate-400 mt-4">All data stored locally on this computer. Regular backups recommended. Offline 100%.</p>
  </div>
  </div>
- </div>
 
- <!-- DETAIL VIEW — resident details (replaces modal) -->
- <div x-show="currentView === 'detail'" class="space-y-5" x-transition.opacity>
- <div class="flex items-center justify-between gap-4">
+ <!-- DETAIL VIEW — resident details (replaces modal) — x-cloak prevents FOUC leak onto other tabs -->
+ <div x-show="currentView === 'detail'" x-cloak class="detail-view space-y-5">
+ <div class="detail-view-head">
  <div>
- <h2 class="text-2xl font-extrabold tracking-tight text-slate-900">Resident Details</h2>
+ <h2 class="text-2xl font-extrabold tracking-tight text-slate-900 view-title">Resident Details</h2>
  </div>
+ <button @click="closeDetail()" class="action-btn action-btn--secondary detail-view-back" aria-label="Back to previous view"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back</button>
  </div>
 
  <template x-if="detailResident">
- <div class="card">
- <div class="section-head">
- <div class="section-head__title">Personal Information</div>
+ <div class="detail-view-body">
+  <div class="card detail-view-hero">
+   <div class="detail-view-hero__band" aria-hidden="true"></div>
+   <div class="p-5 sm:p-6">
+    <div class="detail-view-hero__layout">
+     <div class="detail-photo" aria-hidden="true">
+      <img :src="detailPhoto" :alt="(detailResident ? detailResident.last_name + ', ' + detailResident.first_name + ' photo' : 'Resident photo')" class="w-full h-full object-cover" x-show="detailPhoto">
+      <div class="detail-photo--empty" x-show="!detailPhoto"><span>No Photo</span><span class="font-normal">1×1</span></div>
+     </div>
+     <div class="flex-1 min-w-0">
+      <h4 class="detail-view-name" :title="(detailResident.last_name + ', ' + detailResident.first_name + (detailResident.suffix ? ' ' + detailResident.suffix : ''))" x-text="detailResident.last_name + ', ' + detailResident.first_name + (detailResident.suffix ? ' ' + detailResident.suffix : '')"></h4>
+      <p class="detail-view-id" x-text="detailResident.resident_id"></p>
+      <div class="detail-view-pills">
+       <span class="detail-view-purok" x-text="'Purok ' + (detailResident.address_purok || 'N/A')"></span>
+       <span x-show="detailResident.gender === 'MALE'" class="status-pill status-pill--active pill-male">Male</span>
+       <span x-show="detailResident.gender === 'FEMALE'" class="status-pill status-pill--active pill-female">Female</span>
+       <span :class="statusPillClass(detailResident)" x-text="statusLabel(detailResident)"></span>
+      </div>
+      <div class="detail-view-validity">
+       <span class="detail-view-validity__icon" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+       <span>ID valid until <strong x-text="detailResident.valid_until ? formatDateDDMMYYYY(detailResident.valid_until) : 'N/A'">N/A</strong></span>
+       <span :class="detailResident.valid_until ? (isExpired(detailResident) ? 'status-pill status-pill--expired' : 'status-pill status-pill--active') : 'status-pill status-pill--inactive'" x-text="expiryCountdown(detailResident)">No expiry set</span>
+      </div>
+     </div>
+    </div>
+    <div class="detail-view-groups">
+     <div>
+      <h5 class="detail-view-group__title">Personal Information</h5>
+      <dl class="detail-view-fields detail-view-fields--2col">
+       <div class="detail-field"><dt>Middle Name</dt><dd x-text="detailResident.middle_name || 'N/A'"></dd></div>
+       <div class="detail-field"><dt>Birth Date</dt><dd x-text="formatDateDDMMYYYY(detailResident.birth_date)"></dd></div>
+       <div class="detail-field"><dt>Civil Status</dt><dd x-text="detailResident.civil_status || 'N/A'"></dd></div>
+       <div class="detail-field"><dt>Citizenship</dt><dd x-text="detailResident.citizenship || 'Filipino'"></dd></div>
+       <div class="detail-field"><dt>Occupation</dt><dd x-text="detailResident.occupation || 'N/A'"></dd></div>
+       <div class="detail-field"><dt>Religion</dt><dd x-text="detailResident.religion || 'N/A'"></dd></div>
+       <div class="detail-field"><dt>Contact</dt><dd x-text="detailResident.contact_number || 'N/A'"></dd></div>
+      </dl>
+     </div>
+     <div>
+      <h5 class="detail-view-group__title">Emergency Contact</h5>
+      <dl class="detail-view-fields">
+       <div class="detail-field"><dt>Contact Person</dt><dd x-text="detailResident.emergency_contact_name || 'N/A'"></dd></div>
+       <div class="detail-field"><dt>Relationship</dt><dd x-text="detailResident.emergency_contact_relation || 'N/A'"></dd></div>
+       <div class="detail-field"><dt>Contact Number</dt><dd x-text="detailResident.emergency_contact_number || 'N/A'"></dd></div>
+       <div class="detail-field"><dt>Contact Address:</dt><dd x-text="detailResident.emergency_contact_address || 'N/A'"></dd></div>
+      </dl>
+     </div>
+    </div>
+    <div class="mt-5">
+     <h5 class="detail-view-group__title">Full Address</h5>
+     <p class="detail-view-address" x-text="(detailResident.address_street ? detailResident.address_street + ', ' : '') + 'Purok ' + (detailResident.address_purok || '') + ', ' + (detailResident.address_barangay || '') + (detailResident.address_city ? ', ' + detailResident.address_city : '') + (detailResident.address_province ? ', ' + detailResident.address_province : '')"></p>
+    </div>
+   </div>
+  </div>
+  <div class="detail-view-actions">
+   <div class="detail-view-actions__secondary">
+    <button @click="editResident(detailResident.id)" class="action-btn action-btn--edit detail-view-actions__btn">Edit</button>
+    <template x-if="isExpired(detailResident)">
+     <button @click="renewResident(detailResident.id); closeDetail()" class="action-btn action-btn--renew detail-view-actions__btn">Renew ID</button>
+    </template>
+   </div>
+   <div class="detail-view-actions__primary">
+    <button @click="previewResidentCard(detailResident.id)" class="action-btn action-btn--secondary detail-view-actions__btn">Preview Card</button>
+    <button @click="printResidentCard(detailResident.id)" class="action-btn action-btn--primary detail-view-actions__btn">Print Card (CR100)</button>
+   </div>
+  </div>
  </div>
- <div class="p-5 sm:p-6">
- <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
- <div class="sm:col-span-2 lg:col-span-1 flex items-center gap-4">
- <div class="detail-photo" aria-hidden="true">
- <img :src="detailPhoto" :alt="(detailResident ? detailResident.last_name + ', ' + detailResident.first_name + ' photo' : 'Resident photo')" class="w-full h-full object-cover" x-show="detailPhoto">
- <div class="detail-photo--empty" x-show="!detailPhoto"><span>No Photo</span><span class="font-normal">1×1</span></div>
- </div>
- <div class="flex-1 min-w-0">
- <h4 class="text-xl font-extrabold tracking-tight text-slate-900 break-words leading-tight" :title="(detailResident.last_name + ', ' + detailResident.first_name + (detailResident.suffix ? ' ' + detailResident.suffix : ''))" x-text="detailResident.last_name + ', ' + detailResident.first_name + (detailResident.suffix ? ' ' + detailResident.suffix : '')"></h4>
- <p class="text-blue-700 font-mono text-[13px] font-bold mt-1 tracking-tight" x-text="detailResident.resident_id"></p>
- <div class="flex gap-2 mt-3 flex-wrap">
- <span class="inline-flex bg-slate-900 text-white px-2.5 py-1 rounded-full text-xs font-bold" x-text="'Purok ' + (detailResident.address_purok || 'N/A')"></span>
- <span x-show="detailResident.gender === 'MALE'" class="status-pill status-pill--active" style="background:#DBEAFE; color:#1E40AF; border-color:#BFDBFE;">Male</span>
- <span x-show="detailResident.gender === 'FEMALE'" class="status-pill status-pill--active" style="background:#FCE7F3; color:#BE185D; border-color:#FBCFE8;">Female</span>
- <span :class="statusPillClass(detailResident)" x-text="statusLabel(detailResident)"></span>
- </div>
- </div>
- </div>
- <div class="flex gap-4 py-2.5"><dt class="w-28 shrink-0 text-slate-500 text-[13px]">Middle Name:</dt><dd class="flex-1 text-slate-900 font-bold text-[13px] text-right break-words" x-text="detailResident.middle_name || 'N/A'"></dd></div>
- <div class="flex gap-4 py-2.5"><dt class="w-28 shrink-0 text-slate-500 text-[13px]">Birth Date:</dt><dd class="flex-1 text-slate-900 font-bold text-[13px] text-right break-words" x-text="formatDateDDMMYYYY(detailResident.birth_date)"></dd></div>
- <div class="flex gap-4 py-2.5"><dt class="w-28 shrink-0 text-slate-500 text-[13px]">Gender:</dt><dd class="flex-1 text-slate-900 font-bold text-[13px] text-right break-words" x-text="detailResident.gender"></dd></div>
- <div class="flex gap-4 py-2.5"><dt class="w-28 shrink-0 text-slate-500 text-[13px]">Civil Status:</dt><dd class="flex-1 text-slate-900 font-bold text-[13px] text-right break-words" x-text="detailResident.civil_status || 'N/A'"></dd></div>
- <div class="flex gap-4 py-2.5"><dt class="w-28 shrink-0 text-slate-500 text-[13px]">Citizenship:</dt><dd class="flex-1 text-slate-900 font-bold text-[13px] text-right break-words" x-text="detailResident.citizenship || 'Filipino'"></dd></div>
- <div class="flex gap-4 py-2.5"><dt class="w-28 shrink-0 text-slate-500 text-[13px]">Occupation:</dt><dd class="flex-1 text-slate-900 font-bold text-[13px] text-right break-words" x-text="detailResident.occupation || 'N/A'"></dd></div>
- <div class="flex gap-4 py-2.5"><dt class="w-28 shrink-0 text-slate-500 text-[13px]">Religion:</dt><dd class="flex-1 text-slate-900 font-bold text-[13px] text-right break-words" x-text="detailResident.religion || 'N/A'"></dd></div>
- <div class="flex gap-4 py-2.5"><dt class="w-28 shrink-0 text-slate-500 text-[13px]">Contact:</dt><dd class="flex-1 text-slate-900 font-bold text-[13px] text-right break-words" x-text="detailResident.contact_number || 'N/A'"></dd></div>
- </div>
- </div>
-
- <div class="card">
- <div class="section-head">
- <div class="section-head__title">Emergency Contact</div>
- </div>
- <div class="p-5 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
- <div class="flex gap-4 py-2.5"><dt class="w-36 shrink-0 text-slate-500 text-[13px]">Contact Person:</dt><dd class="flex-1 text-slate-900 font-bold text-[13px] text-right break-words" x-text="detailResident.emergency_contact_name || 'N/A'"></dd></div>
- <div class="flex gap-4 py-2.5"><dt class="w-36 shrink-0 text-slate-500 text-[13px]">Relationship:</dt><dd class="flex-1 text-slate-900 font-bold text-[13px] text-right break-words" x-text="detailResident.emergency_contact_relation || 'N/A'"></dd></div>
- <div class="flex gap-4 py-2.5"><dt class="w-36 shrink-0 text-slate-500 text-[13px]">Contact Number:</dt><dd class="flex-1 text-slate-900 font-bold text-[13px] text-right break-words" x-text="detailResident.emergency_contact_number || 'N/A'"></dd></div>
- <div class="flex gap-4 py-2.5"><dt class="w-36 shrink-0 text-slate-500 text-[13px]">Contact Address:</dt><dd class="flex-1 text-slate-900 font-bold text-[13px] text-right break-words" x-text="detailResident.emergency_contact_address || 'N/A'"></dd></div>
- </div>
- </div>
-
- <div class="card">
- <div class="section-head">
- <div class="section-head__title">Full Address</div>
- </div>
- <div class="p-5 sm:p-6">
- <p class="text-sm text-slate-900 leading-relaxed" x-text="(detailResident.address_street ? detailResident.address_street + ', ' : '') + 'Purok ' + (detailResident.address_purok || '') + ', ' + (detailResident.address_barangay || '') + (detailResident.address_city ? ', ' + detailResident.address_city : '') + (detailResident.address_province ? ', ' + detailResident.address_province : '')"></p>
- </div>
- </div>
-
- <div class="flex flex-col sm:flex-row gap-3 sm:justify-end">
- <button @click="editResident(detailResident.id); closeDetail()" class="action-btn action-btn--edit">Edit</button>
- <template x-if="isExpired(detailResident)">
- <button @click="renewResident(detailResident.id); closeDetail()" class="action-btn action-btn--renew">Renew ID</button>
  </template>
- <button @click="previewResidentCard(detailResident.id)" class="action-btn action-btn--secondary">Preview Card</button>
- <button @click="printResidentCard(detailResident.id)" class="action-btn action-btn--primary">Print Card (CR100)</button>
- </div>
- </template>
 
- <div x-show="!detailResident" class="card">
+ <div x-show="!detailResident" class="card" x-cloak>
  <div class="empty-state">
  <div class="empty-state__icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M5 20c0-4 3-7 7-7s7 3 7 7"/></svg></div>
  <div class="empty-state__title">No resident selected</div>
  <div class="empty-state__desc">Select a resident from Dashboard or Search to view details.</div>
+ <ul class="detail-view-empty__steps" aria-hidden="true"><li><span>1</span> Search</li><li><span>2</span> View</li><li><span>3</span> Print</li></ul>
  <button @click="closeDetail()" class="action-btn action-btn--primary"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back</button>
  </div>
  </div>
@@ -578,15 +628,15 @@
  </main>
 
  <!-- Toast — semantic, no emoji -->
- <div x-show="toast.show" 
+ <div x-show="toast.show" x-cloak
  role="status" aria-live="polite" aria-atomic="true"
- x-transition:enter="transition ease-out duration-300"
- x-transition:enter-start="opacity-0 translate-y-4"
+ x-transition:enter="transition ease-out duration-200"
+ x-transition:enter-start="opacity-0 translate-y-2"
  x-transition:enter-end="opacity-100 translate-y-0"
- x-transition:leave="transition ease-in duration-200"
+ x-transition:leave="transition ease-in duration-150"
  x-transition:leave-start="opacity-100 translate-y-0"
- x-transition:leave-end="opacity-0 translate-y-4"
- class="toast fixed bottom-6 right-6 z-50 max-w-[90vw]"
+ x-transition:leave-end="opacity-0 translate-y-2"
+ class="toast"
  :class="{
  'toast--success': toast.type === 'success',
  'toast--error': toast.type === 'error',

@@ -46,6 +46,22 @@ function formatContactPH(raw) {
     if (/^09\d{9}$/.test(digits)) return `${digits.slice(0, 4)}-${digits.slice(4, 7)}-${digits.slice(7, 11)}`;
     return t;
 }
+// Live mask for PH mobile inputs: digits only, max 11, progressive 4-3-4
+// (0990 → 0990-123 → 0990-123-4567). Emergency BRGY- ID references are
+// not phones and pass through uppercased (backend verifies existence).
+function maskContactPH(raw) {
+    if (raw == null) return '';
+    const t = String(raw);
+    if (/^\s*brgy-/i.test(t)) return t.trim().toUpperCase();
+    let digits = t.replace(/\D/g, '');
+    // Fold +63/63 country prefix and bare 10-digit mobiles into 09 form.
+    if (digits.length >= 12 && digits.startsWith('63')) digits = '0' + digits.slice(2);
+    else if (digits.length === 10 && digits.startsWith('9')) digits = '0' + digits;
+    digits = digits.slice(0, 11);
+    if (digits.length <= 4) return digits;
+    if (digits.length <= 7) return digits.slice(0, 4) + '-' + digits.slice(4);
+    return digits.slice(0, 4) + '-' + digits.slice(4, 7) + '-' + digits.slice(7);
+}
 function todayISO() {
     // P2-14: local date (backend uses chrono::Local) — UTC slicing was off
     // by one near midnight (up to ~8h PH offset edge).
@@ -104,7 +120,7 @@ const PHOTO_MAX_FILE_BYTES = 6 * 1024 * 1024;
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         formatDateDDMMYYYY, normalizeBirthDateForSubmit, truncateCard,
-        formatContactPH, todayISO, computeAge, PUROK_OPTIONS,
+        formatContactPH, maskContactPH, todayISO, computeAge, PUROK_OPTIONS,
         joinPath, backupBaseName, PHOTO_MAX_FILE_BYTES,
     };
 }

@@ -171,7 +171,20 @@ Output (isolated, never in `%TEMP%`):
 src-tauri/target/release/bundle/msi/Barangay ID Registration System_1.0.0_x64_en-US.msi
 src-tauri/target/release/bundle/nsis/...
 ```
-Install on Win10/11, data still resolves to `D:\Barangay\barangay-id-system\data` if present, else to install-adjacent `data\` via `get_project_root()` walkup.
+Install on Win10/11 (per-user MSI — no admin rights needed). The installer creates a **desktop shortcut automatically** (stock Tauri WiX behavior) and installs beside your data:
+
+```
+%LOCALAPPDATA%\Barangay ID Registration System\
+ ├── Barangay ID Registration System.exe
+ ├── data\      (residents.db, photos, backups — created on first run)
+ ├── Documents\  logs\  tmp\  config\
+```
+
+One folder, exe + data together. Details: `src-tauri/wix/main.wxs` is the official Tauri v1.6 WiX template with two surgical changes — `InstallScope perUser` (+`limited` privileges) and `INSTALLDIR` under `LocalAppDataFolder` instead of Program Files (read-only; the app refuses to start there by design). If a `D:\Barangay\barangay-id-system\data` folder already exists, the app keeps using it (portable/USB workflow unchanged).
+
+> **Migrating from an old perMachine install:** uninstall the old MSI first (Windows can't upgrade perMachine → perUser in place), back up via Settings → Backup, then install the new MSI and restore.
+> **Uninstall wipes the install folder including `data\`** (stock WiX `RemoveFolder` behavior) — always take a Backup first.
+> **Fully offline:** the MSI embeds the complete WebView2 runtime installer (~+127MB, fetched once by the *build* machine and cached) — the officer PC needs no internet at install time. If the runtime is already present, the installer skips it automatically.
 
 ---
 

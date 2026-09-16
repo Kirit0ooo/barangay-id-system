@@ -60,10 +60,11 @@
         "digestAlgorithm": "sha256",
         "timestampUrl": "",
         "webviewInstallMode": {
-          "type": "embedBootstrapper"
+          "type": "offlineInstaller"
         },
         "wix": {
-          "language": "en-US"
+          "language": "en-US",
+          "template": "./wix/main.wxs"
         }
       }
     },

@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 // helpers.js is a classic browser <script> (no exports) — evaluate it in a
 // Function scope so tests run against the real source, not a copy.
 const src = readFileSync(new URL('../src/js/helpers.js', import.meta.url), 'utf8');
-const H = new Function(`${src}; return { formatDateDDMMYYYY, normalizeBirthDateForSubmit, truncateCard, formatContactPH, todayISO, computeAge, PUROK_OPTIONS, joinPath, backupBaseName, PHOTO_MAX_FILE_BYTES };`)();
+const H = new Function(`${src}; return { formatDateDDMMYYYY, normalizeBirthDateForSubmit, truncateCard, formatContactPH, maskContactPH, todayISO, computeAge, PUROK_OPTIONS, joinPath, backupBaseName, PHOTO_MAX_FILE_BYTES };`)();
 
 describe('formatDateDDMMYYYY', () => {
   it('converts ISO to DD-MM-YYYY', () => {
@@ -71,6 +71,34 @@ describe('formatContactPH', () => {
   it('returns empty for empty', () => {
     assert.equal(H.formatContactPH('  '), '');
     assert.equal(H.formatContactPH(null), '');
+  });
+});
+
+describe('maskContactPH', () => {
+  it('dashes progressively while typing', () => {
+    assert.equal(H.maskContactPH('0990'), '0990');
+    assert.equal(H.maskContactPH('09901'), '0990-1');
+    assert.equal(H.maskContactPH('0990123'), '0990-123');
+    assert.equal(H.maskContactPH('09901234567'), '0990-123-4567');
+  });
+  it('caps at 11 digits', () => {
+    assert.equal(H.maskContactPH('099012345678999'), '0990-123-4567');
+  });
+  it('strips spaces, parens and dashes', () => {
+    assert.equal(H.maskContactPH('0990 123 4567'), '0990-123-4567');
+    assert.equal(H.maskContactPH('(0990)123-4567'), '0990-123-4567');
+  });
+  it('folds 63 prefix and bare 10-digit mobiles', () => {
+    assert.equal(H.maskContactPH('+639901234567'), '0990-123-4567');
+    assert.equal(H.maskContactPH('639901234567'), '0990-123-4567');
+    assert.equal(H.maskContactPH('9901234567'), '0990-123-4567');
+  });
+  it('leaves BRGY- references untouched (uppercased)', () => {
+    assert.equal(H.maskContactPH('brgy-2026-00001'), 'BRGY-2026-00001');
+  });
+  it('returns empty for empty', () => {
+    assert.equal(H.maskContactPH(''), '');
+    assert.equal(H.maskContactPH(null), '');
   });
 });
 

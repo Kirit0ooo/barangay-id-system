@@ -16,6 +16,8 @@
   --border-strong:#CBD5E1;
   --paper:#F8FAFC;
   --surface:#FFFFFF;
+  --amber-neon:#FF1E1E;
+  --on-neon:#FFFFFF;
   --radius-card:16px;
   --radius-input:12px;
   --radius-pill:999px;
@@ -29,6 +31,10 @@
 *{ scrollbar-width:thin; scrollbar-color: var(--border-strong) var(--paper); }
 
 html{ font-size:15px; -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; scrollbar-gutter:stable; }
+/* Full-bleed sticky nav: kill page-level horizontal overflow so the nav
+   background never scrolls sideways or renders cut. `clip` (never `hidden`)
+   preserves position:sticky; vertical scrolling untouched. */
+html,body{ overflow-x:clip; }
 body{
   margin:0; /* no preflight in offline build — kills default 8px that broke nav full-bleed */
   font-family: "Inter","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
@@ -43,8 +49,8 @@ body{
    Kept on body directly since the `app-bg` class is no longer set on the HTML element.
 */
 body{
-  background:var(--paper);
-  color:var(--ink);
+  background:var(--amber-neon);
+  color:var(--on-neon);
 }
 
 /* Scoped transitions only — no global * transition */
@@ -275,10 +281,10 @@ tbody tr:hover{ background:rgba(248,250,252,.92); }
 .stat-card__bar{ height:6px; background:var(--color-border); border-radius:999px; overflow:hidden; }
 .stat-card__bar-fill{ height:100%; border-radius:999px; }
 
-/* Primary stat (Total Residents) */
+/* Primary stat (Total Residents) — dominant value, navy accent */
 .stat-card--primary{ border-left:3px solid var(--color-primary); }
 .stat-card--primary .stat-card__icon{ background:rgba(15,43,94,.1); color:var(--color-primary); }
-.stat-card--primary .stat-card__value{ color:var(--color-text); }
+.stat-card--primary .stat-card__value{ color:var(--color-text); font-size:34px; }
 
 /* Secondary stat (This Year) */
 .stat-card--secondary{ border-left:3px solid var(--color-info); }
@@ -292,6 +298,53 @@ tbody tr:hover{ background:rgba(248,250,252,.92); }
 .stat-card--female .stat-card__icon{ background:rgba(236,72,153,.1); color:#ec4899; }
 .stat-card--female .stat-card__value{ color:#ec4899; }
 .stat-card--female .stat-card__bar-fill{ background:#ec4899; }
+.stat-card--active .stat-card__icon{ background:rgba(5,150,105,.12); color:#059669; }
+.stat-card--active .stat-card__value{ color:#059669; }
+.stat-card--renew .stat-card__icon{ background:rgba(217,119,6,.12); color:#d97706; }
+.stat-card--renew .stat-card__value{ color:#d97706; }
+.stat-card--lost .stat-card__icon{ background:rgba(220,38,38,.1); color:#dc2626; }
+.stat-card--lost .stat-card__value{ color:#dc2626; }
+.stat-card--damage .stat-card__icon{ background:rgba(234,88,12,.12); color:#ea580c; }
+.stat-card--damage .stat-card__value{ color:#ea580c; }
+/* Dashboard hero — donut + legend beside Total / This Year (one panel, no nested cards) */
+.stat-hero{ grid-column:1/-1; }
+.stat-hero__layout{ display:grid; grid-template-columns:minmax(240px,300px) auto minmax(0,1fr); gap:28px; align-items:center; }
+.stat-hero__chart{ min-width:0; max-width:380px; margin:0 auto; width:100%; }
+.stat-hero__divider{ width:1px; align-self:stretch; background:var(--color-border); }
+.stat-hero__side{ min-width:0; }
+.stat-hero__side--left{ display:flex; flex-direction:column; gap:16px; justify-content:center; }
+.stat-hero__side--left .stat-hero__stat + .stat-hero__stat{ border-top:1px solid var(--color-border); padding-top:16px; }
+.stat-hero__stat--total .stat-card__value{ font-size:34px; color:var(--color-primary); }
+/* Aligned slots: different value sizes + badge label must not stagger rows */
+.stat-hero__stat{ display:flex; flex-direction:column; }
+.stat-hero__stat .stat-card__label{ min-height:24px; display:flex; align-items:center; }
+.stat-hero__stat .stat-card__value{ min-height:40px; display:flex; align-items:flex-end; }
+.stat-hero__stat .stat-card__meta{ margin-top:auto; padding-top:6px; }
+.stat-hero__stat--total .stat-card__icon{ background:rgba(15,43,94,.1); color:var(--color-primary); }
+.stat-hero__stat--year .stat-card__icon{ background:rgba(37,99,235,.1); color:var(--color-info); }
+@media(max-width:900px){ .stat-hero__layout{ grid-template-columns:1fr; gap:20px; } .stat-hero__divider{ display:none; } .stat-hero__chart{ max-width:340px; margin:0 auto; width:100%; } }
+/* 3D gender pie — static layered SVG donut (offline, no chart lib) */
+.pie-wrap{ position:relative; max-width:230px; margin:4px auto 0; }
+.pie{ width:100%; height:auto; display:block; }
+.pie-shadow{ fill:rgba(15,23,42,.12); }
+.pie-center{ position:absolute; left:0; right:0; top:0; bottom:8%; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none; }
+.pie-center__value{ font-size:26px; font-weight:800; letter-spacing:-0.02em; color:var(--color-text); line-height:1; }
+.pie-center__label{ font-size:11px; font-weight:600; color:var(--color-text-muted); }
+.pie-legend{ display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+.pie-legend__row{ display:flex; align-items:center; gap:8px; font-size:13px; color:var(--color-text); }
+.pie-dot{ width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.pie-dot--male{ background:#2563eb; }
+.pie-dot--female{ background:#ec4899; }
+.pie-legend__count{ margin-left:auto; font-weight:800; font-variant-numeric:tabular-nums; }
+.pie-legend__pct{ min-width:40px; text-align:right; font-weight:600; color:var(--color-text-muted); font-variant-numeric:tabular-nums; }
+.pie-legend__row + .pie-legend__row{ border-top:1px solid var(--color-border); padding-top:6px; }
+.pie-legend__row{ flex-wrap:wrap; }
+.pie-legend__bar{ flex-basis:100%; margin-top:2px; }
+.pie-legend__fill--male{ background:linear-gradient(90deg,#2563eb,#60a5fa); }
+.pie-legend__fill--female{ background:linear-gradient(90deg,#ec4899,#f9a8d4); }
+.pie-legend__count{ font-size:20px; }
+.pie-legend__pct--male{ color:#2563eb; }
+.pie-legend__pct--female{ color:#ec4899; }
 
 /* Form section wrapper */
 .form-section{
@@ -327,18 +380,23 @@ tbody tr:hover{ background:rgba(248,250,252,.92); }
   text-transform:uppercase;
   color:var(--color-text);
 }
-.form-section__body{ padding:20px 24px; }
+.form-section__body{ padding:20px 24px; width:100%; }
 
 /* Form grid */
-.form-grid{ display:grid; gap:16px; }
+.form-grid{ display:grid; gap:16px; width:100%; }
 .form-grid--2{ grid-template-columns:repeat(2, minmax(0,1fr)); }
 .form-grid--4{ grid-template-columns:repeat(4, minmax(0,1fr)); }
 @media (max-width: 1024px){ .form-grid--4{ grid-template-columns:repeat(2, minmax(0,1fr)); } }
-@media (max-width: 640px){ .form-grid--2, .form-grid--4{ grid-template-columns:1fr; } }
+@media (max-width: 640px){ .form-grid--2, .form-grid--4{ grid-template-columns:minmax(0,1fr); } }
 
 /* Form field */
 .form-field{ display:flex; flex-direction:column; gap:6px; }
 .form-field__label{ font-size:13px; font-weight:600; color:var(--color-text); }
+.form-field__req{ color:var(--color-error); font-weight:800; font-size:1.15em; line-height:1; margin-left:2px; }
+/* View titles sit directly on the amber-neon backdrop: white, large-scale
+   (22-28px extrabold clears WCAG AA large-text 3:1 on #FF1E1E). All body
+   copy lives on white surfaces and is untouched. */
+#main-content .view-title{ color:var(--on-neon); }
 .form-field__input,
 .form-field__select{
   width:100%;
@@ -384,15 +442,23 @@ tbody tr:hover{ background:rgba(248,250,252,.92); }
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  gap:6px;
-  min-height:32px;
-  min-width:32px;
-  padding:0 12px;
+  gap:8px;
+  min-height:40px;
+  min-width:40px;
+  padding:8px 16px;
   border-radius:8px;
-  font-size:11px;
+  font-size:13px;
   font-weight:600;
+  line-height:1.25;
+  white-space:nowrap;
   transition:background-color 150ms ease, border-color 150ms ease, color 150ms ease;
 }
+/* Uniform 40px height for every button on every tab; width always fits the
+   label. This later stylesheet wins over same-specificity utilities.
+   Icon-only buttons stay 40x40 touch targets via min-width. */
+nav[aria-label="Primary"] [role="tab"]{ min-height:40px; padding-top:8px; padding-bottom:8px; }
+/* Maintenance/printing tiles become uniform chips (were 100px icon tiles) */
+.action-chip{ flex:0 0 auto; }
 .action-btn--view{ background:var(--color-surface); border:1px solid var(--color-border); color:var(--color-text-muted); }
 .action-btn--view:hover{ background:var(--color-bg); border-color:var(--color-border-strong); color:var(--color-text); }
 .action-btn--edit{ background:#FFFBEB; border:1px solid #FDE68A; color:#92400E; }
@@ -408,31 +474,36 @@ tbody tr:hover{ background:rgba(248,250,252,.92); }
 .action-btn--secondary{ background:var(--color-surface); border:1px solid var(--color-border); color:var(--color-text); }
 .action-btn--secondary:hover{ background:var(--color-bg); }
 
-/* Toast — semantic, no emoji */
+/* Toast — civic restraint: white surface + left accent, not saturated blob */
 .toast{
   position:fixed;
   bottom:24px;
   right:24px;
   display:flex;
   align-items:center;
-  gap:12px;
-  padding:12px 20px;
-  border-radius:16px;
-  box-shadow:0 10px 25px rgba(0,0,0,.15);
-  border:1px solid;
+  gap:10px;
+  padding:12px 16px 12px 14px;
+  background:var(--color-surface);
+  border:1px solid var(--color-border);
+  border-left-width:4px;
+  border-radius:var(--radius-input);
+  box-shadow:var(--shadow-card);
   z-index:50;
-  max-width:90vw;
+  max-width:420px;
+  min-width:280px;
   font-size:13px;
   font-weight:600;
-  color:var(--color-text-inverse);
-  animation:toast-in 300ms ease;
+  color:var(--color-text);
+  line-height:1.4;
 }
-@keyframes toast-in{ from{ opacity:0; transform:translateY(16px); } to{ opacity:1; transform:translateY(0); } }
-.toast--success{ background:var(--color-success); border-color:#047857; }
-.toast--error{ background:var(--color-error); border-color:#B91C1C; }
-.toast--info{ background:var(--color-text); border-color:var(--color-border-strong); }
-.toast__icon{ display:flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; background:rgba(255,255,255,.2); flex-shrink:0; }
-.toast--success .toast__icon{ background:rgba(255,255,255,.25); }
+.toast--success{ border-left-color:#059669; }
+.toast--error{ border-left-color:#DC2626; }
+.toast--info{ border-left-color:var(--color-primary); }
+.toast__icon{ display:flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; flex-shrink:0; }
+.toast--success .toast__icon{ background:#ECFDF5; color:#059669; }
+.toast--error .toast__icon{ background:#FEF2F2; color:#DC2626; }
+.toast--info .toast__icon{ background:#EFF6FF; color:var(--color-primary); }
+@media (max-width:640px){ .toast{ left:16px; right:16px; bottom:16px; max-width:none; min-width:0; } }
 
 /* Loading states */
 .skeleton{ background:linear-gradient(90deg, var(--color-border) 25%, var(--color-border-strong) 50%, var(--color-border) 75%); background-size:200% 100%; animation:skeleton 1.5s ease-in-out infinite; border-radius:4px; }
@@ -468,3 +539,421 @@ tbody tr:hover{ background:rgba(248,250,252,.92); }
 .empty-state__icon{ width:48px; height:48px; border-radius:16px; background:var(--color-bg); border:1px solid var(--color-border); display:flex; align-items:center; justify-content:center; color:var(--color-text-muted); margin-bottom:12px; }
 .empty-state__title{ font-size:13px; font-weight:700; color:var(--color-text); margin-bottom:4px; }
 .empty-state__desc{ font-size:13px; color:var(--color-text-muted); margin-bottom:16px; }
+
+/* ==========================================================================
+   DETAIL VIEW — resident record (Operate polish)
+   Identity: navy band + gold rule hero, label-above-value fields,
+   grouped sections, prominent print actions. No gradients, no glass.
+   ========================================================================== */
+.detail-view{ width:100%; max-width:none; min-width:0; }
+.detail-view-body{ display:flex; flex-direction:column; gap:20px; width:100%; min-width:0; }
+.detail-view-hero{ overflow:hidden; }
+.detail-view-hero__band{ height:10px; background:var(--color-primary); border-bottom:3px solid var(--color-accent); }
+.detail-view-hero__layout{ display:flex; gap:20px; align-items:flex-start; }
+.detail-view-hero .detail-photo{
+  width:160px; height:160px; border-radius:14px; flex-shrink:0;
+  border:1px solid var(--color-border-strong); background:var(--color-bg);
+}
+.detail-view-name{
+  margin:0; font-size:22px; font-weight:800; letter-spacing:-0.02em;
+  line-height:1.15; color:var(--color-text); overflow-wrap:anywhere;
+}
+.detail-view-id{
+  margin:6px 0 0; font-family:var(--font-mono); font-size:13px;
+  font-weight:700; letter-spacing:-0.01em; color:var(--color-primary);
+}
+.detail-view-pills{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; align-items:center; }
+.detail-view-validity{ display:flex; align-items:center; gap:8px; margin-top:10px; flex-wrap:wrap; font-size:13px; color:var(--color-text-muted); }
+.detail-view-validity strong{ color:var(--color-text); font-variant-numeric:tabular-nums; }
+.detail-view-validity__icon{ display:inline-flex; color:var(--color-text-muted); }
+.detail-view-purok{
+  display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px;
+  background:var(--color-primary); color:#fff; font-size:11px; font-weight:700;
+  border:1px solid var(--color-primary);
+}
+.detail-view-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.detail-view-back{ flex-shrink:0; min-height:40px; padding:0 16px; font-size:13px; }
+.pill-male{ background:#DBEAFE; color:#1E40AF; border-color:#BFDBFE; }
+.pill-female{ background:#FCE7F3; color:#BE185D; border-color:#FBCFE8; }
+.detail-view-groups{
+  display:grid; grid-template-columns:1fr 1fr; gap:24px;
+  margin-top:20px; padding-top:20px; border-top:1px solid var(--color-border);
+}
+.detail-view-group__title{
+  margin:0 0 4px; font-size:11px; font-weight:700; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--color-text-muted);
+}
+.detail-view-fields{ margin:0; display:grid; gap:0; width:100%; min-width:0; }
+.detail-view-fields--2col{ grid-template-columns:repeat(2, minmax(0,1fr)); gap:0 24px; }
+.detail-field{ padding:10px 0; border-top:1px solid var(--color-border); }
+.detail-view-fields .detail-field:first-child,
+.detail-view-fields--2col .detail-field:nth-child(-n+2){ border-top:none; }
+.detail-view-group__title + .detail-view-fields .detail-field:first-child{ border-top:none; }
+.detail-field dt{
+  font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--color-text-muted); margin-bottom:3px;
+}
+.detail-field dd{
+  margin:0; font-size:15px; font-weight:600; line-height:1.45;
+  color:var(--color-text); overflow-wrap:anywhere;
+}
+.detail-view-address{
+  margin:0; font-size:15px; line-height:1.625; color:var(--color-text);
+  border-left:3px solid var(--color-primary); padding-left:14px;
+}
+.detail-view-actions{
+  display:flex; flex-wrap:wrap; gap:12px; justify-content:space-between;
+  align-items:stretch; padding:16px; background:var(--color-surface);
+  border:1px solid var(--color-border); border-radius:var(--radius-card);
+}
+.detail-view-actions__primary,
+.detail-view-actions__secondary{ display:flex; flex-wrap:wrap; gap:10px; }
+.detail-view-actions__primary .detail-view-actions__btn{ min-height:44px; padding:0 20px; font-size:13px; }
+.detail-view-actions__secondary .detail-view-actions__btn{ min-height:44px; padding:0 16px; font-size:13px; }
+.detail-view-empty__steps{
+  list-style:none; margin:0 0 20px; padding:0; display:flex;
+  flex-wrap:wrap; gap:8px; justify-content:center;
+}
+.detail-view-empty__steps li{
+  display:inline-flex; align-items:center; gap:8px; font-size:13px;
+  color:var(--color-text-muted); background:var(--color-bg);
+  border:1px solid var(--color-border); border-radius:999px; padding:6px 12px 6px 6px;
+}
+.detail-view-empty__steps span{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:22px; height:22px; border-radius:50%; background:var(--color-primary);
+  color:#fff; font-size:11px; font-weight:700; flex-shrink:0;
+}
+@media (max-width: 640px){
+  .detail-view-hero__layout{ flex-direction:column; }
+  .detail-view-hero .detail-photo{ width:128px; height:128px; }
+  .detail-view-name{ font-size:20px; }
+  .detail-view-groups{ grid-template-columns:1fr; gap:16px; }
+  .detail-view-fields--2col{ grid-template-columns:1fr; }
+  .detail-view-fields--2col .detail-field:nth-child(2){ border-top:1px solid var(--color-border); }
+  .detail-view-actions{
+    position:sticky; bottom:12px; z-index:20;
+    flex-direction:column; box-shadow:var(--shadow-card);
+  }
+  .detail-view-actions__primary,
+  .detail-view-actions__secondary{ display:grid; grid-template-columns:1fr; }
+  .detail-view-actions__btn{ width:100%; }
+}
+@media (prefers-reduced-motion: reduce){
+  .detail-view{ transition:none !important; }
+}
+
+/* ==========================================================================
+   REGISTER VIEW — Operate polish (restrained civic premium)
+   Matches detail-view identity: navy band + gold rule, label-above inputs,
+   grouped sections, sticky actions on mobile. No gradients, no glass,
+   no emoji. Sans only. Tokens only.
+   ========================================================================== */
+.register-view{ width:100%; max-width:none; }
+.register-head{
+  display:flex; align-items:flex-start; justify-content:space-between;
+  gap:16px; flex-wrap:wrap;
+}
+.register-eyebrow{
+  margin:0 0 2px; font-size:11px; font-weight:700; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--color-text-muted);
+}
+.register-sub{ margin:6px 0 0; font-size:13px; color:var(--color-text-muted); }
+.register-clear{ flex-shrink:0; min-height:40px; padding:0 16px; font-size:13px; }
+.register-hint{ font-weight:400; color:var(--color-text-muted); }
+
+/* Edit-mode banner: gold left rule + pale gold wash (single accent use) */
+.register-edit-banner{
+  display:flex; align-items:center; gap:10px;
+  background:#FFFBEB; border:1px solid #FDE68A; border-left:4px solid var(--color-accent);
+  border-radius:var(--radius-input); padding:10px 14px;
+  font-size:13px; color:#92400E;
+}
+.register-edit-banner__dot{
+  width:8px; height:8px; border-radius:50%;
+  background:var(--color-accent); flex-shrink:0;
+}
+
+/* Staggered section entry: fast, subtle, transform+opacity only */
+@media (prefers-reduced-motion: no-preference){
+  .register-view .register-hero,
+  .register-view .register-section,
+  .register-view .register-actions{ animation:register-enter 320ms ease both; }
+  .register-view .register-section:nth-of-type(2){ animation-delay:60ms; }
+  .register-view .register-section:nth-of-type(3){ animation-delay:120ms; }
+  .register-view .register-section:nth-of-type(4){ animation-delay:180ms; }
+  .register-view .register-section:nth-of-type(5){ animation-delay:240ms; }
+}
+@keyframes register-enter{
+  from{ opacity:0; transform:translateY(8px); }
+  to{ opacity:1; transform:none; }
+}
+
+/* Hero: navy band + gold rule mirrors detail-view-hero */
+.register-hero{ overflow:hidden; }
+.register-hero__band{
+  height:10px; background:var(--color-primary);
+  border-bottom:3px solid var(--color-accent);
+}
+.register-hero__inner{ padding:20px 24px; width:100%; }
+.register-idhead{
+  display:flex; align-items:center; gap:10px;
+  padding-bottom:12px; border-bottom:1px solid var(--color-border);
+}
+.register-stepchip{
+  display:inline-flex; align-items:center;
+  background:var(--color-primary); color:#fff;
+  font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+  padding:4px 10px; border-radius:999px;
+}
+.register-idhead__note{ font-size:12px; color:var(--color-text-muted); }
+.register-generate{ min-height:42px; padding:0 18px; font-size:13px; }
+
+/* Photo: inviting dotted-paper pattern (neutral dots, not decoration) */
+.register-photo{
+  background-color:var(--color-bg);
+  background-image:radial-gradient(#CBD5E1 1px, transparent 1px);
+  background-size:14px 14px;
+  cursor:pointer;
+}
+.register-photo:hover{ border-color:var(--color-primary); }
+.register-photo__empty{ display:flex; flex-direction:column; align-items:center; }
+.register-photo__icon{
+  width:44px; height:44px; border-radius:12px;
+  background:var(--color-surface); border:1px solid var(--color-border);
+  display:flex; align-items:center; justify-content:center;
+  color:var(--color-primary); margin:0 auto;
+}
+.register-photo__cta{
+  font-size:13px; font-weight:700; color:var(--color-primary); margin-top:8px;
+}
+
+/* Section numbering: navy disc + gold ring reads premium, stays civic */
+.register-number{ box-shadow:0 0 0 2px var(--color-surface), 0 0 0 4px var(--color-accent); }
+.register-step{
+  font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--color-text-muted);
+}
+.register-section .form-section__body{ padding:20px 24px; }
+
+/* Birth-date helper: integrated navy badge, not loose grey text */
+.register-age{
+  display:inline-flex; align-items:center; gap:6px; align-self:flex-start;
+  background:rgba(15,43,94,.07); border:1px solid rgba(15,43,94,.18);
+  color:var(--color-primary); font-size:12px; font-weight:700;
+  padding:4px 10px; border-radius:999px; margin-top:2px;
+}
+.register-age:empty{ display:none; }
+
+/* Prefilled state: explicit pill + tinted input */
+.register-prefill{
+  display:inline-flex; align-items:center;
+  font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+  background:#EFF6FF; border:1px solid #BFDBFE; color:#1D4ED8;
+  padding:2px 8px; border-radius:999px; margin-left:6px; vertical-align:1px;
+}
+.register-prefilled{ background:#F8FAFC; border-style:dashed; }
+.register-prefilled:focus{ border-style:solid; background:var(--color-surface); }
+
+/* Emergency group: navy left rule groups the section body */
+.register-emergency .form-section__body{
+  border-left:3px solid var(--color-primary);
+  margin-left:24px; padding-left:20px;
+}
+.register-emergency__note{
+  margin-left:auto; align-items:center; gap:6px;
+  font-size:12px; font-weight:600; color:var(--color-text-muted);
+}
+
+/* Card status: color-coded selected state per status */
+.register-statusrow{ display:flex; gap:10px; flex-wrap:wrap; margin:10px 0 16px; }
+.register-status{
+  min-height:40px; padding:0 18px; font-size:12px; font-weight:700;
+  letter-spacing:.06em; border-radius:999px; position:relative;
+}
+.register-status::before{
+  content:""; width:8px; height:8px; border-radius:50%;
+  background:currentColor; opacity:.45; flex-shrink:0;
+}
+.register-status.is-selected{ color:#fff; border:1px solid transparent; }
+.register-status--active.is-selected{ background:#059669; border-color:#047857; }
+.register-status--renew.is-selected{ background:#2563EB; border-color:#1D4ED8; }
+.register-status--lost.is-selected{ background:#EA580C; border-color:#C2410C; }
+.register-status--damage.is-selected{ background:#DC2626; border-color:#B91C1C; }
+.register-status.is-selected::before{ background:#fff; opacity:1; }
+.register-selected{
+  display:flex; align-items:center; gap:8px;
+  background:var(--color-bg); border:1px solid var(--color-border);
+  border-radius:var(--radius-input); padding:8px 12px; margin-top:4px;
+}
+.register-selected__value{
+  font-weight:800; font-size:12px; letter-spacing:.06em; color:var(--color-text);
+}
+
+/* Actions bar: prominent card, note left + buttons right */
+.register-actions{
+  display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+  background:var(--color-surface); border:1px solid var(--color-border);
+  border-radius:var(--radius-card); padding:14px 16px;
+  box-shadow:var(--shadow-card);
+}
+.register-actions__note{ margin:0; font-size:13px; color:var(--color-text-muted); }
+.register-actions__btns{ display:flex; gap:10px; margin-left:auto; }
+.register-actions__btns .action-btn{ min-height:44px; padding:0 20px; font-size:13px; }
+
+/* Responsive hardening — register auto-fits 320px → 1920px+ (mobile-first).
+   Photo scales 128 → 140 → 160; grids collapse gracefully; flex rows
+   stack on narrow screens. All overrides live here, never tailwind.css. */
+.register-photo{ width:128px; }
+@media (min-width:640px){ .register-photo{ width:140px; } }
+@media (min-width:1024px){ .register-photo{ width:160px; } }
+
+/* Emergency grid: missing variant — 1 col → 2 col (sm) → 3 col (lg) */
+.form-grid--3{ display:grid; gap:16px; grid-template-columns:minmax(0,1fr); }
+@media (min-width:640px){ .form-grid--3{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (min-width:1024px){ .form-grid--3{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
+
+/* Resident ID row: stacked input-over-button on mobile, row from sm */
+.register-idrow{ flex-direction:column; }
+.register-idrow .form-field__input{ min-width:0; flex:1 1 auto; }
+.register-idrow .register-generate{ width:100%; }
+@media (min-width:640px){
+  .register-idrow{ flex-direction:row; }
+  .register-idrow .register-generate{ width:auto; flex-shrink:0; }
+}
+
+/* Card status: 2-col grid on mobile, 4-col from sm; truncate safety */
+.register-statusrow{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:10px 0 16px; }
+@media (min-width:640px){ .register-statusrow{ grid-template-columns:repeat(4,minmax(0,1fr)); } }
+.register-status{
+  width:100%; min-height:44px; overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap;
+}
+
+/* ID head + hero row: wrap safely, tighter gap on mobile */
+.register-idhead{ flex-wrap:wrap; }
+.register-idhead__note{ min-width:0; }
+@media (max-width:640px){ .register-hero__row{ gap:16px; } }
+
+/* Validation states: only after user interaction, never on load */
+.form-field__input:user-invalid,
+.form-field__select:user-invalid{
+  border-color:var(--color-error);
+  box-shadow:0 0 0 4px rgba(220,38,38,.10);
+}
+.form-field__input:user-invalid + .form-field__help,
+.form-field__select:user-invalid + .form-field__help{ color:var(--color-error); }
+
+@media (max-width: 640px){
+  .register-head{ flex-direction:column; align-items:stretch; }
+  .register-clear{ width:100%; }
+  .register-hero__inner{ padding:16px; }
+  .register-section .form-section__body{ padding:16px; }
+  .register-emergency .form-section__body{ margin-left:16px; padding-left:14px; }
+  .register-step{ display:none; }
+  .register-actions{
+    position:sticky; bottom:12px; z-index:20;
+    flex-direction:column; align-items:stretch;
+  }
+  .register-actions__note{ text-align:center; }
+  .register-actions__btns{ display:grid; grid-template-columns:minmax(0,1fr); width:100%; margin-left:0; }
+  .register-actions__btns .action-btn{ width:100%; min-height:48px; }
+  .register-status{ min-height:48px; }
+  .form-field__input, .form-field__select{ min-height:44px; font-size:14px; }
+  .register-generate{ min-height:48px; }
+}
+@media (prefers-reduced-motion: reduce){
+  .register-view .register-hero,
+  .register-view .register-section,
+  .register-view .register-actions{ animation:none !important; }
+}
+
+/* ==========================================================================
+   REGISTER AUTOFIT — strict containment inside <main> (320px → 1920px+).
+   Parent: max-w-[1280px] + px-4/sm:px-6/lg:px-8. This block guarantees the
+   register/edit form never causes horizontal scroll, clipping, or blowout.
+   CSS-only fix; no JS/Alpine/markup contract changes. Lives here, never
+   in tailwind.css.
+   ========================================================================== */
+.register-view{
+  min-width:0; width:100%; max-width:none;
+  overflow-x:hidden; /* general overflow protection (#9) */
+}
+.register-view img{ max-width:100%; }
+.register-view .card,
+.register-view .form-section{
+  min-width:0; width:100%; max-width:100%;
+}
+
+/* --- Grids: minmax(0,1fr) + min-width:0 items (#2, #9) --- */
+.form-grid > *,
+.form-field{ min-width:0; }
+.form-grid--2{ grid-template-columns:minmax(0,1fr); }
+@media (min-width:640px){ .form-grid--2{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+/* --4 already minmax-based above; re-asserted here so no 1fr slips back in */
+.form-grid--4{ grid-template-columns:minmax(0,1fr); }
+@media (min-width:640px){ .form-grid--4{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (min-width:1024px){ .form-grid--4{ grid-template-columns:repeat(4,minmax(0,1fr)); } }
+/* Emergency span guard (#8): a col-span-2 child in a 1-col track would
+   force an implicit second column and overflow at 320-639px. */
+@media (max-width:639.98px){
+  .form-grid--3 > [class*="col-span"],
+  .form-grid--2 > [class*="col-span"],
+  .form-grid--4 > [class*="col-span"]{ grid-column:auto !important; }
+}
+
+/* --- Inputs: shrinkable + full cell width (#3) --- */
+.form-field__input,
+.form-field__select{
+  min-width:0; width:100%; max-width:100%;
+}
+input[type="date"].form-field__input{ min-width:0; }
+.register-idrow .form-field__input{ min-width:0; flex:1 1 auto; width:100%; }
+
+/* --- Hero card (#1): flex children must shrink; photo scales + caps --- */
+.register-hero__row{ min-width:0; }
+.register-hero__row > *{ min-width:0; max-width:100%; }
+.register-hero__row > .flex-shrink-0{ max-width:100%; }
+.register-photo{ width:128px; max-width:100%; }
+@media (min-width:640px){ .register-photo{ width:140px; } }
+@media (min-width:1024px){ .register-photo{ width:160px; } }
+.register-photo img{ max-width:100%; }
+.register-idhead{ min-width:0; }
+.register-idhead__note{ min-width:0; overflow-wrap:anywhere; }
+
+/* --- ID row (#4): stacked mobile, side-by-side from sm --- */
+.register-idrow{ display:flex; min-width:0; flex-direction:column; }
+.register-idrow > *{ min-width:0; }
+.register-idrow .register-generate{ width:100%; flex-shrink:0; }
+@media (min-width:640px){
+  .register-idrow{ flex-direction:row; align-items:center; }
+  .register-idrow .register-generate{ width:auto; }
+}
+
+/* --- Card status (#5): 2-col mobile → 4-col sm, ellipsis-safe --- */
+.register-statusrow{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:10px 0 16px; min-width:0; }
+@media (min-width:640px){ .register-statusrow{ grid-template-columns:repeat(4,minmax(0,1fr)); } }
+.register-status{
+  min-width:0; width:100%; max-width:100%;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+
+/* --- Actions bar (#6): stacked full-width mobile → inline from sm --- */
+.register-actions{ min-width:0; max-width:100%; }
+.register-actions__note{ min-width:0; }
+.register-actions__btns{ min-width:0; flex-wrap:wrap; gap:10px; }
+.register-actions__btns .action-btn{ min-width:0; max-width:100%; }
+@media (max-width:639.98px){
+  .register-actions__btns .action-btn{ width:100%; }
+}
+
+/* --- Photo upload wrapper (#7): never exceed its cell --- */
+.register-hero__row > .flex-shrink-0{ width:100%; max-width:280px; margin-inline:auto; }
+@media (min-width:1024px){
+  .register-hero__row > .flex-shrink-0{ width:auto; margin-inline:0; }
+}
+
+/* --- Emergency grid (#8): 1-col → 2-col sm → 3-col lg (asserted) --- */
+.form-grid--3{ grid-template-columns:minmax(0,1fr); }
+@media (min-width:640px){ .form-grid--3{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (min-width:1024px){ .form-grid--3{ grid-template-columns:repeat(3,minmax(0,1fr)); } }

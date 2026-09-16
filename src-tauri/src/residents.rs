@@ -1058,6 +1058,10 @@ pub struct DashboardStats {
     pub this_year: i64,
     pub male: i64,
     pub female: i64,
+    pub active: i64,
+    pub renew: i64,
+    pub lost: i64,
+    pub damage: i64,
 }
 
 #[tauri::command]
@@ -1101,11 +1105,42 @@ pub async fn get_dashboard_stats(
     .fetch_one(&pool)
     .await
     .map_err(|e| e.to_string())?;
+    // Card-status counts mirror statusLabel(): active residents bucketed by
+    // remarks (NULL/blank legacy rows count as ACTIVE); soft-deleted rows
+    // never appear in any bucket. UPPER() keeps legacy mixed-case comparable.
+    let active: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM residents WHERE is_active = 1 AND (remarks IS NULL OR TRIM(remarks) = '' OR UPPER(remarks) = 'ACTIVE')",
+    )
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    let renew: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM residents WHERE is_active = 1 AND UPPER(remarks) = 'RENEW'",
+    )
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    let lost: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM residents WHERE is_active = 1 AND UPPER(remarks) = 'LOST'",
+    )
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    let damage: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM residents WHERE is_active = 1 AND UPPER(remarks) = 'DAMAGE'",
+    )
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| e.to_string())?;
     Ok(DashboardStats {
         total,
         this_year,
         male,
         female,
+        active,
+        renew,
+        lost,
+        damage,
     })
 }
 

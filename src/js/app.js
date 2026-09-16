@@ -46,7 +46,7 @@ function emptyForm() {
         email: '',
         address_street: '',
         address_purok: '',
-        address_barangay: '',
+        address_barangay: '(NOUVELAS OCCIDENTAL) BALUD',
         address_city: 'BASEY',
         address_province: 'SAMAR',
         religion: '',
@@ -74,12 +74,14 @@ function app() {
         currentView: 'dashboard',
         
         // Stats
-        stats: { total: 0, thisYear: 0, male: 0, female: 0 },
+        stats: { total: 0, thisYear: 0, male: 0, female: 0, active: 0, renew: 0, lost: 0, damage: 0 },
         recentResidents: [],
         
         // Form
         form: emptyForm(),
         editingResident: null,
+        // View to return to after leaving edit mode (list/detail Back target).
+        editReturnView: 'dashboard',
         // Existing photo (edit mode) shown while photoData holds a fresh upload.
         // Kept outside `form` so it never leaks into the save payload.
         editPhotoUrl: '',
@@ -144,6 +146,14 @@ function app() {
                 e.target.value = up;
                 if (key in this.form) this.form[key] = up;
             }
+        },
+        // Live 11-digit mask for contact fields: digits only, auto-dash
+        // 0990-123-4567 as you type. BRGY- emergency references pass through.
+        onContactInput(e, key) {
+            if (!e || !e.target) return;
+            const masked = maskContactPH(e.target.value);
+            if (e.target.value !== masked) e.target.value = masked;
+            if (key in this.form) this.form[key] = masked;
         },
         onSettingsUpper(e, key) {
             if (!e || !e.target) return;
@@ -256,16 +266,28 @@ function app() {
                     this.stats.thisYear = stats.this_year;
                     this.stats.male = stats.male;
                     this.stats.female = stats.female;
+                    this.stats.active = stats.active ?? 0;
+                    this.stats.renew = stats.renew ?? 0;
+                    this.stats.lost = stats.lost ?? 0;
+                    this.stats.damage = stats.damage ?? 0;
                 } else {
                     // Fallback for older backend: full paged fetch (no silent cap).
+                    // Mirrors backend buckets: active-only, UPPER() compare,
+                    // NULL/blank remarks count as ACTIVE.
                     const all = await this.fetchAllResidentsPaged();
                     const currentYear = new Date().getFullYear().toString();
+                    const actives = all.filter(r => r.is_active !== 0);
+                    const statusOf = (r) => (((r.remarks || 'ACTIVE') + '').toUpperCase());
                     this.stats.total = all.length;
                     this.stats.thisYear = all.filter(r =>
                         r.date_registered && r.date_registered.startsWith(currentYear)
                     ).length;
-                    this.stats.male = all.filter(r => r.gender === 'Male').length;
-                    this.stats.female = all.filter(r => r.gender === 'Female').length;
+                    this.stats.male = all.filter(r => ((r.gender || '').toUpperCase()) === 'MALE').length;
+                    this.stats.female = all.filter(r => ((r.gender || '').toUpperCase()) === 'FEMALE').length;
+                    this.stats.active = actives.filter(r => { const s = statusOf(r); return s === 'ACTIVE'; }).length;
+                    this.stats.renew = actives.filter(r => statusOf(r) === 'RENEW').length;
+                    this.stats.lost = actives.filter(r => statusOf(r) === 'LOST').length;
+                    this.stats.damage = actives.filter(r => statusOf(r) === 'DAMAGE').length;
                 }
                 try {
                     this.recentResidents = await API.getRecentResidents(10);
@@ -337,7 +359,7 @@ function app() {
                 
                 // Set defaults: barangay from settings; city/province prefilled BASEY/SAMAR (editable, persisted to DB)
                 if (!this.form.address_barangay) {
-                    this.form.address_barangay = this.settings.barangayName;
+                    this.form.address_barangay = '(NOUVELAS OCCIDENTAL) BALUD';
                 }
                 if (!this.form.address_city) {
                     this.form.address_city = 'BASEY';
@@ -350,6 +372,19 @@ function app() {
                 this.normalizeFormUpper();
                 // R3 — normalize DOB to YYYY-MM-DD before storage (accepts DD-MM-YYYY, DD/MM/YYYY, YYYY-MM-DD)
                 if (this.form.birth_date) this.form.birth_date = normalizeBirthDateForSubmit(this.form.birth_date);
+                // Contact fields must be exactly 11 digits (09XX-XXX-XXXX) on new
+                // input — the mask guides entry, this gate blocks legacy short
+                // numbers at submit (old DB rows untouched). Emergency also
+                // accepts a BRGY- resident reference (backend verifies it).
+                const mustBeMobile = (v, label, allowBrgy) => {
+                    const t = (v || '').trim();
+                    if (!t) return;
+                    if (allowBrgy && /^BRGY-/i.test(t)) return;
+                    const d = t.replace(/\D/g, '');
+                    if (d.length !== 11 || !d.startsWith('09')) throw label + ' must be 11 digits (09XX-XXX-XXXX)';
+                };
+                mustBeMobile(this.form.contact_number, 'Contact number', false);
+                mustBeMobile(this.form.emergency_contact_number, 'Emergency contact number', true);
                 // Prepare resident data (exclude photoData from resident object)
                 const resident = { ...this.form };
                 const photoData = this.form.photoData && this.form.photoData.startsWith('data:') 
@@ -396,7 +431,7 @@ function app() {
             // Auto-generate ID for new entries
             this.generateID();
             // Pre-fill address defaults: barangay from settings, city BASEY, province SAMAR (editable)
-            this.form.address_barangay = this.settings.barangayName;
+            this.form.address_barangay = '(NOUVELAS OCCIDENTAL) BALUD';
             this.form.address_city = 'BASEY';
             this.form.address_province = 'SAMAR';
         },
@@ -413,6 +448,15 @@ function app() {
                     this.detailPhoto = null;
                 }
                 this.currentView = 'detail';
+                // Detail replaces the list: jump to top instantly so the hero is in viewport,
+                // then move keyboard focus to main for screen readers. Smooth scroll is
+                // unreliable inside Tauri webviews and leaves content below the fold.
+                try {
+                    setTimeout(() => {
+                        try { window.scrollTo(0, 0); } catch {}
+                        try { document.getElementById('main-content').focus({ preventScroll: true }); } catch {}
+                    }, 30);
+                } catch {}
                 Logger.info('viewResident', id);
             } catch (e) {
                 this.showToast('Failed to load resident: ' + e, 'error');
@@ -426,8 +470,18 @@ function app() {
             this.detailPhoto = null;
         },
 
+        // Edit-mode Back: return to the resident's detail view without saving.
+        async goBackFromEdit() {
+            const id = this.editingResident;
+            if (!id) { this.closeDetail(); return; }
+            await this.viewResident(id);
+            this.previousView = this.editReturnView || 'dashboard';
+        },
         async editResident(id) {
             try {
+                // Capture return target only when entering edit mode fresh —
+                // revertEdit() re-calls this and must not overwrite it.
+                if (this.editingResident !== id) this.editReturnView = this.previousView || 'dashboard';
                 const resident = await API.getResident(id);
                 this.form = { ...emptyForm(), ...resident, photoData: '' };
                 // Stored enum values are UPPERCASE and selects now match by
@@ -440,8 +494,11 @@ function app() {
                 try { this.editPhotoUrl = (await API.getResidentPhoto(id)) || ''; }
                 catch { this.editPhotoUrl = ''; }
                 this.editingResident = resident.id;
+                // Leaving detail: clear detail state first so the register view never
+                // renders behind a stale detail record.
+                this.detailResident = null;
+                this.detailPhoto = null;
                 this.currentView = 'register';
-                if (this.currentView === 'detail') this.closeDetail();
             } catch (e) {
                 this.showToast('Failed to load resident: ' + e, 'error');
                 Logger.error('editResident failed', e);
@@ -572,6 +629,48 @@ function app() {
             return iso < today;
         },
         
+        // Gender pie segment math: full percent of total — white seam ticks
+        // (pieBoth) separate the arcs instead of a value gap, so round caps
+        // meet the seam cleanly. Empty and full-circle states stay clean.
+        pieSeg(part) {
+            if (!this.stats.total || part <= 0) return 0;
+            return (part / this.stats.total) * 100;
+        },
+        pieSpan() {
+            if (!this.stats.total) return 0;
+            return (this.stats.male / this.stats.total) * 360;
+        },
+        pieBoth() {
+            if (!this.stats.total) return false;
+            const m = (this.stats.male / this.stats.total) * 100;
+            return m > 2 && m < 98;
+        },
+        pieOff() {
+            if (!this.stats.total) return 0;
+            return -((this.stats.male / this.stats.total) * 100);
+        },
+        // Days until ID expiry (null when unset/unparseable). Accepts ISO
+        // storage plus legacy DD-MM-YYYY rows; compares calendar dates only.
+        validDaysLeft(r) {
+            if (!r || !r.valid_until || !String(r.valid_until).trim()) return null;
+            const vu = String(r.valid_until).trim();
+            let iso;
+            if (/^\d{4}-\d{2}-\d{2}$/.test(vu)) iso = vu;
+            else {
+                const p = vu.split(/[-/]/);
+                if (p.length !== 3) return null;
+                iso = `${p[2].padStart(4, '0')}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+            }
+            return Math.round((new Date(iso) - new Date(this.todayISO())) / 86400000);
+        },
+        // Expiry countdown readout for the detail hero validity line.
+        expiryCountdown(r) {
+            const d = this.validDaysLeft(r);
+            if (d === null) return 'No expiry set';
+            if (d < 0) return 'Expired ' + Math.abs(d) + ' day' + (Math.abs(d) === 1 ? '' : 's') + ' ago';
+            if (d === 0) return 'Expires today';
+            return d + ' day' + (d === 1 ? '' : 's') + ' left';
+        },
         // Semantic status pill class for new CSS variants
         statusPillClass(r) {
             const label = this.statusLabel(r);

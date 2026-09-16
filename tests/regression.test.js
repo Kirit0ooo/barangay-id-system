@@ -208,5 +208,58 @@ check('backend short_barangay extracts parens first', configRs.includes("find('(
 check('backend short_barangay keeps full-string fallback', configRs.includes("b.to_uppercase()") && configRs.includes('chars().take(40)'), 'fallback missing in config.rs');
 check('card template carries barangay.ico favicon', cardTpl.includes('<link rel="icon" href="barangay.ico" type="image/x-icon">'), 'favicon link missing in card-template.html');
 
+// 27. repair — null guards on async-loaded template state (photoScanResult)
+check('photoScanResult panel uses template x-if outer guard', indexHtml.includes('<template x-if="photoScanResult">'), 'outer should be template x-if, not x-show');
+check('photoScanResult inner orphan guard null-safe', indexHtml.includes('photoScanResult && photoScanResult.orphan_count'), 'inner x-if must guard null before .orphan_count');
+check('no bare photoScanResult deref outside template', !/x-show="photoScanResult"/.test(indexHtml) || indexHtml.includes('<template x-if="photoScanResult">'), 'x-show on nullable still present');
+
+// 28. detail open/close logic — routed view (not modal/new window)
+check('detail opens as exclusive routed view', indexHtml.includes(`x-show="currentView === 'detail'"`), 'detail must be exclusive currentView branch');
+check('detail Edit goes to register (no closeDetail bounce)', !indexHtml.includes(`editResident(detailResident.id); closeDetail()`), 'Edit must not call closeDetail after editResident');
+check('detail dismisses with Esc', indexHtml.includes(`@keydown.escape.window`), 'Esc-to-close missing on app root');
+
+// 29. amber-neon backdrop — titles stay readable, surfaces stay light
+const styleCss = readFileSync(join(root, 'src/css/style.css'), 'utf8');
+check('amber-neon backdrop token exists', styleCss.includes('--amber-neon:') && styleCss.includes('background:var(--amber-neon)'), 'backdrop token missing');
+check('all five view titles use view-title', (indexHtml.match(/view-title"/g) || []).length >= 5, 'every view h2 needs view-title');
+check('content surfaces stay light', styleCss.includes('.stat-card{\n  background:var(--color-surface);') && styleCss.includes('.form-section{\n  background:var(--color-surface);'), 'cards/stats/forms must stay white surfaces');
+
+// 30. contact auto-dash mask — 11 digits, 0990-123-4567, submit gate
+const helpersJs = readFileSync(join(root, 'src/js/helpers.js'), 'utf8');
+check('maskContactPH helper exists', helpersJs.includes('function maskContactPH('), 'mask helper missing');
+check('contact inputs use mask handler', indexHtml.includes(`onContactInput($event, 'contact_number')`) && indexHtml.includes(`onContactInput($event, 'emergency_contact_number')`), 'inputs not wired to mask');
+check('contact inputs capped by maxlength', indexHtml.includes('id="inp-contact"') && indexHtml.includes('maxlength="13"'), 'maxlength cap missing');
+check('save enforces 11-digit mobiles', appJs.includes('mustBeMobile'), 'submit gate missing');
+
+// 31. dashboard status cards + gender pie (male/female ratio cards retired)
+check('status cards present (active/renew/lost/damage)', ['Active cards', 'Renew cards', 'Lost cards', 'Damage cards'].every(s => indexHtml.includes(s)), 'status card missing');
+check('gender pie present (offline SVG, no chart lib)', indexHtml.includes('svg class="pie"') && indexHtml.includes('pie-legend'), 'pie missing');
+check('old ratio cards retired', !indexHtml.includes('stat-card--male') && !indexHtml.includes('stat-card--female'), 'old male/female cards still present');
+check('backend serves status counts', residentsRs.includes('pub active: i64') && residentsRs.includes("UPPER(remarks) = 'RENEW'") && residentsRs.includes("UPPER(remarks) = 'LOST'") && residentsRs.includes("UPPER(remarks) = 'DAMAGE'"), 'status queries missing');
+check('pie segments use gapped helper + definition ring', appJs.includes('pieSeg(') && appJs.includes('pieOff()') && indexHtml.includes('r="56.5"'), 'pie segment math missing');
+check('primary stat dominant (34px)', styleCss.includes('.stat-card--primary .stat-card__value{ color:var(--color-text); font-size:34px; }'), 'primary dominance missing');
+check('year stacked under total, pie middle (no right side)', indexHtml.includes('stat-hero__side--left') && !indexHtml.includes('stat-hero__side--right') && !indexHtml.includes('stat-card--primary" role') && !indexHtml.includes('stat-card--secondary" role'), 'stacked hero missing');
+check('hero stat icons tinted (total navy, year blue)', styleCss.includes('.stat-hero__stat--total .stat-card__icon') && styleCss.includes('.stat-hero__stat--year .stat-card__icon'), 'hero icons untinted');
+check('hero chart zone capped (no ultrawide sprawl)', styleCss.includes('.stat-hero__chart{ min-width:0; max-width:380px;'), 'chart cap missing');
+check('hero stat slots aligned (label/value/meta rows)', styleCss.includes('.stat-hero__stat .stat-card__value{ min-height:40px;'), 'slot alignment missing');
+check('root clips horizontal overflow (full-bleed sticky nav)', styleCss.includes('html,body{ overflow-x:clip; }'), 'nav can scroll sideways');
+check('uniform 40px buttons, label-fit widths', styleCss.includes('min-height:40px;') && !indexHtml.includes('min-height: 100px') && indexHtml.includes('action-chip'), 'button heights vary');
+check('edit mode hides Clear Form, shows Back (new keeps Clear)', indexHtml.includes('x-show="!editingResident" @click="clearForm"') && indexHtml.includes('x-show="editingResident" @click="goBackFromEdit()"'), 'edit/new buttons not gated');
+check('edit mode has Back only (Cancel is new-only)', indexHtml.includes('x-show="!editingResident" @click="clearForm"') && !appJs.includes('async revertEdit()') && appJs.includes('async goBackFromEdit()'), 'edit-mode buttons wrong');
+check('detail hero shows ID expiry below pills', indexHtml.includes('detail-view-validity') && indexHtml.includes('expiryCountdown(detailResident)') && appJs.includes('expiryCountdown('), 'expiry line missing');
+check('pie extrude graded by depth', indexHtml.includes(':opacity="0.35 + i * 0.06"'), 'flat extrude opacity');
+check('pie legend has proportion bars', indexHtml.includes('pie-legend__fill--male') && indexHtml.includes('pie-legend__fill--female'), 'legend bars missing');
+check('pie ring seated both edges + soft shadow', indexHtml.includes('r="33.5"') && indexHtml.includes('feGaussianBlur') && indexHtml.includes('filter="url(#pieSoft)"'), 'pie seating incomplete');
+check('pie reference traits (round caps, seams, radial fill)', indexHtml.includes('stroke-linecap="round"') && indexHtml.includes('pieBoth()') && indexHtml.includes('radialGradient') && !indexHtml.includes('pie-diff'), 'reference adaptation incomplete');
+check('pie top arcs lit by vertical gradients', indexHtml.includes('pieGradMale') && indexHtml.includes('pieGradFemale') && indexHtml.includes('stroke="url(#pieGradMale)"'), 'arc gradients missing');
+
+// 32. per-user MSI (writable one-folder install + automatic desktop shortcut)
+const wixTmpl = readFileSync(join(root, 'src-tauri/wix/main.wxs'), 'utf8');
+check('MSI installs per-user (no admin, writable dir)', wixTmpl.includes('InstallScope="perUser"') && wixTmpl.includes('InstallPrivileges="limited"') && !wixTmpl.includes('InstallScope="perMachine"'), 'MSI still perMachine');
+check('MSI data dir is per-user LocalAppData (not Program Files)', wixTmpl.includes('LocalAppDataFolder') && !wixTmpl.includes('$(var.PlatformProgramFilesFolder)" Name="PFiles"'), 'install dir still Program Files');
+check('MSI creates desktop shortcut automatically', wixTmpl.includes('<Directory Id="DesktopFolder"') && wixTmpl.includes('Id="ApplicationShortcutDesktop"') && wixTmpl.includes('<ComponentRef Id="ApplicationShortcutDesktop"'), 'desktop shortcut missing');
+check('tauri.conf wires custom WiX template', tauriConf.tauri.bundle.windows.wix.template === './wix/main.wxs', 'wix.template not wired');
+check('WebView2 embedded offline (no runtime download)', tauriConf.tauri.bundle.windows.webviewInstallMode.type === 'offlineInstaller', 'still bootstrapper/download mode');
+
 if (failed) { console.error(`\n${failed} regression check(s) failed`); process.exit(1); }
 else console.log(`\nAll regression checks passed — HIGH findings repaired`);
