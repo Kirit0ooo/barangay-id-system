@@ -24,7 +24,25 @@ pub fn default_root() -> PathBuf {
     }
     #[cfg(not(windows))]
     {
-        PathBuf::from("/mnt/d/Barangay/barangay-id-system")
+        // Portable fallback: walk up from the executable location looking
+        // for project markers (src-tauri/ or barangay.ico), max 6 levels.
+        // Final fallback is current_dir() — keeps all data inside the
+        // project folder. Never returns paths under /tmp, /var, or home.
+        if let Ok(exe) = std::env::current_exe() {
+            let mut dir = exe.parent().map(|p| p.to_path_buf());
+            for _ in 0..6 {
+                if let Some(d) = dir.clone() {
+                    if d.join("src-tauri").exists() || d.join("barangay.ico").exists() {
+                        return d;
+                    }
+                    dir = d.parent().map(|p| p.to_path_buf());
+                } else {
+                    break;
+                }
+            }
+        }
+        // Last resort: current working directory
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
     }
 }
 
@@ -135,6 +153,15 @@ pub fn get_documents_excel_dir() -> PathBuf {
     d
 }
 
+/// Phase-1 verification registry home (`Documents/Verify/registry-*.json`).
+/// Operator-published to the static portal next to `verify/index.html`.
+/// Holds full PII by design — gitignored, never committed.
+pub fn get_verify_dir() -> PathBuf {
+    let d = get_documents_dir().join("Verify");
+    let _ = fs::create_dir_all(&d);
+    d
+}
+
 pub fn get_app_data_dir() -> PathBuf {
     // Isolation: ALL data must stay inside the project tree — no fallback to AppData/TEMP.
     // Ensure Documents structure exists as well.
@@ -225,84 +252,6 @@ pub fn sanitize_file_name_component(raw_name: &str, max_stem_len: usize) -> Stri
     stem + &ext
 }
 
-/// L2 (finalized): legacy PDF-era name. Kept for existing tests only — new
-/// call sites use `per_resident_export_stem`. Same behavior; delegates.
-#[cfg(test)]
-pub fn per_resident_pdf_filename(full_name: &str, resident_id: &str) -> String {
-    per_resident_export_stem(full_name, resident_id)
-}
-
-/// L2: canonical per-resident **export** stem (xlsx-only; HTML-only print).
-/// Build a sanitized `<NAME>-<RESIDENT_ID>.pdf` stem: NAME = full name
-/// uppercased, spaces collapsed to `_`; RESIDENT_ID kept verbatim except
-/// illegal chars stripped. Both parts capped for Windows safety.
-/// Callers strip the trailing `.pdf` for the stem.
-/// Currently exercised by unit tests only (per-resident export command
-/// removed as unwired); retained as the canonical stem helper for reuse.
-#[allow(dead_code)]
-pub fn per_resident_export_stem(full_name: &str, resident_id: &str) -> String {
-    let name_part = {
-        let upper = full_name.trim().to_uppercase();
-        let mut tmp: String = upper
-            .chars()
-            .filter(|c| {
-                !matches!(*c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
-                    && !c.is_control()
-            })
-            .collect();
-        tmp = tmp.replace("..", "");
-        let mut out = String::new();
-        let mut prev_us = false;
-        for c in tmp.chars() {
-            if c.is_whitespace() {
-                if !prev_us {
-                    out.push('_');
-                    prev_us = true;
-                }
-            } else {
-                out.push(c);
-                prev_us = false;
-            }
-        }
-        let v: Vec<char> = out.chars().collect();
-        let cut: String = if v.len() > 80 {
-            v[..80].iter().collect()
-        } else {
-            out
-        };
-        cut.trim().trim_matches('.').trim_matches('_').to_string()
-    };
-    let id_part = {
-        let t: String = resident_id
-            .trim()
-            .chars()
-            .filter(|c| {
-                !matches!(*c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
-                    && !c.is_control()
-                    && !c.is_whitespace()
-            })
-            .collect();
-        let t = t.replace("..", "");
-        let v: Vec<char> = t.chars().collect();
-        if v.len() > 40 {
-            v[..40].iter().collect()
-        } else {
-            t
-        }
-    };
-    let name = if name_part.is_empty() {
-        "UNNAMED".to_string()
-    } else {
-        name_part
-    };
-    let id = if id_part.is_empty() {
-        "NO-ID".to_string()
-    } else {
-        id_part
-    };
-    sanitize_file_name_component(&format!("{}-{}.pdf", name, id), 120)
-}
-
 /// Bulk base name from the backup/execution local date: `BACKUP-YYYY-MM-DD`.
 pub fn backup_base_name() -> String {
     format!("BACKUP-{}", chrono::Local::now().format("%Y-%m-%d"))
@@ -387,6 +336,46 @@ pub(crate) fn prune_oldest_files(dir: &Path, prefixes: &[&str], keep: usize) {
         dir.display(),
         keep
     );
+}
+
+/// Phase-1 prerequisite: back up irreplaceable config secrets alongside the
+/// DB copy. Losing the QR/verifying signing keys orphans every printed QR,
+/// and backups already hold full PII, so no new exposure class is added.
+/// Writes `<dir>/config_backup_<stem>.json` with the sidecar values present
+/// (missing keys serialize null). Best-effort: failures are logged, never
+/// fail the backup. Restore is deliberately MANUAL (see QR docs) — secrets
+/// are never auto-overwritten by a restore.
+pub(crate) fn backup_config_secrets(dir: &Path, stem: &str) {
+    let read_secret = |name: &str| -> Option<String> {
+        let root = get_project_root()?;
+        let raw = fs::read_to_string(root.join("config").join(name)).ok()?;
+        let t = raw.trim().to_string();
+        if t.is_empty() {
+            None
+        } else {
+            Some(t)
+        }
+    };
+    let doc = serde_json::json!({
+        "exported_at": chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+        "qr_hmac_secret": read_secret("qr_hmac_secret"),
+        "id_verify_private": read_secret("id_verify_private"),
+    });
+    let dest = dir.join(format!("config_backup_{}.json", stem));
+    if validate_isolated_write_path(&dest).is_err() {
+        tracing::warn!("config secrets backup skipped (isolation)");
+        return;
+    }
+    match serde_json::to_string_pretty(&doc) {
+        Ok(text) => {
+            if fs::write(&dest, text).is_ok() {
+                tracing::info!("config secrets backed up at {}", dest.display());
+            } else {
+                tracing::warn!("config secrets backup write failed: {}", dest.display());
+            }
+        }
+        Err(e) => tracing::warn!("config secrets backup serialize failed: {}", e),
+    }
 }
 
 fn lexical_normalize(path: &Path) -> PathBuf {
@@ -558,7 +547,6 @@ pub async fn init_db() -> Result<SqlitePool> {
             citizenship TEXT DEFAULT 'Filipino',
             occupation TEXT,
             contact_number TEXT,
-            email TEXT,
             address_street TEXT,
             address_purok TEXT,
             address_barangay TEXT DEFAULT 'Barangay',
@@ -595,6 +583,11 @@ pub async fn init_db() -> Result<SqlitePool> {
 
     // Migration for existing DBs: add column if missing
     let _ = sqlx::query("ALTER TABLE residents ADD COLUMN valid_until TEXT")
+        .execute(&pool)
+        .await;
+    // Email removal: drop the deprecated column from existing DBs.
+    // Best-effort (ignored when already gone or on old SQLite).
+    let _ = sqlx::query("ALTER TABLE residents DROP COLUMN email")
         .execute(&pool)
         .await;
     // Data-integration audit trail + emergency-contact FK link (nullable; old
@@ -864,45 +857,17 @@ mod validate_tests {
         assert!(out.ends_with(".pdf"), "ext kept: {}", out);
     }
 
-    // ── per_resident_pdf_filename caps and fallbacks ──
+    // ── dead-PDF surface removed (Phase-1): no per-resident .pdf stem
+    // helper exists anymore — print is HTML-only via card-template.html.
     #[test]
-    fn per_resident_pdf_80_40_caps_and_illegal_stripped() {
-        let long_name = "A".repeat(120);
-        let long_id = "B".repeat(80);
-        let fname = per_resident_pdf_filename(&long_name, &long_id);
-        assert!(fname.ends_with(".pdf"), "must end .pdf: {}", fname);
-        let stem = fname.strip_suffix(".pdf").unwrap();
-        // after sanitize 120 cap
+    fn no_pdf_stem_helper_remains() {
+        // Sanitize helper (used by xlsx/registry paths) must not emit .pdf.
+        let out = sanitize_file_name_component("DOE-BRGY-2026-00001", 120);
         assert!(
-            stem.len() <= 120,
-            "stem 120 cap violated: {} len {}",
-            stem,
-            stem.len()
+            !out.ends_with(".pdf"),
+            "stem helper must not emit .pdf: {}",
+            out
         );
-        // illegal chars filtered
-        let fname2 = per_resident_pdf_filename("a/b:c*d?e\"f<g>h|i", "id/with\\bad:chars");
-        for ch in ['/', '\\', ':', '*', '?', '"', '<', '>', '|'] {
-            assert!(!fname2.contains(ch), "illegal {} in {}", ch, fname2);
-        }
-    }
-
-    #[test]
-    fn per_resident_pdf_empty_fallbacks() {
-        let fname = per_resident_pdf_filename("", "");
-        assert!(fname.contains("UNNAMED"), "empty name fallback: {}", fname);
-        assert!(fname.contains("NO-ID"), "empty id fallback: {}", fname);
-        assert!(fname.ends_with(".pdf"));
-        let fname2 = per_resident_pdf_filename("   ", "   ");
-        assert!(fname2.contains("UNNAMED"));
-        assert!(fname2.contains("NO-ID"));
-    }
-
-    #[test]
-    fn per_resident_pdf_illegal_name_normalized() {
-        let fname = per_resident_pdf_filename("JOHN..DOE / TEST: *", "BRGY-2026-00001");
-        assert!(!fname.contains(".."), "dotdot in {}", fname);
-        assert!(!fname.contains('/'), "slash in {}", fname);
-        assert!(!fname.contains(':'), "colon in {}", fname);
     }
 
     // ── validate_isolated_write_path extended ──

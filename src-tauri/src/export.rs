@@ -118,7 +118,6 @@ fn write_excel(residents: &[Resident], save_path: &str) -> Result<()> {
         "Citizenship",
         "Occupation",
         "Contact No.",
-        "Email",
         "Street",
         "Purok",
         "Full Address",
@@ -142,6 +141,7 @@ fn write_excel(residents: &[Resident], save_path: &str) -> Result<()> {
         "Date Registered",
         "Date Updated",
         "Emergency Address",
+        "Emergency Contact Resident ID",
     ];
 
     for (col, header) in headers.iter().enumerate() {
@@ -149,9 +149,9 @@ fn write_excel(residents: &[Resident], save_path: &str) -> Result<()> {
     }
 
     let widths = [
-        8.0, 14.0, 15.0, 15.0, 15.0, 8.0, 12.0, 18.0, 9.0, 12.0, 12.0, 15.0, 14.0, 20.0, 15.0,
-        12.0, 32.0, 15.0, 15.0, 15.0, 12.0, 10.0, 8.0, 8.0, 14.0, 14.0, 14.0, 14.0, 20.0, 12.0,
-        18.0, 18.0, 10.0, 14.0, 16.0, 16.0, 20.0,
+        8.0, 14.0, 15.0, 15.0, 15.0, 8.0, 12.0, 18.0, 9.0, 12.0, 12.0, 15.0, 14.0, 15.0, 12.0,
+        32.0, 15.0, 15.0, 15.0, 12.0, 10.0, 8.0, 8.0, 14.0, 14.0, 14.0, 14.0, 20.0, 12.0, 18.0,
+        18.0, 10.0, 14.0, 16.0, 16.0, 20.0, 20.0,
     ];
     // M-2: guard against header/width desync that would silently truncate columns
     assert_eq!(
@@ -231,122 +231,116 @@ fn write_excel(residents: &[Resident], save_path: &str) -> Result<()> {
         worksheet.write_string_with_format(
             row_num,
             13,
-            r.email.as_deref().unwrap_or(""),
-            &cell_format,
-        )?;
-        worksheet.write_string_with_format(
-            row_num,
-            14,
             r.address_street.as_deref().unwrap_or(""),
             &cell_format,
         )?;
         worksheet.write_string_with_format(
             row_num,
-            15,
+            14,
             r.address_purok.as_deref().unwrap_or(""),
             &cell_format,
         )?;
-        worksheet.write_string_with_format(row_num, 16, &full_addr, &cell_format)?;
+        worksheet.write_string_with_format(row_num, 15, &full_addr, &cell_format)?;
         worksheet.write_string_with_format(
             row_num,
-            17,
+            16,
             r.address_barangay.as_deref().unwrap_or(""),
             &cell_format,
         )?;
         worksheet.write_string_with_format(
             row_num,
-            18,
+            17,
             r.address_city.as_deref().unwrap_or(""),
             &cell_format,
         )?;
         worksheet.write_string_with_format(
             row_num,
-            19,
+            18,
             r.address_province.as_deref().unwrap_or(""),
             &cell_format,
         )?;
         worksheet.write_string_with_format(
             row_num,
-            20,
+            19,
             r.religion.as_deref().unwrap_or(""),
             &cell_format,
         )?;
         worksheet.write_string_with_format(
             row_num,
-            21,
+            20,
             r.blood_type.as_deref().unwrap_or(""),
             &cell_format,
         )?;
         worksheet.write_string_with_format(
             row_num,
-            22,
+            21,
             r.height.as_deref().unwrap_or(""),
             &cell_format,
         )?;
         worksheet.write_string_with_format(
             row_num,
-            23,
+            22,
             r.weight.as_deref().unwrap_or(""),
             &cell_format,
         )?;
         worksheet.write_string_with_format(
             row_num,
-            24,
+            23,
             r.philhealth.as_deref().unwrap_or(""),
             &cell_format,
         )?;
         worksheet.write_string_with_format(
             row_num,
-            25,
+            24,
             r.sss.as_deref().unwrap_or(""),
             &cell_format,
         )?;
         worksheet.write_string_with_format(
             row_num,
-            26,
+            25,
             r.tin.as_deref().unwrap_or(""),
             &cell_format,
         )?;
         worksheet.write_string_with_format(
             row_num,
-            27,
+            26,
             r.voters_id.as_deref().unwrap_or(""),
             &cell_format,
         )?;
         worksheet.write_string_with_format(
             row_num,
-            28,
+            27,
             r.emergency_contact_name.as_deref().unwrap_or(""),
             &cell_format,
         )?;
         worksheet.write_string_with_format(
             row_num,
-            29,
+            28,
             r.emergency_contact_relation.as_deref().unwrap_or(""),
             &cell_format,
         )?;
         worksheet.write_string_with_format(
             row_num,
-            30,
+            29,
             r.emergency_contact_number.as_deref().unwrap_or(""),
             &cell_format,
         )?;
         worksheet.write_string_with_format(
             row_num,
-            31,
+            30,
             r.photo_filename.as_deref().unwrap_or(""),
             &cell_format,
         )?;
         worksheet.write_string_with_format(
             row_num,
-            32,
+            31,
             r.remarks.as_deref().unwrap_or("ACTIVE"),
             &cell_format,
         )?;
         // P1-6: Excel shows display format (DD-MM-YYYY); storage stays ISO.
         worksheet.write_string_with_format(
             row_num,
-            33,
+            32,
             &r.valid_until
                 .as_deref()
                 .map(|v| crate::id_card::fmt_ddmmyyyy(v.trim()))
@@ -355,20 +349,27 @@ fn write_excel(residents: &[Resident], save_path: &str) -> Result<()> {
         )?;
         worksheet.write_string_with_format(
             row_num,
-            34,
+            33,
             r.date_registered.as_deref().unwrap_or(""),
             &cell_format,
         )?;
         worksheet.write_string_with_format(
             row_num,
-            35,
+            34,
             r.date_updated.as_deref().unwrap_or(""),
             &cell_format,
         )?;
         worksheet.write_string_with_format(
             row_num,
-            36,
+            35,
             r.emergency_contact_address.as_deref().unwrap_or(""),
+            &cell_format,
+        )?;
+        // P13 FK parity: round-trip preserves the emergency-contact link.
+        worksheet.write_string_with_format(
+            row_num,
+            36,
+            r.emergency_contact_resident_id.as_deref().unwrap_or(""),
             &cell_format,
         )?;
     }
@@ -479,6 +480,17 @@ fn opt_cell(row: &[String], idx: Option<usize>) -> Option<String> {
     }
 }
 
+/// Phase-1 strict valid_until for Excel import: `None` (blank cell) clears,
+/// parseable values normalize to ISO, unparseable values are Err (caller
+/// skips the row — never stores raw).
+fn strict_valid_until_opt(raw: &str) -> Result<Option<String>, String> {
+    let t = raw.trim();
+    if t.is_empty() {
+        return Ok(None);
+    }
+    crate::residents::normalize_valid_until(t).map(Some)
+}
+
 /// M2: photo referenced by an import row must already exist under
 /// `<app_data>/photos` (or `<root>/data/photos` fallback). Returns the
 /// stored value unchanged when it exists, Err(message) otherwise.
@@ -536,16 +548,18 @@ pub async fn import_from_excel(
         .map_err(|e| format!("Import task failed: {}", e))??;
 
     // R4 — import column guard: widths/headers contract is 37 columns (write_excel invariant).
-    // Reject severely mismatched sheets early; warn on any deviation so operator can fix export.
+    // Reject severely mismatched sheets early; warn on partial legacy exports.
     const EXPECTED_COLS: usize = 37;
-    if headers.len() != EXPECTED_COLS {
-        tracing::warn!(
-            "import header count mismatch: got {} expected {} — headers: {:?}",
+    // H-5b: Return Err when exceeding EXPECTED_COLS to prevent silent data loss.
+    if headers.len() > EXPECTED_COLS {
+        return Err(format!(
+            "Import header count too high ({} > {}) — excess columns will be truncated. Expected {} columns.",
             headers.len(),
             EXPECTED_COLS,
-            &headers
-        );
+            EXPECTED_COLS
+        ));
     }
+    // Reject too few columns outright — cannot map required fields.
     if headers.len() < 10 {
         return Err(format!(
             "Import header count too low ({} < 10) — is this a valid BACKUP export? Expected {} columns.",
@@ -553,12 +567,15 @@ pub async fn import_from_excel(
             EXPECTED_COLS
         ));
     }
-    if headers.len() > EXPECTED_COLS + 10 {
-        return Err(format!(
-            "Import header count too high ({} > {}) — file may be corrupted.",
+    // Partial legacy export (10..EXPECTED_COLS): warn but allow.
+    // Exact match (EXPECTED_COLS): silent OK.
+    if headers.len() < EXPECTED_COLS {
+        tracing::warn!(
+            "import header count mismatch: got {} expected {} — headers: {:?}",
             headers.len(),
-            EXPECTED_COLS + 10
-        ));
+            EXPECTED_COLS,
+            &headers
+        );
     }
     // Row-level inconsistent column counts are warned and normalized below.
     for (ri, row) in rows.iter().enumerate() {
@@ -586,7 +603,6 @@ pub async fn import_from_excel(
     let c_citizen = col_idx(&headers, "Citizenship");
     let c_occup = col_idx(&headers, "Occupation");
     let c_contact = col_idx(&headers, "Contact No.");
-    let c_email = col_idx(&headers, "Email");
     let c_street = col_idx(&headers, "Street");
     let c_purok = col_idx(&headers, "Purok");
     let c_brgy = col_idx(&headers, "Barangay");
@@ -607,10 +623,12 @@ pub async fn import_from_excel(
     let c_status = col_idx(&headers, "Status");
     let c_valid = col_idx(&headers, "Valid Until");
     let c_emer_addr = col_idx(&headers, "Emergency Address");
-    // M2: emergency-link column is optional (export does not write it yet,
-    // but an operator may add it). Either header is accepted; absent = keep DB value.
-    let c_emer_id = col_idx(&headers, "Emergency Contact ID")
-        .or_else(|| col_idx(&headers, "Emergency Contact Resident ID"));
+    // M2: emergency-link column is optional (older 37-col exports lack it).
+    // Canonical header is "Emergency Contact Resident ID"; legacy operator-added
+    // variants are still accepted; absent = keep DB value.
+    let c_emer_id = col_idx(&headers, "Emergency Contact Resident ID")
+        .or_else(|| col_idx(&headers, "emergency_contact_resident_id"))
+        .or_else(|| col_idx(&headers, "Emergency Contact ID"));
 
     // H-3: release Mutex before loop — clone pool + photo dir, never hold lock across rows
     let (pool, app_data_dir) = {
@@ -705,7 +723,6 @@ pub async fn import_from_excel(
         base.citizenship = opt_cell(row, c_citizen);
         base.occupation = opt_cell(row, c_occup);
         base.contact_number = opt_cell(row, c_contact);
-        base.email = opt_cell(row, c_email);
         base.address_street = opt_cell(row, c_street);
         base.address_purok = opt_cell(row, c_purok);
         base.address_barangay = opt_cell(row, c_brgy);
@@ -767,12 +784,19 @@ pub async fn import_from_excel(
                 base.emergency_contact_resident_id = Some(fk);
             }
         }
-        // P1-6: import accepts DD-MM-YYYY or ISO, stores ISO; unparseable kept raw.
+        // Strict valid_until: unparseable values are row-level errors —
+        // the row is skipped, never stored raw (Phase-1 strictness).
         if let Some(vu) = opt_cell(row, c_valid) {
-            if vu.trim().is_empty() {
-                base.valid_until = None;
-            } else {
-                base.valid_until = Some(crate::residents::normalize_valid_until(&vu).unwrap_or(vu));
+            match strict_valid_until_opt(&vu) {
+                Ok(v) => base.valid_until = v,
+                Err(msg) => {
+                    skipped += 1;
+                    errors.push(format!(
+                        "Row {} ({}): invalid valid_until '{}' ({}) — skipped",
+                        excel_row, id_no, vu, msg
+                    ));
+                    continue;
+                }
             }
         }
         // P1-1: same normalization pipeline as create/update — Excel-edited
@@ -808,13 +832,13 @@ pub async fn import_from_excel(
                     r#"UPDATE residents SET
                         last_name = ?, first_name = ?, middle_name = ?, suffix = ?,
                         birth_date = ?, birth_place = ?, gender = ?, civil_status = ?, citizenship = ?,
-                        occupation = ?, contact_number = ?, email = ?,
+                        occupation = ?, contact_number = ?,
                         address_street = ?, address_purok = ?,
                         address_barangay = ?, address_city = ?, address_province = ?,
                         religion = ?, blood_type = ?, height = ?, weight = ?,
                         philhealth = ?, sss = ?, tin = ?, voters_id = ?,
                         emergency_contact_name = ?, emergency_contact_relation = ?, emergency_contact_number = ?,
-                        emergency_contact_address = ?,
+                        emergency_contact_address = ?, emergency_contact_resident_id = ?,
                         photo_filename = ?, date_updated = ?, remarks = ?, valid_until = ?
                         WHERE id = ?"#,
                 )
@@ -829,7 +853,6 @@ pub async fn import_from_excel(
                 .bind(&b.citizenship)
                 .bind(&b.occupation)
                 .bind(&b.contact_number)
-                .bind(&b.email)
                 .bind(&b.address_street)
                 .bind(&b.address_purok)
                 .bind(&b.address_barangay)
@@ -847,6 +870,7 @@ pub async fn import_from_excel(
                 .bind(&b.emergency_contact_relation)
                 .bind(&b.emergency_contact_number)
                 .bind(&b.emergency_contact_address)
+                .bind(&b.emergency_contact_resident_id)
                 .bind(&b.photo_filename)
                 .bind(&b.date_updated)
                 .bind(&b.remarks)
@@ -872,13 +896,13 @@ pub async fn import_from_excel(
                 r#"UPDATE residents SET
                     last_name = ?, first_name = ?, middle_name = ?, suffix = ?,
                     birth_date = ?, birth_place = ?, gender = ?, civil_status = ?, citizenship = ?,
-                    occupation = ?, contact_number = ?, email = ?,
+                    occupation = ?, contact_number = ?,
                     address_street = ?, address_purok = ?,
                     address_barangay = ?, address_city = ?, address_province = ?,
                     religion = ?, blood_type = ?, height = ?, weight = ?,
                     philhealth = ?, sss = ?, tin = ?, voters_id = ?,
                     emergency_contact_name = ?, emergency_contact_relation = ?, emergency_contact_number = ?,
-                    emergency_contact_address = ?,
+                    emergency_contact_address = ?, emergency_contact_resident_id = ?,
                     photo_filename = ?, date_updated = ?, remarks = ?, valid_until = ?
                     WHERE id = ?"#,
             )
@@ -893,7 +917,6 @@ pub async fn import_from_excel(
             .bind(&b.citizenship)
             .bind(&b.occupation)
             .bind(&b.contact_number)
-            .bind(&b.email)
             .bind(&b.address_street)
             .bind(&b.address_purok)
             .bind(&b.address_barangay)
@@ -911,6 +934,7 @@ pub async fn import_from_excel(
             .bind(&b.emergency_contact_relation)
             .bind(&b.emergency_contact_number)
             .bind(&b.emergency_contact_address)
+            .bind(&b.emergency_contact_resident_id)
             .bind(&b.photo_filename)
             .bind(&b.date_updated)
             .bind(&b.remarks)
@@ -976,7 +1000,6 @@ mod export_tests {
             citizenship: Some("Filipino".into()),
             occupation: None,
             contact_number: Some("09123456789".into()),
-            email: None,
             address_street: Some("Street".into()),
             address_purok: Some("AVOCADO".into()),
             address_barangay: Some("BALUD".into()),
@@ -1023,7 +1046,6 @@ mod export_tests {
             "Citizenship",
             "Occupation",
             "Contact No.",
-            "Email",
             "Street",
             "Purok",
             "Full Address",
@@ -1047,11 +1069,12 @@ mod export_tests {
             "Date Registered",
             "Date Updated",
             "Emergency Address",
+            "Emergency Contact Resident ID",
         ];
         let widths = [
-            8.0, 14.0, 15.0, 15.0, 15.0, 8.0, 12.0, 18.0, 9.0, 12.0, 12.0, 15.0, 14.0, 20.0, 15.0,
-            12.0, 32.0, 15.0, 15.0, 15.0, 12.0, 10.0, 8.0, 8.0, 14.0, 14.0, 14.0, 14.0, 20.0, 12.0,
-            18.0, 18.0, 10.0, 14.0, 16.0, 16.0, 20.0,
+            8.0, 14.0, 15.0, 15.0, 15.0, 8.0, 12.0, 18.0, 9.0, 12.0, 12.0, 15.0, 14.0, 15.0, 12.0,
+            32.0, 15.0, 15.0, 15.0, 12.0, 10.0, 8.0, 8.0, 14.0, 14.0, 14.0, 14.0, 20.0, 12.0, 18.0,
+            18.0, 10.0, 14.0, 16.0, 16.0, 20.0, 20.0,
         ];
         assert_eq!(headers.len(), 37);
         assert_eq!(widths.len(), 37);
@@ -1104,5 +1127,23 @@ mod export_tests {
         let short = vec!["a".to_string(), "b".to_string()];
         assert_eq!(cell(&short, Some(5)), "");
         assert_eq!(cell(&short, Some(0)), "a");
+    }
+
+    #[test]
+    fn strict_valid_until_rejects_unparseable_never_raw() {
+        assert_eq!(
+            strict_valid_until_opt("2027-01-15").unwrap(),
+            Some("2027-01-15".to_string())
+        );
+        assert_eq!(
+            strict_valid_until_opt("15-01-2027").unwrap(),
+            Some("2027-01-15".to_string())
+        );
+        assert_eq!(strict_valid_until_opt("").unwrap(), None);
+        assert_eq!(strict_valid_until_opt("   ").unwrap(), None);
+        // Unparseable -> Err (caller skips the row, never stores raw).
+        assert!(strict_valid_until_opt("not-a-date").is_err());
+        assert!(strict_valid_until_opt("32-13-2027").is_err());
+        assert!(strict_valid_until_opt("2027").is_err());
     }
 }
