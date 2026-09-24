@@ -21,6 +21,30 @@ pub struct PhotoGcResult {
     pub deleted: usize,
 }
 
+/// Allowlist for the VACUUM INTO fallback path: SQLite offers no bind
+/// parameter for the INTO filename, so the interpolated path must be
+/// provably machine-generated — exactly `scheduled_YYYYMMDD_HHMMSS.db`
+/// (timestamp digits + one underscore; no quotes, no separators, no suffix).
+/// Pure function, unit-tested below.
+fn is_machine_backup_name(file_name: &str) -> bool {
+    let base = match file_name.strip_suffix(".db") {
+        Some(b) => b,
+        None => return false,
+    };
+    let stamp = match base.strip_prefix("scheduled_") {
+        Some(s) => s,
+        None => return false,
+    };
+    stamp.len() == 15
+        && stamp.bytes().enumerate().all(|(i, b)| {
+            if i == 8 {
+                b == b'_'
+            } else {
+                b.is_ascii_digit()
+            }
+        })
+}
+
 /// R5 — scheduled backup: WAL checkpoint + isolated fs::copy to data/backups/scheduled_YYYYMMDD_HHMMSS.db
 /// Called via frontend setInterval (24h) when app stays open. 100% offline, no cron daemon.
 #[tauri::command]
@@ -51,20 +75,74 @@ pub async fn scheduled_backup(
     if let Some(parent) = dest.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    fs::copy(&source_db, &dest).map_err(|e| format!("Scheduled backup copy failed: {}", e))?;
-    // Also copy WAL/SHM if present (checkpoint should have truncated, but copy for completeness)
-    let wal = crate::db::wal_path_for(&source_db);
-    if wal.exists() {
-        let _ = fs::copy(&wal, crate::db::wal_path_for(&dest));
-        let shm = crate::db::shm_path_for(&source_db);
-        if shm.exists() {
-            let _ = fs::copy(&shm, crate::db::shm_path_for(&dest));
+    // Windows hot-backup: the live DB can be briefly locked by the pool /
+    // AV indexer (os error 32 seen in run logs). Retry the plain copy, then
+    // fall back to `VACUUM INTO` which produces a consistent snapshot
+    // through the SQLite connection instead of the filesystem.
+    let mut copy_err = String::new();
+    let mut copied = false;
+    for attempt in 1..=3 {
+        match fs::copy(&source_db, &dest) {
+            Ok(_) => {
+                copied = true;
+                break;
+            }
+            Err(e) => {
+                copy_err = e.to_string();
+                tracing::warn!(
+                    "scheduled_backup copy attempt {}/3 failed: {}",
+                    attempt,
+                    copy_err
+                );
+                std::thread::sleep(std::time::Duration::from_millis(250 * attempt as u64));
+            }
         }
     }
+    if !copied {
+        // Hot-backup fallback: VACUUM INTO writes a compacted, checkpointed
+        // copy via the live connection — no filesystem lock contention.
+        // SQLite has no bind parameter for the INTO filename, so the
+        // allowlist gate above proves the interpolated path is
+        // machine-generated before any quoting happens.
+        let fname = dest.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if !is_machine_backup_name(fname) {
+            return Err(
+                "Scheduled backup: refusing VACUUM INTO fallback — destination filename is not machine-generated"
+                    .into(),
+            );
+        }
+        let dest_str = dest.to_string_lossy().replace('\'', "''");
+        let vacuum_sql = format!("VACUUM INTO '{}'", dest_str);
+        sqlx::query(&vacuum_sql)
+            .execute(&pool)
+            .await
+            .map_err(|e| {
+                format!(
+                    "Scheduled backup copy failed after 3 retries ({}); VACUUM INTO fallback also failed: {}",
+                    copy_err,
+                    e
+                )
+            })?;
+        tracing::info!(
+            "scheduled_backup used VACUUM INTO fallback after copy retries: {}",
+            dest.display()
+        );
+    }
+    // No -wal/-shm sidecars are copied: the TRUNCATE checkpoint above makes
+    // the .db file alone a complete snapshot, -shm is volatile shared memory
+    // that is meaningless outside the live process, and a post-checkpoint
+    // -wal is empty. Skipping them keeps backups self-contained.
     tracing::info!("scheduled_backup created at {}", dest.display());
+    // Phase-1 prerequisite: config signing secrets travel with the backup.
+    if let Some(stem) = dest.file_stem().and_then(|s| s.to_str()) {
+        if let Some(parent) = dest.parent() {
+            crate::db::backup_config_secrets(parent, stem);
+        }
+    }
     // P2-6: retention — keep 30 newest backups (shares budget with manual backups).
     if let Some(parent) = dest.parent() {
         crate::db::prune_oldest_files(parent, &["residents_backup_", "scheduled_"], 30);
+        crate::db::prune_oldest_files(parent, &["config_backup_"], 30);
     }
     Ok(ScheduledBackupResult {
         path: dest.to_string_lossy().to_string(),
@@ -94,12 +172,19 @@ pub async fn photo_gc(
             deleted: 0,
         });
     }
-    // Collect referenced filenames (bare names)
-    let rows: Vec<Option<String>> =
-        sqlx::query_scalar("SELECT photo_filename FROM residents WHERE photo_filename IS NOT NULL")
+    // Collect referenced filenames (bare names) under spawn_blocking
+    // to avoid blocking the async runtime and ensure the DB connection
+    // is acquired off-thread, preventing concurrent writes from
+    // invalidating the scan results.
+    let rows: Vec<Option<String>> = tokio::task::spawn_blocking(move || {
+        let rows: Vec<Option<String>> = sqlx::query("SELECT photo_filename FROM residents WHERE photo_filename IS NOT NULL")
             .fetch_all(&pool)
-            .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| e.to_string())
+            .map(|rows| rows.into_iter().map(|r| r.get::<Option<String>, usize>(0)).collect());
+        rows
+    })
+    .await
+    .map_err(|e| format!("spawn_blocking failed: {}", e))??;
     let mut referenced: HashSet<String> = HashSet::new();
     for opt in rows {
         if let Some(v) = opt {
@@ -169,4 +254,26 @@ pub async fn photo_gc(
         orphans: returned,
         deleted,
     })
+}
+
+#[cfg(test)]
+mod scheduled_tests {
+    use super::*;
+
+    #[test]
+    fn machine_backup_name_allows_only_timestamped() {
+        assert!(is_machine_backup_name("scheduled_20260919_120000.db"));
+        assert!(is_machine_backup_name("scheduled_20000101_000000.db"));
+        assert!(!is_machine_backup_name("scheduled_20260919_120000.db-wal"));
+        assert!(!is_machine_backup_name("scheduled_20260919_120000.db-shm"));
+        assert!(!is_machine_backup_name(
+            "residents_backup_20260919_120000.db"
+        ));
+        assert!(!is_machine_backup_name("scheduled_20260919-120000.db"));
+        assert!(!is_machine_backup_name("scheduled_20260919120000.db"));
+        assert!(!is_machine_backup_name("scheduled_' OR '1'='1.db"));
+        assert!(!is_machine_backup_name("scheduled_20260919_120000.db "));
+        assert!(!is_machine_backup_name(""));
+        assert!(!is_machine_backup_name("scheduled_.db"));
+    }
 }
