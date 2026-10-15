@@ -23,7 +23,11 @@ pub async fn backup_database(
     let source_db = app_data_dir.join("residents.db");
     let backup_dir = app_data_dir.join("backups");
 
-    fs::create_dir_all(&backup_dir).map_err(|e| e.to_string())?;
+    // P1 sync-blocking fix: create_dir_all off the async runtime.
+    let dir_clone = backup_dir.clone();
+    tokio::task::spawn_blocking(move || std::fs::create_dir_all(&dir_clone).map_err(|e| e.to_string()))
+        .await
+        .map_err(|e| format!("Backup task failed: {}", e))??;
 
     let destination = if let Some(path) = backup_path {
         let raw = PathBuf::from(path);
@@ -49,19 +53,29 @@ pub async fn backup_database(
     let _ = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
         .execute(&pool)
         .await;
-    if let Some(parent) = destination.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    fs::copy(&source_db, &destination).map_err(|e| format!("Backup failed: {}", e))?;
-    // H-5: use format!-based -wal/-shm paths to avoid with_extension double-extension bug
-    let wal = wal_path_for(&source_db);
-    let shm = shm_path_for(&source_db);
-    if wal.exists() {
-        let _ = fs::copy(&wal, wal_path_for(&destination));
-        if shm.exists() {
-            let _ = fs::copy(&shm, shm_path_for(&destination));
+    // P0 atomic backup: write to .tmp then rename so a crash never leaves a
+    // truncated .db that looks valid. All blocking I/O off the async runtime.
+    let src_clone = source_db.clone();
+    let dst_clone = destination.clone();
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        if let Some(parent) = dst_clone.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
-    }
+        let tmp = {
+            let mut p = dst_clone.clone();
+            let name = format!("{}.tmp", dst_clone.file_name().ok_or("Invalid backup path")?.to_string_lossy());
+            p.set_file_name(name);
+            p
+        };
+        std::fs::copy(&src_clone, &tmp).map_err(|e| format!("Backup failed: {}", e))?;
+        std::fs::rename(&tmp, &dst_clone).map_err(|e| format!("Backup rename failed: {}", e))?;
+        // No -wal/-shm sidecars: the TRUNCATE checkpoint above makes the .db
+        // alone a complete snapshot (mirrors scheduled_backup policy) — -shm
+        // is volatile shared memory, never a meaningful backup artifact.
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Backup task failed: {}", e))??;
 
     let photos_dir = app_data_dir.join("photos");
     if photos_dir.exists() {
@@ -72,7 +86,12 @@ pub async fn backup_database(
                 .unwrap_or_default()
                 .to_string_lossy()
         ));
-        if let Err(e) = copy_dir_all(&photos_dir, &photos_backup) {
+        let src_photos = photos_dir.clone();
+        let dst_photos = photos_backup.clone();
+        let photo_res = tokio::task::spawn_blocking(move || copy_dir_all(&src_photos, &dst_photos))
+            .await
+            .map_err(|e| format!("Photo backup task failed: {}", e))?;
+        if let Err(e) = photo_res {
             eprintln!("Warning: Could not backup photos: {}", e);
         }
     }
@@ -122,26 +141,44 @@ pub async fn restore_database(
         "safety_backup_{}.db",
         Local::now().format("%Y%m%d_%H%M%S")
     ));
-    fs::create_dir_all(
-        safety_backup
-            .parent()
-            .ok_or("Restore failed: invalid backup dir")?,
-    )
-    .map_err(|e| e.to_string())?;
+    // P1 sync-blocking fix: create_dir_all off the async runtime
+    {
+        let sb = safety_backup.clone();
+        tokio::task::spawn_blocking(move || {
+            let parent = sb.parent().ok_or("Restore failed: invalid backup dir")?;
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())
+        })
+        .await
+        .map_err(|e| format!("Restore task failed: {}", e))??;
+    }
     if destination.exists() {
         let _ = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
             .execute(&pool)
             .await;
-        fs::copy(&destination, &safety_backup).map_err(|e| e.to_string())?;
-        // Copy safety WAL/SHM if present
-        let wal = wal_path_for(&destination);
-        if wal.exists() {
-            let _ = fs::copy(&wal, wal_path_for(&safety_backup));
-            let shm = shm_path_for(&destination);
-            if shm.exists() {
-                let _ = fs::copy(&shm, shm_path_for(&safety_backup));
+        // Atomic safety backup: copy to tmp then rename
+        let src_safety = destination.clone();
+        let dst_safety = safety_backup.clone();
+        tokio::task::spawn_blocking(move || -> Result<(), String> {
+            let tmp = {
+                let mut p = dst_safety.clone();
+                let name = format!("{}.tmp", dst_safety.file_name().ok_or("Invalid backup path")?.to_string_lossy());
+                p.set_file_name(name);
+                p
+            };
+            std::fs::copy(&src_safety, &tmp).map_err(|e| e.to_string())?;
+            std::fs::rename(&tmp, &dst_safety).map_err(|e| e.to_string())?;
+            let wal = wal_path_for(&src_safety);
+            if wal.exists() {
+                let _ = std::fs::copy(&wal, wal_path_for(&dst_safety));
+                let shm = shm_path_for(&src_safety);
+                if shm.exists() {
+                    let _ = std::fs::copy(&shm, shm_path_for(&dst_safety));
+                }
             }
-        }
+            Ok(())
+        })
+        .await
+        .map_err(|e| format!("Restore task failed: {}", e))??;
     } else {
         let _ = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
             .execute(&pool)
@@ -154,25 +191,59 @@ pub async fn restore_database(
     // Close pool before overwriting the DB file
     pool.close().await;
 
-    // Remove WAL/SHM sidecars so the next open starts clean
-    let dest_wal = wal_path_for(&destination);
-    let dest_shm = shm_path_for(&destination);
-    let _ = fs::remove_file(&dest_wal);
-    let _ = fs::remove_file(&dest_shm);
+    // Remove WAL/SHM sidecars so the next open starts clean (blocking off runtime)
+    {
+        let dw = wal_path_for(&destination);
+        let ds = shm_path_for(&destination);
+        tokio::task::spawn_blocking(move || {
+            let _ = std::fs::remove_file(&dw);
+            let _ = std::fs::remove_file(&ds);
+        })
+        .await
+        .map_err(|e| format!("Restore task failed: {}", e))?;
+    }
 
-    fs::copy(&source, &destination).map_err(|e| {
-        tracing::error!("Restore copy failed: {}", e);
-        format!("Restore failed: {}", e)
-    })?;
+    // P0 atomic restore: copy to tmp then rename so live DB is never truncated
+    {
+        let src_r = source.clone();
+        let dst_r = destination.clone();
+        tokio::task::spawn_blocking(move || -> Result<(), String> {
+            let tmp = {
+                let mut p = dst_r.clone();
+                let name = format!("{}.tmp", dst_r.file_name().ok_or("Invalid backup path")?.to_string_lossy());
+                p.set_file_name(name);
+                p
+            };
+            std::fs::copy(&src_r, &tmp).map_err(|e| {
+                tracing::error!("Restore copy failed: {}", e);
+                format!("Restore failed: {}", e)
+            })?;
+            std::fs::rename(&tmp, &dst_r).map_err(|e| {
+                tracing::error!("Restore rename failed: {}", e);
+                format!("Restore failed: {}", e)
+            })?;
+            Ok(())
+        })
+        .await
+        .map_err(|e| format!("Restore task failed: {}", e))??;
+    }
 
     // If the backup had wal/shm sidecars, also restore them (rare — checkpointed backups shouldn't need them, but handle consistently)
-    let src_wal = wal_path_for(&source);
-    let src_shm = shm_path_for(&source);
-    if src_wal.exists() {
-        let _ = fs::copy(&src_wal, &dest_wal);
-        if src_shm.exists() {
-            let _ = fs::copy(&src_shm, &dest_shm);
-        }
+    {
+        let src_wal = wal_path_for(&source);
+        let src_shm = shm_path_for(&source);
+        let dst_wal = wal_path_for(&destination);
+        let dst_shm = shm_path_for(&destination);
+        tokio::task::spawn_blocking(move || {
+            if src_wal.exists() {
+                let _ = std::fs::copy(&src_wal, &dst_wal);
+                if src_shm.exists() {
+                    let _ = std::fs::copy(&src_shm, &dst_shm);
+                }
+            }
+        })
+        .await
+        .map_err(|e| format!("Restore task failed: {}", e))?;
     }
 
     // Reopen pool — rebuild with same WAL settings used in db::init_db

@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" href="barangay.ico" type="image/x-icon">
+<!-- No favicon link: this template is fetched as text and rendered via iframe
+     srcdoc / print windows, where head links never resolve; a relative href
+     would only 404 (canonical icon lives at repo root for the app bundle). -->
 <title>Barangay Resident's Card - Official Template (CR100 98.6x66.8mm)</title>
 <!--
   OFFICIAL Barangay Resident's Card template — portable, offline-first. CR100.
@@ -19,7 +21,6 @@
     Screen shows a 3mm bleed frame + crop marks; safe area = 3mm inset.
     Print: @page is A4 portrait with front over back (preview order) and a
     1in top margin — each CR100 card keeps a dashed cut outline at its edge.
-  /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 */
 -->
 <style>
   :root{
@@ -303,11 +304,11 @@
    calling to print immediately after fill. */
 (function () {
   var IMG_FIELDS = { photo: 1, qr: 1, seal: 1, emblem: 1 };
-  function esc(s) {
-    return String(s == null ? "" : s)
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  }
+  // Allowlist for image slots: only offline-safe schemes. A javascript: URL
+  // here would execute in the print window, so anything else is dropped.
+  var SAFE_IMG = /^(data:image\/|asset:|http:\/\/asset\.localhost|blob:|https?:\/\/)/;
+  // NOTE: no esc() helper — all text slots fill via textContent (XSS-safe by
+  // construction), image slots via setAttribute("src"). Do not re-add one.
   // No hardcoded template background — pure vector by default. Operator template
   // via config/civic.json is injected as inline data-URL style by the app when present.
   window.__renderCard = function (payload) {
@@ -316,6 +317,7 @@
       var key = el.getAttribute("data-field");
       if (!(key in payload) || payload[key] == null || payload[key] === "") return;
       if (IMG_FIELDS[key] && el.tagName === "IMG") {
+        if (!SAFE_IMG.test(payload[key])) return;
         el.setAttribute("src", payload[key]);
       } else {
         el.textContent = payload[key];
@@ -339,7 +341,6 @@
     s.style.transformOrigin = 'top center';
     s.style.transform = 'scale(' + k + ')';
   };
-  window.__esc = esc;
   /* Print timestamp (DD-MM-YYYY, card convention) stamped at open + print. */
   window.__stampPrintTime = function () {
     var el = document.querySelector(".print-note .pn-time");

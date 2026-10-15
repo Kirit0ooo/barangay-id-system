@@ -49,8 +49,8 @@ body{
    Kept on body directly since the `app-bg` class is no longer set on the HTML element.
 */
 body{
-  background:var(--amber-neon);
-  color:var(--on-neon);
+  background:var(--paper);
+  color:var(--ink);
 }
 
 /* Scoped transitions only — no global * transition */
@@ -68,6 +68,7 @@ nav[aria-label="Primary"]{ transform:translateZ(0); backface-visibility:hidden; 
 nav[aria-label="Primary"] button:active{ transform:none; }
 /* Inactive tabs: solid white (AAA on navy) — utility fallback if Alpine class lags */
 nav[aria-label="Primary"] [role="tab"]:not(.bg-white){ color:#fff; }
+.nav-logo{ filter:drop-shadow(0 1px 2px rgba(0,0,0,.45)); }
 
 /* Scrollbar — single source */
 ::-webkit-scrollbar{ width:8px; height:8px; }
@@ -298,53 +299,67 @@ tbody tr:hover{ background:rgba(248,250,252,.92); }
 .stat-card--female .stat-card__icon{ background:rgba(236,72,153,.1); color:#ec4899; }
 .stat-card--female .stat-card__value{ color:#ec4899; }
 .stat-card--female .stat-card__bar-fill{ background:#ec4899; }
-.stat-card--active .stat-card__icon{ background:rgba(5,150,105,.12); color:#059669; }
+.stat-card--active{ border-left:3px solid #059669; }
+.stat-card--active .stat-card__icon{ background:rgba(5,150,105,.12); color:#059669; border:1px solid rgba(5,150,105,.18); }
 .stat-card--active .stat-card__value{ color:#059669; }
-.stat-card--renew .stat-card__icon{ background:rgba(217,119,6,.12); color:#d97706; }
-.stat-card--renew .stat-card__value{ color:#d97706; }
-.stat-card--lost .stat-card__icon{ background:rgba(220,38,38,.1); color:#dc2626; }
-.stat-card--lost .stat-card__value{ color:#dc2626; }
-.stat-card--damage .stat-card__icon{ background:rgba(234,88,12,.12); color:#ea580c; }
-.stat-card--damage .stat-card__value{ color:#ea580c; }
-/* Dashboard hero — donut + legend beside Total / This Year (one panel, no nested cards) */
-.stat-hero{ grid-column:1/-1; }
-.stat-hero__layout{ display:grid; grid-template-columns:minmax(240px,300px) auto minmax(0,1fr); gap:28px; align-items:center; }
+.stat-card--renew{ border-left:3px solid #2563eb; }
+.stat-card--renew .stat-card__icon{ background:rgba(37,99,235,.10); color:#2563eb; border:1px solid rgba(37,99,235,.14); }
+.stat-card--renew .stat-card__value{ color:#1e40af; }
+.stat-card--lost{ border-left:3px solid #dc2626; }
+.stat-card--lost .stat-card__icon{ background:rgba(220,38,38,.10); color:#dc2626; border:1px solid rgba(220,38,38,.14); }
+.stat-card--lost .stat-card__value{ color:#7f1d1d; }
+.stat-card--damage{ border-left:3px solid #ea580c; }
+.stat-card--damage .stat-card__icon{ background:rgba(234,88,12,.10); color:#ea580c; border:1px solid rgba(234,88,12,.14); }
+.stat-card--damage .stat-card__value{ color:#9a3412; }
+.stat-card--active, .stat-card--renew, .stat-card--lost, .stat-card--damage{ transition:border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease; }
+.stat-card--active:hover, .stat-card--renew:hover, .stat-card--lost:hover, .stat-card--damage:hover{ transform:translateY(-1px); box-shadow:0 4px 14px rgba(15,23,42,.08); }
+.stat-card--active .stat-card__value, .stat-card--renew .stat-card__value, .stat-card--lost .stat-card__value, .stat-card--damage .stat-card__value{ font-variant-numeric:tabular-nums; letter-spacing:-.03em; }
+.stat-card--active .stat-card__meta, .stat-card--renew .stat-card__meta, .stat-card--lost .stat-card__meta, .stat-card--damage .stat-card__meta{ font-size:12px; line-height:1.4; }
+/* Dashboard hero — civic overview: totals left, gauge center (premium restrained) */
+.stat-hero{ grid-column:1/-1; position:relative; overflow:hidden; padding:0; }
+.stat-hero__accent{ height:4px; background:linear-gradient(90deg,var(--color-primary),var(--color-primary) 72%,var(--color-accent) 72%,var(--color-accent)); }
+.stat-hero__layout{ display:grid; grid-template-columns:minmax(260px,320px) auto minmax(280px,1fr); gap:28px; align-items:center; padding:22px 22px 18px; }
 .stat-hero__chart{ min-width:0; max-width:380px; margin:0 auto; width:100%; }
-.stat-hero__divider{ width:1px; align-self:stretch; background:var(--color-border); }
+.stat-hero__divider{ width:1px; align-self:stretch; background:linear-gradient(180deg,transparent, var(--color-border) 18%, var(--color-border) 82%, transparent); }
 .stat-hero__side{ min-width:0; }
-.stat-hero__side--left{ display:flex; flex-direction:column; gap:16px; justify-content:center; }
-.stat-hero__side--left .stat-hero__stat + .stat-hero__stat{ border-top:1px solid var(--color-border); padding-top:16px; }
+.stat-hero__side--left{ display:flex; flex-direction:column; gap:18px; justify-content:center; }
+.stat-hero__side--left .stat-hero__stat + .stat-hero__stat{ border-top:1px solid var(--color-border); padding-top:18px; }
 .stat-hero__stat--total .stat-card__value{ font-size:34px; color:var(--color-primary); }
+.stat-hero__stat--year .stat-card__value{ font-size:26px; color:var(--color-text); font-weight:700; }
 /* Aligned slots: different value sizes + badge label must not stagger rows */
-.stat-hero__stat{ display:flex; flex-direction:column; }
-.stat-hero__stat .stat-card__label{ min-height:24px; display:flex; align-items:center; }
-.stat-hero__stat .stat-card__value{ min-height:40px; display:flex; align-items:flex-end; }
-.stat-hero__stat .stat-card__meta{ margin-top:auto; padding-top:6px; }
+.stat-hero__stat{ display:flex; flex-direction:column; gap:4px; }
+.stat-hero__stat-head{ display:flex; align-items:center; gap:10px; }
+.stat-hero__stat .stat-card__label{ min-height:24px; display:flex; align-items:center; gap:8px; font-size:11px; letter-spacing:.08em; }
+.stat-hero__dot{ width:6px; height:6px; border-radius:50%; background:var(--color-accent); opacity:.95; flex-shrink:0; }
+.stat-hero__badge{ display:inline-flex; align-items:center; font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#065F46; background:#ECFDF5; border:1px solid #A7F3D0; padding:2px 7px; border-radius:999px; margin-left:2px; line-height:1; }
+.stat-hero__stat .stat-card__value{ min-height:40px; display:flex; align-items:flex-end; line-height:1; letter-spacing:-.02em; }
+.stat-hero__stat .stat-card__meta{ margin-top:2px; padding-top:0; font-size:12px; color:var(--color-text-muted); line-height:1.4; }
 .stat-hero__stat--total .stat-card__icon{ background:rgba(15,43,94,.1); color:var(--color-primary); }
-.stat-hero__stat--year .stat-card__icon{ background:rgba(37,99,235,.1); color:var(--color-info); }
-@media(max-width:900px){ .stat-hero__layout{ grid-template-columns:1fr; gap:20px; } .stat-hero__divider{ display:none; } .stat-hero__chart{ max-width:340px; margin:0 auto; width:100%; } }
-/* 3D gender pie — static layered SVG donut (offline, no chart lib) */
-.pie-wrap{ position:relative; max-width:230px; margin:4px auto 0; }
-.pie{ width:100%; height:auto; display:block; }
-.pie-shadow{ fill:rgba(15,23,42,.12); }
-.pie-center{ position:absolute; left:0; right:0; top:0; bottom:8%; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none; }
-.pie-center__value{ font-size:26px; font-weight:800; letter-spacing:-0.02em; color:var(--color-text); line-height:1; }
-.pie-center__label{ font-size:11px; font-weight:600; color:var(--color-text-muted); }
-.pie-legend{ display:flex; flex-direction:column; gap:6px; margin-top:10px; }
-.pie-legend__row{ display:flex; align-items:center; gap:8px; font-size:13px; color:var(--color-text); }
-.pie-dot{ width:10px; height:10px; border-radius:50%; flex-shrink:0; }
-.pie-dot--male{ background:#2563eb; }
-.pie-dot--female{ background:#ec4899; }
-.pie-legend__count{ margin-left:auto; font-weight:800; font-variant-numeric:tabular-nums; }
-.pie-legend__pct{ min-width:40px; text-align:right; font-weight:600; color:var(--color-text-muted); font-variant-numeric:tabular-nums; }
-.pie-legend__row + .pie-legend__row{ border-top:1px solid var(--color-border); padding-top:6px; }
-.pie-legend__row{ flex-wrap:wrap; }
-.pie-legend__bar{ flex-basis:100%; margin-top:2px; }
-.pie-legend__fill--male{ background:linear-gradient(90deg,#2563eb,#60a5fa); }
-.pie-legend__fill--female{ background:linear-gradient(90deg,#ec4899,#f9a8d4); }
-.pie-legend__count{ font-size:20px; }
-.pie-legend__pct--male{ color:#2563eb; }
-.pie-legend__pct--female{ color:#ec4899; }
+.stat-hero__stat--year .stat-card__icon{ background:rgba(37,99,235,.08); color:var(--color-info); border:1px solid rgba(37,99,235,.12); }
+@media(max-width:900px){ .stat-hero__layout{ grid-template-columns:1fr; gap:20px; padding:18px; } .stat-hero__divider{ display:none; } .stat-hero__chart{ max-width:340px; margin:0 auto; width:100%; } }
+/* Balance gauge — gender split as two opposing arcs on a 180-degree track (offline, no chart lib) */
+.gauge-wrap{ position:relative; max-width:230px; margin:2px auto 0; }
+.gauge{ width:100%; height:auto; display:block; }
+.gauge-arc{ transition:stroke-dasharray 720ms cubic-bezier(.22,.8,.32,1), stroke-dashoffset 720ms cubic-bezier(.22,.8,.32,1); filter:drop-shadow(0 2px 2px rgba(15,43,94,.22)); }
+@media(prefers-reduced-motion:reduce){ .gauge-arc{ transition:none !important; } }
+.gauge-center{ text-align:center; margin-top:-4px; pointer-events:none; }
+.gauge-center__value{ display:block; font-size:30px; font-weight:800; letter-spacing:-.04em; color:var(--color-text); line-height:1.1; font-variant-numeric:tabular-nums; }
+.gauge-center__label{ display:block; font-size:10px; margin-top:4px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--color-text-muted); opacity:.7; }
+.gauge-legend{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; }
+.gauge-chip{ background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:8px 10px 10px; box-shadow:0 1px 3px rgba(15,23,42,.05); font-size:13px; color:var(--color-text); transition:transform 160ms ease, box-shadow 160ms ease; }
+.gauge-chip:hover{ transform:translateY(-1px); box-shadow:0 4px 10px rgba(15,43,94,.10); }
+@media(prefers-reduced-motion:reduce){ .gauge-chip{ transition:none !important; } .gauge-chip:hover{ transform:none; } }
+.gauge-chip__label{ font-weight:600; }
+.gauge-dot{ width:9px; height:9px; border-radius:50%; flex-shrink:0; display:inline-block; margin-right:6px; vertical-align:baseline; }
+.gauge-dot--male{ background:#2563eb; box-shadow:0 0 0 4px rgba(37,99,235,.10); }
+.gauge-dot--female{ background:#ec4899; box-shadow:0 0 0 4px rgba(236,72,153,.10); }
+.gauge-chip__count{ margin-left:6px; font-weight:800; font-size:15px; font-variant-numeric:tabular-nums; }
+.gauge-chip__pct{ float:right; font-size:12px; font-weight:700; color:var(--color-text-muted); font-variant-numeric:tabular-nums; }
+.gauge-chip--male .gauge-chip__pct{ color:#1e40af; }
+.gauge-chip--female .gauge-chip__pct{ color:#be185d; }
+.gauge-chip__bar{ margin-top:7px; height:5px; background:#f1f5f9; border-radius:999px; overflow:hidden; }
+.gauge-fill--male{ height:100%; background:#2563eb; border-radius:999px; transition:width 720ms cubic-bezier(.22,.8,.32,1); }
+.gauge-fill--female{ height:100%; background:#ec4899; border-radius:999px; transition:width 720ms cubic-bezier(.22,.8,.32,1); }
 
 /* Form section wrapper */
 .form-section{
@@ -393,10 +408,10 @@ tbody tr:hover{ background:rgba(248,250,252,.92); }
 .form-field{ display:flex; flex-direction:column; gap:6px; }
 .form-field__label{ font-size:13px; font-weight:600; color:var(--color-text); }
 .form-field__req{ color:var(--color-error); font-weight:800; font-size:1.15em; line-height:1; margin-left:2px; }
-/* View titles sit directly on the amber-neon backdrop: white, large-scale
-   (22-28px extrabold clears WCAG AA large-text 3:1 on #FF1E1E). All body
+/* View titles sit directly on the paper backdrop: ink, large-scale
+   (22-28px extrabold clears WCAG AA on #F8FAFC). All body
    copy lives on white surfaces and is untouched. */
-#main-content .view-title{ color:var(--on-neon); }
+#main-content .view-title{ color:var(--ink); }
 .form-field__input,
 .form-field__select{
   width:100%;
@@ -419,14 +434,23 @@ tbody tr:hover{ background:rgba(248,250,252,.92); }
 .form-field__input::placeholder{ color:var(--color-text-muted); opacity:.6; }
 .form-field__help{ font-size:11px; color:var(--color-text-muted); }
 
-/* Table */
+/* Table — refined civic ledger */
 .data-table{ width:100%; border-collapse:collapse; font-size:13px; }
 .data-table caption{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); }
-.data-table thead{ background:var(--color-bg); border-bottom:1px solid var(--color-border); position:sticky; top:0; }
-.data-table th{ padding:12px 16px; text-align:left; font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--color-text-muted); }
-.data-table td{ padding:12px 16px; border-top:1px solid var(--color-border); }
+.data-table thead{ background:#f8fafc; border-bottom:1px solid var(--color-border); position:sticky; top:0; }
+.data-table th{ padding:11px 14px; text-align:left; font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--color-text-muted); white-space:nowrap; }
+.data-table td{ padding:12px 14px; border-top:1px solid var(--color-border); vertical-align:middle; }
+.data-table tbody tr{ transition:background 120ms ease; }
 .data-table tbody tr:hover td{ background:var(--color-surface-hover); }
 .data-table tbody tr.inactive td{ background:rgba(241,245,249,.6); }
+.recent-card{ overflow:hidden; }
+.recent-card .section-head{ padding:14px 18px; background:linear-gradient(180deg,#ffffff 0%, #fcfcfe 100%); gap:10px; }
+.recent-card .section-head__icon{ width:28px; height:28px; border-radius:8px; background:rgba(15,43,94,.07); color:var(--color-primary); border:1px solid rgba(15,43,94,.10); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.recent-card .section-head__title{ font-size:11px; letter-spacing:.08em; }
+.recent-card .recent-count{ display:inline-flex; align-items:center; background:var(--color-text); color:#fff; font-size:11px; font-weight:700; letter-spacing:.02em; padding:4px 10px; border-radius:999px; margin-left:auto; }
+.recent-card .data-table tbody td:first-child{ font-variant-numeric:tabular-nums; }
+.recent-card .data-table .purok-pill{ background:#f8fafc; border:1px solid #e2e8f0; color:#334155; font-size:11px; font-weight:700; letter-spacing:.02em; padding:3px 8px; border-radius:999px; }
+@media(max-width:640px){ .data-table th, .data-table td{ padding:10px 12px; } }
 
 /* Status pills */
 .status-pill{ display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; font-size:11px; font-weight:700; border:1px solid; }
@@ -527,18 +551,19 @@ nav[aria-label="Primary"] [role="tab"]{ min-height:40px; padding-top:8px; paddin
 .detail-photo img{ width:100%; height:100%; object-fit:cover; }
 .detail-photo--empty{ color:var(--color-text-muted); font-size:11px; font-weight:600; text-align:center; }
 
-/* Empty state */
+/* Empty state — civic placeholder */
 .empty-state{
   display:flex;
   flex-direction:column;
   align-items:center;
   justify-content:center;
-  padding:48px 24px;
+  padding:46px 24px 40px;
   text-align:center;
 }
-.empty-state__icon{ width:48px; height:48px; border-radius:16px; background:var(--color-bg); border:1px solid var(--color-border); display:flex; align-items:center; justify-content:center; color:var(--color-text-muted); margin-bottom:12px; }
-.empty-state__title{ font-size:13px; font-weight:700; color:var(--color-text); margin-bottom:4px; }
-.empty-state__desc{ font-size:13px; color:var(--color-text-muted); margin-bottom:16px; }
+.empty-state__icon{ width:44px; height:44px; border-radius:12px; background:#f8fafc; border:1px solid #e2e8f0; display:flex; align-items:center; justify-content:center; color:#94a3b8; margin-bottom:14px; box-shadow:0 1px 2px rgba(15,23,42,.04); }
+.empty-state__title{ font-size:14px; font-weight:700; color:var(--color-text); margin-bottom:6px; letter-spacing:-.01em; }
+.empty-state__desc{ font-size:13px; color:var(--color-text-muted); margin-bottom:18px; line-height:1.5; max-width:36ch; }
+.recent-card .empty-state{ padding:42px 24px 36px; background:radial-gradient(ellipse at 50% 0%, rgba(248,250,252,.9) 0%, transparent 62%); }
 
 /* ==========================================================================
    DETAIL VIEW — resident record (Operate polish)
@@ -800,6 +825,7 @@ nav[aria-label="Primary"] [role="tab"]{ min-height:40px; padding-top:8px; paddin
 .register-actions__note{ margin:0; font-size:13px; color:var(--color-text-muted); }
 .register-actions__btns{ display:flex; gap:10px; margin-left:auto; }
 .register-actions__btns .action-btn{ min-height:44px; padding:0 20px; font-size:13px; }
+.register-submit{ min-width:160px; }
 
 /* Responsive hardening — register auto-fits 320px → 1920px+ (mobile-first).
    Photo scales 128 → 140 → 160; grids collapse gracefully; flex rows

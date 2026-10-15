@@ -69,6 +69,27 @@ function todayISO() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// Single source of truth for parsing a resident's valid_until into an ISO
+// YYYY-MM-DD string (or null when unset/unparseable). Accepts ISO storage plus
+// legacy DD-MM-YYYY / DD/MM/YYYY rows. isExpired() and validDaysLeft() both
+// derive from this so the two can never drift on date-format handling again.
+// (Previously each had its own parser that disagreed on malformed input.)
+function parseValidUntil(vu) {
+    if (vu == null) return null;
+    const s = String(vu).trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const p = s.split(/[-/]/);
+    if (p.length !== 3) return null;
+    // DD-MM-YYYY / DD/MM/YYYY = day, month, year. Require all-numeric parts so
+    // a partial parseInt (e.g. parseInt('20XX') === 20) can't fabricate a date.
+    const [d, m, y] = p;
+    if (!/^\d+$/.test(d) || !/^\d+$/.test(m) || !/^\d+$/.test(y)) return null;
+    const day = parseInt(d, 10), month = parseInt(m, 10), year = parseInt(y, 10);
+    if (!year || !month || !day) return null;
+    return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
 function computeAge(iso) {
     if (!iso) return null;
     const s = iso.trim();

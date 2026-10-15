@@ -9,8 +9,9 @@
 //!
 //! What remains — the two things the template cannot do itself:
 //! - `fmt_ddmmyyyy` — storage-ISO → display date (also used by export.rs).
-//! - `get_qr_data_url` — verification-QR PNG data-URL (`qr_data` payload +
-//!   `qr_png_base64` renderer), fetched by the frontend per card.
+//! - `get_qr_data_url` — legacy QR PNG data-URL (unsigned 7-key JSON:
+//!   id/name/dob/purok/contact/valid/status), fetched by the frontend per
+//!   card. Authenticity is by manual BRGY-ID lookup in the app.
 
 use crate::db::AppState;
 use crate::residents::Resident;
@@ -56,26 +57,8 @@ pub(crate) fn valid_until_display(resident: &Resident) -> String {
     }
 }
 
-fn qr_data(resident: &Resident) -> String {
-    // QR contains resident info as compact JSON for offline verification.
-    // `id` (BRGY-YYYY-NNNNN) is always first and always present — decoders
-    // verify the card by this key. Contact uses the 09XX-XXX-XXXX display
-    // form (same as the printed face). Payload stays a minimal-PII 7-key set
-    // (see Documents/QR_PII_README.md).
-    // ponytail: config flag deferred — single-key mode unrequested so far.
-    serde_json::json!({
-        "id": resident.resident_id,
-        "name": format!("{} {}, {}", resident.last_name, resident.first_name, resident.middle_name.clone().unwrap_or_default()),
-        "dob": fmt_ddmmyyyy(&resident.birth_date),
-        "purok": resident.address_purok.clone().unwrap_or_default(),
-        "contact": resident.contact_number.as_deref().map(crate::residents::format_contact_for_display).unwrap_or_default(),
-        "valid": valid_until_display(resident),
-        "status": resident.remarks.clone().unwrap_or_else(|| "ACTIVE".to_string())
-    }).to_string()
-}
-
-/// Preview QR at 200px (screen). Encodes the same `qr_data` payload the
-/// archived cards carried; a 1x1 placeholder is returned on failure (never panics).
+/// Preview QR at 200px (screen). Encodes the legacy 7-key resident JSON;
+/// a 1x1 placeholder is returned on failure (never panics).
 fn qr_png_base64(data: &str) -> String {
     // Generate QR as PNG base64 data URL.
     // Fallback to empty placeholder on failure rather than panic
@@ -104,21 +87,49 @@ fn qr_png_base64(data: &str) -> String {
     )
 }
 
+/// Legacy card-QR payload: unsigned 7-key JSON
+/// {id, name ("LAST FIRST,MIDDLE"), dob (DD-MM-YYYY), purok, contact,
+/// valid (DD-MM-YYYY), status}. Scannable offline; authenticity is by
+/// manual BRGY-ID lookup in the app (no signature).
+fn qr_data(r: &Resident) -> String {
+    let middle = r.middle_name.as_deref().unwrap_or("");
+    let name = format!("{} {},{}", r.last_name, r.first_name, middle);
+    let doc = serde_json::json!({
+        "id": r.resident_id,
+        "name": name,
+        "dob": fmt_ddmmyyyy(&r.birth_date),
+        "purok": r.address_purok.as_deref().unwrap_or(""),
+        "contact": r.contact_number.as_deref().unwrap_or(""),
+        "valid": valid_until_display(r),
+        "status": r.remarks.as_deref().unwrap_or("ACTIVE"),
+    });
+    doc.to_string()
+}
+
 /// Dedicated QR data-URL command — the card template path calls this instead
-/// of regex-scraping `<img>` out of preview HTML. Same `qr_data` payload as
-/// before, so previously printed cards still verify.
+/// of regex-scraping `<img>` out of preview HTML. Encodes the legacy
+/// unsigned JSON payload (`qr_data`).
 #[tauri::command]
 pub async fn get_qr_data_url(
     state: State<'_, Arc<Mutex<AppState>>>,
     resident_id: i64,
 ) -> Result<String, String> {
     let pool = { state.lock().await.pool.clone() };
-    let resident = sqlx::query_as::<_, Resident>("SELECT * FROM residents WHERE id = ?")
+    let resident = sqlx::query_as::<_, Resident>(&format!(
+        "SELECT {} FROM residents WHERE id = ?",
+        crate::residents::RESIDENT_COLUMNS
+    ))
         .bind(resident_id)
         .fetch_one(&pool)
         .await
         .map_err(|e| format!("Resident not found: {}", e))?;
-    Ok(qr_png_base64(&qr_data(&resident)))
+    // C4: never mint a QR from a partial record; inactive rows are not printable.
+    if resident.is_active.unwrap_or(1) != 1 {
+        return Err("Resident is inactive".into());
+    }
+    crate::residents::validate_resident_complete(&resident)?;
+    let payload = qr_data(&resident);
+    Ok(qr_png_base64(&payload))
 }
 
 /// P1-4: batch per-card binaries for bulk print — one IPC call returns photo
@@ -144,21 +155,34 @@ pub async fn get_cards_batch(
         let s = state.lock().await;
         (s.pool.clone(), s.app_data_dir.clone())
     };
+    // C4/M3: single WHERE IN (...) round-trip (no N+1 loop). Inactive or
+    // incomplete rows yield None entries so they are never printable.
+    let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!(
+        "SELECT {} FROM residents WHERE id IN ({}) AND (is_active = 1 OR is_active IS NULL)",
+        crate::residents::RESIDENT_COLUMNS,
+        placeholders
+    );
+    let mut q = sqlx::query_as::<_, Resident>(&sql);
+    for id in &ids {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(&pool).await.map_err(|e| e.to_string())?;
+    let mut by_id = std::collections::HashMap::with_capacity(rows.len());
+    for r in rows {
+        by_id.insert(r.id.unwrap_or(-1), r);
+    }
     let mut out = Vec::with_capacity(ids.len());
     for resident_id in ids {
-        let resident: Option<Resident> =
-            sqlx::query_as::<_, Resident>("SELECT * FROM residents WHERE id = ?")
-                .bind(resident_id)
-                .fetch_optional(&pool)
-                .await
-                .map_err(|e| e.to_string())?;
-        let photo = resident
-            .as_ref()
+        let resident: Option<&Resident> = by_id.get(&resident_id);
+        // Active-only + completeness gate: inactive/incomplete → None entry.
+        let eligible = resident
+            .filter(|r| r.is_active.unwrap_or(1) == 1)
+            .filter(|r| crate::residents::validate_resident_complete(r).is_ok());
+        let photo = eligible
             .and_then(|r| r.photo_filename.as_deref())
             .and_then(|f| crate::residents::get_photo_base64(f, &app_data_dir));
-        let qr = resident
-            .as_ref()
-            .map(|r| qr_png_base64(&qr_data(&r)));
+        let qr = eligible.map(|r| qr_png_base64(&qr_data(r)));
         out.push(photo.zip(qr)); // zip combines two Options into Option<(T, U)>
     }
     Ok(out)
@@ -184,7 +208,6 @@ mod qr_tests {
             citizenship: Some("Filipino".to_string()),
             occupation: None,
             contact_number: Some("09171234567".to_string()),
-            email: None,
             address_street: None,
             address_purok: Some("AVOCADO".to_string()),
             address_barangay: Some("Barangay (Nouvelas Occidental) Balud".to_string()),
@@ -210,34 +233,32 @@ mod qr_tests {
             valid_until: None,
             last_pdf_path: None,
             last_pdf_generated_at: None,
+            emergency_contact_address: None,
         }
     }
 
     #[test]
-    fn qr_payload_starts_with_resident_id_and_decodes() {
-        // QR must always carry the business key first and verifiably decode.
+    fn qr_payload_is_legacy_unsigned_json() {
+        // Full removal: the card QR is the unsigned 7-key JSON again —
+        // id/name/dob/purok/contact/valid/status. No signature, no URL.
         let r = francis_like();
         let payload = qr_data(&r);
-        let v: serde_json::Value = serde_json::from_str(&payload).expect("qr must be JSON");
-        assert_eq!(v["id"], serde_json::Value::String(r.resident_id.clone()));
-        assert!(payload.contains("BRGY-2026-00001"));
-        // Contact slot uses the 09XX-XXX-XXXX display form.
-        assert_eq!(
-            v["contact"],
-            serde_json::Value::String("0917-123-4567".to_string())
-        );
-        // Minimal-PII 7-key set: no photo/address keys.
-        let mut keys: Vec<&str> = v.as_object().unwrap().keys().map(|k| k.as_str()).collect();
-        keys.sort_unstable();
-        assert_eq!(
-            keys,
-            vec!["contact", "dob", "id", "name", "purok", "status", "valid"]
-        );
-        // And the payload actually encodes as a scannable QR matrix.
+        let v: serde_json::Value =
+            serde_json::from_str(&payload).expect("qr_data emits valid JSON");
+        assert_eq!(v["id"], serde_json::json!("BRGY-2026-00001"));
+        assert_eq!(v["name"], serde_json::json!("PATINDOL FRANCIS,ADONA"));
+        assert_eq!(v["dob"], serde_json::json!("15-01-1990"));
+        assert_eq!(v["purok"], serde_json::json!("AVOCADO"));
+        assert_eq!(v["contact"], serde_json::json!("09171234567"));
+        assert_eq!(v["status"], serde_json::json!("ACTIVE"));
+        assert!(v["valid"].as_str().is_some());
+        assert_eq!(v.as_object().unwrap().len(), 7);
+        // Still a scannable QR matrix, well under the length budget.
         assert!(QrCode::new(payload.as_bytes()).is_ok());
+        assert!(payload.len() < 300);
         // Data-URL renderer never panics, even on hostile input.
-        let url = qr_png_base64(&payload);
-        assert!(url.starts_with("data:image/png;base64,"));
+        let data_url = qr_png_base64(&payload);
+        assert!(data_url.starts_with("data:image/png;base64,"));
         assert!(qr_png_base64("").starts_with("data:image/png;base64,"));
     }
 

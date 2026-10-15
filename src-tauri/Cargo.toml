@@ -1,6 +1,6 @@
 [package]
 name = "barangay-id-system"
-version = "1.0.0"
+version = "1.0.1"
 description = "Barangay Resident ID Card Registration System"
 authors = ["Barangay IT"]
 edition = "2021"
@@ -9,7 +9,7 @@ edition = "2021"
 tauri-build = { version = "1.5", features = [] }
 
 [dependencies]
-tauri = { version = "1.5", features = [ "fs-write-file", "fs-read-dir", "fs-remove-file", "fs-remove-dir", "fs-read-file", "fs-create-dir", "fs-copy-file", "fs-rename-file", "fs-exists", "dialog-all", "shell-open", "window-all"] }
+tauri = { version = "1.5", features = [ "dialog-save", "dialog-open", "fs-write-file", "fs-read-dir", "fs-remove-file", "fs-remove-dir", "fs-read-file", "fs-create-dir", "fs-copy-file", "fs-rename-file", "fs-exists", "shell-open", "window-all"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite", "macros", "chrono"] }

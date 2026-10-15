@@ -1,5 +1,5 @@
 @echo off
-REM Barangay ID System — thin double-click log viewer -> run.ps1 -Logs + Explorer open.
+REM Barangay ID System - thin double-click log viewer -> run.ps1 -Logs + Explorer open.
 REM Tail logic lives in run.ps1 -Logs (source of truth); this wrapper only adds `explorer logs`.
 REM Tails app.log.* + frontend.log + latest run/build transcripts in isolated logs\ folder.
 setlocal

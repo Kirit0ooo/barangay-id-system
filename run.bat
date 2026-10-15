@@ -1,5 +1,5 @@
 @echo off
-REM Barangay ID System — thin double-click wrapper around canonical run.ps1 (source of truth).
+REM Barangay ID System - thin double-click wrapper around canonical run.ps1 (source of truth).
 REM Flags are forwarded: run.bat -Logs | -Fix | -NoInstall | -Help | -Audit
 REM Runtime features (no flags needed): get_cards_batch bulk print, E1 duplicate-person check,
 REM E2 optimize_database (7-day cadence), E4 10s photo budget. See run.ps1 .DESCRIPTION.

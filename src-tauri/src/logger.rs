@@ -190,19 +190,27 @@ pub fn append_frontend_log(level: &str, message: &str) {
         }
     }
     let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    // M5: single-line log discipline — strip CR/LF so one invoke call can
+    // never forge extra log lines; cap at 8000 chars so a single message
+    // cannot blow past the 5MB rotation check between writes.
+    let clean_level: String = level.chars().filter(|c| c.is_alphanumeric()).take(16).collect();
+    let mut clean_msg = message.replace('\r', " ").replace('\n', " ");
+    if clean_msg.len() > 8000 {
+        clean_msg.truncate(8000);
+    }
     let line = format!(
         "[{}] [frontend] [{}] {}\n",
         now,
-        level.to_uppercase(),
-        message
+        clean_level.to_uppercase(),
+        clean_msg
     );
     use std::io::Write;
     if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(&path) {
         let _ = file.write_all(line.as_bytes());
     }
     match level {
-        "error" => tracing::error!("[frontend] {}", message),
-        "warn" => tracing::warn!("[frontend] {}", message),
-        _ => tracing::info!("[frontend] {}", message),
+        "error" => tracing::error!("[frontend] {}", clean_msg),
+        "warn" => tracing::warn!("[frontend] {}", clean_msg),
+        _ => tracing::info!("[frontend] {}", clean_msg),
     }
 }

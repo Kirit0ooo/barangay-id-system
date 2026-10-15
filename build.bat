@@ -1,7 +1,12 @@
 @echo off
-REM Barangay ID System — portable release build. Thin wrapper around canonical build.ps1.
+REM Barangay ID System - portable release build. Thin wrapper around canonical build.ps1.
 REM All artifacts stay inside this folder: src-tauri\target\x86_64-pc-windows-msvc\release\bundle\ + logs\build-*.log
 REM Build includes get_cards_batch (bulk print) + optimize_database (E2). See build.ps1 .DESCRIPTION.
+REM Pre-build flow (in build.ps1): stale bundle/ outputs removed, patch version
+REM auto-incremented x.y.z -> x.y.z+1 across package.json / package-lock.json /
+REM tauri.conf.json / Cargo.toml / Cargo.lock so the binary carries the new version.
+REM Opt out per run: build.bat -NoBump  (keep current version)
+REM                build.bat -NoClean (keep previous bundle outputs)
 setlocal
 cd /d "%~dp0"
 

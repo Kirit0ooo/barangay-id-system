@@ -153,15 +153,6 @@ pub fn get_documents_excel_dir() -> PathBuf {
     d
 }
 
-/// Phase-1 verification registry home (`Documents/Verify/registry-*.json`).
-/// Operator-published to the static portal next to `verify/index.html`.
-/// Holds full PII by design — gitignored, never committed.
-pub fn get_verify_dir() -> PathBuf {
-    let d = get_documents_dir().join("Verify");
-    let _ = fs::create_dir_all(&d);
-    d
-}
-
 pub fn get_app_data_dir() -> PathBuf {
     // Isolation: ALL data must stay inside the project tree — no fallback to AppData/TEMP.
     // Ensure Documents structure exists as well.
@@ -252,6 +243,20 @@ pub fn sanitize_file_name_component(raw_name: &str, max_stem_len: usize) -> Stri
     stem + &ext
 }
 
+/// L2 export stem canonical — per-resident file stem (full_name + resident_id), sanitized.
+/// Used for per-resident exports; PDF-era callers delegate via legacy alias below.
+#[allow(dead_code)]
+pub fn per_resident_export_stem(full_name: &str, resident_id: &str) -> String {
+    let raw = format!("{}-{}", full_name.trim(), resident_id.trim());
+    sanitize_file_name_component(&raw, 120)
+}
+
+/// Legacy alias: per-resident PDF filename (kept for old DBs/tests) delegates to export stem.
+#[allow(dead_code)]
+pub fn per_resident_pdf_filename(full_name: &str, resident_id: &str) -> String {
+    format!("{}.pdf", per_resident_export_stem(full_name, resident_id))
+}
+
 /// Bulk base name from the backup/execution local date: `BACKUP-YYYY-MM-DD`.
 pub fn backup_base_name() -> String {
     format!("BACKUP-{}", chrono::Local::now().format("%Y-%m-%d"))
@@ -336,46 +341,6 @@ pub(crate) fn prune_oldest_files(dir: &Path, prefixes: &[&str], keep: usize) {
         dir.display(),
         keep
     );
-}
-
-/// Phase-1 prerequisite: back up irreplaceable config secrets alongside the
-/// DB copy. Losing the QR/verifying signing keys orphans every printed QR,
-/// and backups already hold full PII, so no new exposure class is added.
-/// Writes `<dir>/config_backup_<stem>.json` with the sidecar values present
-/// (missing keys serialize null). Best-effort: failures are logged, never
-/// fail the backup. Restore is deliberately MANUAL (see QR docs) — secrets
-/// are never auto-overwritten by a restore.
-pub(crate) fn backup_config_secrets(dir: &Path, stem: &str) {
-    let read_secret = |name: &str| -> Option<String> {
-        let root = get_project_root()?;
-        let raw = fs::read_to_string(root.join("config").join(name)).ok()?;
-        let t = raw.trim().to_string();
-        if t.is_empty() {
-            None
-        } else {
-            Some(t)
-        }
-    };
-    let doc = serde_json::json!({
-        "exported_at": chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
-        "qr_hmac_secret": read_secret("qr_hmac_secret"),
-        "id_verify_private": read_secret("id_verify_private"),
-    });
-    let dest = dir.join(format!("config_backup_{}.json", stem));
-    if validate_isolated_write_path(&dest).is_err() {
-        tracing::warn!("config secrets backup skipped (isolation)");
-        return;
-    }
-    match serde_json::to_string_pretty(&doc) {
-        Ok(text) => {
-            if fs::write(&dest, text).is_ok() {
-                tracing::info!("config secrets backed up at {}", dest.display());
-            } else {
-                tracing::warn!("config secrets backup write failed: {}", dest.display());
-            }
-        }
-        Err(e) => tracing::warn!("config secrets backup serialize failed: {}", e),
-    }
 }
 
 fn lexical_normalize(path: &Path) -> PathBuf {
@@ -661,6 +626,9 @@ pub async fn init_db() -> Result<SqlitePool> {
         CREATE INDEX IF NOT EXISTS idx_resident_id ON residents(resident_id);
         CREATE INDEX IF NOT EXISTS idx_purok ON residents(address_purok);
         CREATE INDEX IF NOT EXISTS idx_active ON residents(is_active);
+        CREATE INDEX IF NOT EXISTS idx_gender ON residents(is_active, gender);
+        CREATE INDEX IF NOT EXISTS idx_remarks ON residents(is_active, remarks);
+        CREATE INDEX IF NOT EXISTS idx_dashboard ON residents(is_active, gender, remarks, date_registered);
         "#,
     )
     .execute(&pool)

@@ -134,7 +134,7 @@ $env:TMPDIR                    = Join-Path $Root 'tmp'
 $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $Root 'tmp\webview2'
 if ($EnableVerboseLogging) { $env:RUST_LOG = 'debug'; $env:BARANGAY_VERBOSE = '1'; Write-Host '[Barangay ID] Verbose: RUST_LOG=debug + BARANGAY_VERBOSE=1 (console + app.log + frontend console)' -ForegroundColor Magenta }
 if (-not $env:RUST_LOG) { $env:RUST_LOG = 'info' }
-if ($env:BARANGAY_VERBOSE -eq '1') { Write-Host '[Barangay ID] Frontend verbose: BARANGAY_VERBOSE=1 — JS console will show [debug] lines' -ForegroundColor Magenta }
+if ($env:BARANGAY_VERBOSE -eq '1') { Write-Host '[Barangay ID] Frontend verbose: BARANGAY_VERBOSE=1 - JS console will show [debug] lines' -ForegroundColor Magenta }
 
 foreach ($d in @('logs', 'tmp', 'tmp\webview2', '.npm-cache', 'data')) {
     $p = Join-Path $Root $d
@@ -208,10 +208,10 @@ if ($Audit) {
     try {
         if (Get-Command 'cargo' -ErrorAction SilentlyContinue) {
             try { Invoke-SafeNative cargo audit --file (Join-Path $Root 'src-tauri\Cargo.lock') | Out-Host }
-            catch { Write-Host '[audit] cargo-audit not installed — run: cargo install cargo-audit' -ForegroundColor Yellow }
-        } else { Write-Host '[audit] cargo not found — skipping Rust audit' -ForegroundColor Yellow }
+            catch { Write-Host '[audit] cargo-audit not installed - run: cargo install cargo-audit' -ForegroundColor Yellow }
+        } else { Write-Host '[audit] cargo not found - skipping Rust audit' -ForegroundColor Yellow }
         Invoke-SafeNative npm audit --audit-level=moderate | Out-Host
-        if ($LASTEXITCODE -ne 0) { Write-Host '[audit] npm audit reported issues at/above moderate (see above) — warn-only' -ForegroundColor Yellow }
+        if ($LASTEXITCODE -ne 0) { Write-Host '[audit] npm audit reported issues at/above moderate (see above) - warn-only' -ForegroundColor Yellow }
     } finally { $ErrorActionPreference = $prevEap }
     Write-Host '[Barangay ID] Audit done (warn-only).' -ForegroundColor Green
     exit 0
@@ -240,7 +240,7 @@ try {
             $nodeOk = $true
         } else { throw "node --version exit $LASTEXITCODE" }
     } catch {
-        Write-Host 'Node.js not found - install LTS 18+ from https://nodejs.org' -ForegroundColor Red
+        Write-Host 'Node.js not found - install LTS 20+ from https://nodejs.org' -ForegroundColor Red
         Write-Host "  Detail: $($_.Exception.Message)" -ForegroundColor DarkGray
         $failed = $true
     }
@@ -275,8 +275,30 @@ try {
         $failed = $true
     }
 
+    Write-Host '--- Prereq: MSVC linker (Rust compile) ---' -ForegroundColor Yellow
+    $msvcOk = $false
+    try {
+        # tauri dev compiles the Rust backend: link.exe must exist (x64 Native Tools
+        # prompt works; plain PowerShell needs VS Build Tools on PATH or installed).
+        $linkHit = $false
+        try { $null = Get-Command link.exe -ErrorAction Stop; $linkHit = $true } catch {}
+        if (-not $linkHit) {
+            $vsWhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+            if (Test-Path $vsWhere) {
+                $vsPath = (& $vsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null | Out-String).Trim()
+                if ($vsPath -and (Test-Path (Join-Path $vsPath 'VC\Tools\MSVC'))) { $linkHit = $true }
+            }
+        }
+        if ($linkHit) { Write-Host 'MSVC linker present' -ForegroundColor Green; $msvcOk = $true }
+        else { throw 'link.exe not found and no VS VC.Tools install detected' }
+    } catch {
+        Write-Host 'MSVC Build Tools not found - install from https://visualstudio.microsoft.com/visual-cpp-build-tools/ (Desktop C++ workload; needed to compile Tauri)' -ForegroundColor Red
+        Write-Host "  Detail: $($_.Exception.Message)" -ForegroundColor DarkGray
+        $failed = $true
+    }
+
     if ($failed) { throw 'Missing prerequisites - see messages above. Install missing tools and retry.' }
-    if (-not $nodeOk -or -not $npmOk -or -not $rustOk) { throw 'Prereq check incomplete - aborting.' }
+    if (-not $nodeOk -or -not $npmOk -or -not $rustOk -or -not $msvcOk) { throw 'Prereq check incomplete - aborting.' }
 
     # ---- -Fix: deep clean reinstall (historical fix-tauri.bat folded in) ----
     if ($Fix) {

@@ -1,7 +1,7 @@
 // Golden card test — field-map parity for the single HTML render path
 // (card-template.html + buildCardPayload) plus the backend QR/date helpers.
 // String-level only: offline, no network, no image rendering.
-// Path (a) mirrors src-tauri/src/id_card.rs: fmt_ddmmyyyy, valid_until_display, qr_data.
+// Path (a) mirrors src-tauri/src/id_card.rs: fmt_ddmmyyyy, valid_until_display.
 // Path (b) mirrors src/js/app.js: formatDateDDMMYYYY, shortBarangay, validity bar, address.
 // Path (c) is the drift guard: the real sources must still contain the formulas
 // these mirrors were copied from (grep pins), so a backend/frontend edit that
@@ -35,18 +35,6 @@ function rsValidUntilDisplay(validUntil, todayPlus365) {
   const v = (validUntil || '').trim();
   if (v) return rsFmtDDMMYYYY(v);
   return todayPlus365;
-}
-function rsQrData(r, validDisplay) {
-  // Faithful port of fn qr_data: exact key set, compact JSON.
-  return JSON.stringify({
-    id: r.resident_id,
-    name: `${r.last_name} ${r.first_name}, ${r.middle_name || ''}`,
-    dob: rsFmtDDMMYYYY(r.birth_date),
-    purok: r.address_purok || '',
-    contact: r.contact_number || '',
-    valid: validDisplay,
-    status: r.remarks || 'ACTIVE',
-  });
 }
 
 // ---------- Path (b): frontend mirrors (app.js) ----------
@@ -194,13 +182,6 @@ for (const f of fixtures) {
   const emer = jsEmerAddress(r, short, 'BASEY', 'SAMAR');
   check(`[${tag}] emergency address has municipality + province`, emer.includes('BASEY') && emer.includes('SAMAR'), emer);
   if (expect.emer) check(`[${tag}] emergency address exact`, emer === expect.emer, `got=${emer} want=${expect.emer}`);
-  // QR payload minimal: exact key set, no photo/address keys.
-  const qr = JSON.parse(rsQrData(r, rsValid));
-  const keys = Object.keys(qr).sort().join(',');
-  check(`[${tag}] QR payload minimal keys`, keys === 'contact,dob,id,name,purok,status,valid', keys);
-  check(`[${tag}] QR has no photo/address`, !('photo' in qr) && !('address' in qr) && !('photo_filename' in qr), keys);
-  check(`[${tag}] QR dob == display dob`, qr.dob === rsDob, qr.dob);
-  check(`[${tag}] QR valid == display valid`, qr.valid === rsValid, qr.valid);
 }
 
 // ---------- Truncation parity (Rust truncate vs frontend truncateCard) ----------
@@ -234,7 +215,7 @@ const mainRs = readFileSync(join(root, 'src-tauri/src/main.rs'), 'utf8');
 // Comment-stripped copies: historical notes may name deleted PDF items (allowed).
 const idCardCode = idCardRs.replace(/^\s*\/\/.*$/gm, '');
 const cargoCode = cargoToml.replace(/^\s*#.*$/gm, '');
-check('rust qr_data key set intact', ['"id"', '"name"', '"dob"', '"purok"', '"contact"', '"valid"', '"status"'].every((k) => idCardRs.includes(k)));
+check('rust card QR is the legacy unsigned 7-key JSON (signed verify URL retired)', idCardCode.includes('fn qr_data') && !idCardRs.includes('verify_url_for') && !idCardRs.includes('verify::'));
 check('rust fmt_ddmmyyyy ISO branch intact', idCardRs.includes('p[0].len() == 4'));
 check('no PDF machinery in backend', !idCardCode.includes('printpdf') && !idCardCode.includes('BulkIdResult') && !idCardCode.includes('failures.json') && !idCardCode.includes('generate_single_pdf'));
 check('no printpdf dep, QR kept for preview', !cargoCode.includes('printpdf') && cargoCode.includes('qrcode'));

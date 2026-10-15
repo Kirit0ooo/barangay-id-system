@@ -23,6 +23,18 @@ async function getPhotoAsDataUrl(src) {
 }
 // ───────────────────────────────────────────────────────────────────
 
+// Mirrors backend residents.rs::SEARCH_RESULT_LIMIT — single source for the
+// search-cap toast and the bulk-print large-job warning. Do NOT hardcode
+// 2000 elsewhere; tests/regression.test.js pins equality with the backend.
+const SEARCH_RESULT_CAP = 2000;
+
+// M6: image-slot scheme allowlist (mirrors card-template.html SAFE_IMG).
+// Only offline-safe schemes may become an <img src>; anything else
+// (notably javascript:) is dropped instead of setAttribute'd.
+function isSafeImgSrc(v) {
+    return typeof v === 'string' && /^(data:image\/|asset:|http:\/\/asset\.localhost|blob:|https?:\/\/)/.test(v);
+}
+
 function emptyForm() {
     // Default valid_until: today + 1 year (ISO format)
     const today = new Date();
@@ -43,7 +55,6 @@ function emptyForm() {
         citizenship: 'Filipino',
         occupation: '',
         contact_number: '',
-        email: '',
         address_street: '',
         address_purok: '',
         address_barangay: '(NOUVELAS OCCIDENTAL) BALUD',
@@ -138,7 +149,7 @@ function app() {
         },
         onInputUpper(e, key) {
             if (!e || !e.target) return;
-            if (key === 'email' || key === 'birth_date') return;
+            if (key === 'birth_date') return;
             const v = e.target.value;
             if (typeof v !== 'string') return;
             const up = v.toUpperCase();
@@ -166,7 +177,7 @@ function app() {
             }
         },
         normalizeFormUpper() {
-            const skip = new Set(['email', 'birth_date', 'photoData', 'id']);
+            const skip = new Set(['birth_date', 'photoData', 'id']);
             for (const k of Object.keys(this.form)) {
                 if (skip.has(k)) continue;
                 const v = this.form[k];
@@ -174,9 +185,6 @@ function app() {
                     const up = v.toUpperCase();
                     if (v !== up) this.form[k] = up;
                 }
-            }
-            if (typeof this.form.email === 'string') {
-                this.form.email = this.form.email.trim().toLowerCase();
             }
         },
         
@@ -300,7 +308,6 @@ function app() {
                 Logger.info('Dashboard loaded', {total: this.stats.total});
             } catch (e) {
                 Logger.error('Dashboard load error:', e);
-                console.error('Dashboard load error:', e);
             }
         },
         
@@ -368,20 +375,30 @@ function app() {
                     this.form.address_province = 'SAMAR';
                 }
                 
-                // Auto-uppercase all text fields except email (lower) and birth_date (ISO) before R3 normalization
+                // Auto-uppercase all text fields except birth_date (ISO canonical) before R3 normalization
                 this.normalizeFormUpper();
                 // R3 — normalize DOB to YYYY-MM-DD before storage (accepts DD-MM-YYYY, DD/MM/YYYY, YYYY-MM-DD)
                 if (this.form.birth_date) this.form.birth_date = normalizeBirthDateForSubmit(this.form.birth_date);
-                // Contact fields must be exactly 11 digits (09XX-XXX-XXXX) on new
-                // input — the mask guides entry, this gate blocks legacy short
-                // numbers at submit (old DB rows untouched). Emergency also
-                // accepts a BRGY- resident reference (backend verifies it).
+                // Contact fields mirror backend validate_resident_input's two-track
+                // rule: PH-looking (09… or +…, incl. +63 country prefix) must be
+                // exactly 11 digits starting 09; anything else takes the legacy
+                // charset path (digits/+/-/space/parens, 7–20 chars, ≥1 digit)
+                // so edits to old rows with landlines never trap. The input
+                // mask still guides new entry toward 09XX-XXX-XXXX. Emergency
+                // also accepts a BRGY- resident reference (backend verifies it).
                 const mustBeMobile = (v, label, allowBrgy) => {
                     const t = (v || '').trim();
                     if (!t) return;
                     if (allowBrgy && /^BRGY-/i.test(t)) return;
-                    const d = t.replace(/\D/g, '');
-                    if (d.length !== 11 || !d.startsWith('09')) throw label + ' must be 11 digits (09XX-XXX-XXXX)';
+                    let d = t.replace(/\D/g, '');
+                    // +639… / 639… (12 digits starting 63) → 09… (mirrors backend strip_to_digits).
+                    if ((t.startsWith('+') || d.length === 12) && d.startsWith('63')) d = '0' + d.slice(2);
+                    if (d.startsWith('09') || t.startsWith('+')) {
+                        if (d.length !== 11 || !d.startsWith('09')) throw label + ' must be 11 digits (09XX-XXX-XXXX)';
+                        return;
+                    }
+                    if (t.length < 7 || t.length > 20 || !/^[0-9+\- ()]+$/.test(t) || !/\d/.test(t))
+                        throw label + ' must be 11 digits (09XX-XXX-XXXX) or a legacy number (7–20 chars)';
                 };
                 mustBeMobile(this.form.contact_number, 'Contact number', false);
                 mustBeMobile(this.form.emergency_contact_number, 'Emergency contact number', true);
@@ -439,14 +456,15 @@ function app() {
         async viewResident(id) {
             try {
                 this.previousView = this.currentView;
-                this.detailResident = await API.getResident(id);
+                // Load record + photo concurrently (independent IPCs).
+                const [resident, photo] = await Promise.all([
+                    API.getResident(id),
+                    API.getResidentPhoto(id).catch(() => null)
+                ]);
+                this.detailResident = resident;
                 // Photo slot holds the resident's actual upload only — no
                 // fallback. The detail view shows its No-Photo state when empty.
-                try {
-                    this.detailPhoto = (await API.getResidentPhoto(id)) || null;
-                } catch {
-                    this.detailPhoto = null;
-                }
+                this.detailPhoto = photo || null;
                 this.currentView = 'detail';
                 // Detail replaces the list: jump to top instantly so the hero is in viewport,
                 // then move keyboard focus to main for screen readers. Smooth scroll is
@@ -482,7 +500,11 @@ function app() {
                 // Capture return target only when entering edit mode fresh —
                 // revertEdit() re-calls this and must not overwrite it.
                 if (this.editingResident !== id) this.editReturnView = this.previousView || 'dashboard';
-                const resident = await API.getResident(id);
+                // Load record + photo concurrently (independent IPCs).
+                const [resident, photoUrl] = await Promise.all([
+                    API.getResident(id),
+                    API.getResidentPhoto(id).catch(() => '')
+                ]);
                 this.form = { ...emptyForm(), ...resident, photoData: '' };
                 // Stored enum values are UPPERCASE and selects now match by
                 // value; coerce legacy mixed-case rows so nothing renders blank.
@@ -491,8 +513,7 @@ function app() {
                 }
                 // Render the stored photo (never blank in edit mode); a fresh
                 // upload replaces it via photoData, removal clears both.
-                try { this.editPhotoUrl = (await API.getResidentPhoto(id)) || ''; }
-                catch { this.editPhotoUrl = ''; }
+                this.editPhotoUrl = photoUrl || '';
                 this.editingResident = resident.id;
                 // Leaving detail: clear detail state first so the register view never
                 // renders behind a stale detail record.
@@ -543,13 +564,12 @@ function app() {
                     needInactive
                 );
                 this.searchResults = this.applySearchCategory(rows || []);
-                // Backend caps search at LIMIT 500 — never silently truncate:
+                // Backend caps search at SEARCH_RESULT_CAP — never silently truncate:
                 // signal when the raw set hit the cap so operators refine.
-                if ((rows || []).length >= 500) this.showToast('Showing first 500 matches — refine search or purok filter', 'info');
+                if ((rows || []).length >= SEARCH_RESULT_CAP) this.showToast(`Showing first ${SEARCH_RESULT_CAP} matches — refine search or purok filter`, 'info');
                 Logger.info('search', {query: this.searchQuery, category: this.searchCategory, count: this.searchResults.length});
             } catch (e) {
                 Logger.error('Search error:', e);
-                console.error('Search error:', e);
                 this.searchResults = [];
             }
             this.searching = false;
@@ -606,62 +626,49 @@ function app() {
         },
         
         isExpired(r) {
-            if (!r || !r.valid_until) return false;
-            const vu = String(r.valid_until).trim();
-            if (!vu) return false;
-            // Normalize to ISO YYYY-MM-DD for lexical comparison
-            let iso;
-            if (/^\d{4}-\d{2}-\d{2}$/.test(vu)) {
-                iso = vu;
-            } else {
-                const parts = vu.split(/[-/]/);
-                if (parts.length !== 3) return false;
-                // Detect DD-MM-YYYY or DD/MM/YYYY
-                const [a,b,c] = parts;
-                const year = parseInt(c,10);
-                const month = parseInt(b,10);
-                const day = parseInt(a,10);
-                if (!year || !month || !day) return false;
-                iso = `${String(year).padStart(4,'0')}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-            }
+            // Expiry decision delegates to the single parseValidUntil owner in
+            // helpers.js — no second valid_until parser here. Unparseable → false.
+            const iso = parseValidUntil(r && r.valid_until);
+            if (!iso) return false;
             // Use UTC date strings to avoid local timezone off-by-one
             const today = this.todayISO();
             return iso < today;
         },
         
-        // Gender pie segment math: full percent of total — white seam ticks
-        // (pieBoth) separate the arcs instead of a value gap, so round caps
-        // meet the seam cleanly. Empty and full-circle states stay clean.
-        pieSeg(part) {
+        // Balance-gauge arc math: male grows from the left end of the 180-degree
+        // track, female from the right end (pathLength=100 units). A 3-unit gap
+        // separates the arcs only when both sides are non-trivial (>2% and
+        // <98%); empty and single-side states stay clean with no gap.
+        gaugeSeg(part) {
             if (!this.stats.total || part <= 0) return 0;
             return (part / this.stats.total) * 100;
         },
-        pieSpan() {
-            if (!this.stats.total) return 0;
-            return (this.stats.male / this.stats.total) * 360;
-        },
-        pieBoth() {
+        gaugeGap() {
             if (!this.stats.total) return false;
             const m = (this.stats.male / this.stats.total) * 100;
             return m > 2 && m < 98;
         },
-        pieOff() {
-            if (!this.stats.total) return 0;
-            return -((this.stats.male / this.stats.total) * 100);
+        gaugeArcs() {
+            if (!this.stats.total) return { mLen: 0, fLen: 0, fOff: -100 };
+            const m = this.gaugeSeg(this.stats.male);
+            const gap = this.gaugeGap() ? 3 : 0;
+            const mLen = Math.max(m - gap / 2, 0);
+            const fLen = Math.max((100 - m) - gap / 2, 0);
+            // Female dash must END at the path end (100): offset = fLen - 100.
+            return { mLen, fLen, fOff: fLen - 100 };
         },
         // Days until ID expiry (null when unset/unparseable). Accepts ISO
         // storage plus legacy DD-MM-YYYY rows; compares calendar dates only.
         validDaysLeft(r) {
-            if (!r || !r.valid_until || !String(r.valid_until).trim()) return null;
-            const vu = String(r.valid_until).trim();
-            let iso;
-            if (/^\d{4}-\d{2}-\d{2}$/.test(vu)) iso = vu;
-            else {
-                const p = vu.split(/[-/]/);
-                if (p.length !== 3) return null;
-                iso = `${p[2].padStart(4, '0')}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
-            }
-            return Math.round((new Date(iso) - new Date(this.todayISO())) / 86400000);
+            // Countdown delegates to the same parseValidUntil owner as isExpired
+            // so the pill and the countdown can never disagree on the date.
+            const iso = parseValidUntil(r && r.valid_until);
+            if (!iso) return null;
+            // DST-safe: compare UTC midnights, never local Date subtraction.
+            const [y, m, d] = iso.split('-').map(Number);
+            const [ty, tm, td] = this.todayISO().split('-').map(Number);
+            if (!y || !m || !d || !ty || !tm || !td) return null;
+            return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(ty, tm - 1, td)) / 86400000);
         },
         // Expiry countdown readout for the detail hero validity line.
         expiryCountdown(r) {
@@ -739,10 +746,20 @@ function app() {
             // Progress is a plain JS loop — no backend events since PDF removal.
             let rows = (this.searchResults && this.searchResults.length)
                 ? this.searchResults.filter((r) => r.is_active !== 0)
-                : await this.fetchAllResidentsPaged();
+                : null;
+            if (!rows) { this.showToast('No active residents to print — run a search first', 'info'); return; }
             rows = (rows || []).filter((r) => r && r.is_active !== 0);
             if (!rows.length) { this.showToast('No active residents to print', 'info'); return; }
-            if (rows.length > 2000) this.showToast(`Large print job: ${rows.length} cards — this may take a while`, 'info');
+            if (rows.length > 50) {
+                const ok = await API.confirmDialog(
+                    `Print ${rows.length} ID cards? This opens a print dialog per batch of 200.`,
+                    'Confirm Bulk Print'
+                );
+                if (!ok) return;
+            }
+            // Cancellable: Settings cancel button sets bulkPrintCancel; the
+            // batch loop below checks it between batches.
+            this.bulkPrintCancel = false;
             // P1-4: hoist invariants once — civic config + short-barangay per
             // unique value + photo/QR via chunked get_cards_batch (1 IPC per
             // 200 residents instead of 4 per resident).
@@ -792,6 +809,7 @@ function app() {
                 let totalFailed = 0;
                 
                 for (let batchStart = 0; batchStart < rows.length; batchStart += PRINT_BATCH_SIZE) {
+                    if (this.bulkPrintCancel) { this.showToast('Bulk print cancelled', 'info'); break; }
                     const batchEnd = Math.min(batchStart + PRINT_BATCH_SIZE, rows.length);
                     const batchRows = rows.slice(batchStart, batchEnd);
                     const sections = [];
@@ -810,7 +828,7 @@ function app() {
                             filled.querySelectorAll('[data-field]').forEach((el) => {
                                 const k = el.getAttribute('data-field');
                                 if (!(k in payload) || payload[k] == null || payload[k] === '') return;
-                                if (IMG[k] && el.tagName === 'IMG') el.setAttribute('src', payload[k]);
+                                if (IMG[k] && el.tagName === 'IMG') { if (isSafeImgSrc(payload[k])) el.setAttribute('src', payload[k]); }
                                 else el.textContent = payload[k];
                             });
                             const parts = [...filled.querySelectorAll('.sheet > .bleed, .sheet > .cutline')]
@@ -839,11 +857,12 @@ function app() {
                     // grep-guard: printFilledCard(bulkHtml) pattern preserved for test compatibility
                     this.showToast(`Printing batch ${Math.floor(batchStart / PRINT_BATCH_SIZE) + 1} of ${Math.ceil(rows.length / PRINT_BATCH_SIZE)} (${batchRows.length} cards)…`, 'info');
                     this.printFilledCard(batchHtml);
-                    
+
                     // Small delay to let print dialog settle before next batch
                     if (batchEnd < rows.length) {
                         await new Promise(r => setTimeout(r, 500));
                     }
+                    if (this.bulkPrintCancel) { this.showToast('Bulk print cancelled', 'info'); break; }
                 }
                 
                 const finalOk = rows.length - this.bulkProgress.failures;
@@ -880,23 +899,6 @@ function app() {
             }
         },
 
-        async backupDB() {
-            try {
-                const savePath = await API.saveFileDialog('Backup Database', [
-                    { name: 'Database Files', extensions: ['db'] }
-                ]);
-                
-                if (savePath) {
-                    const result = await API.backupDatabase(savePath);
-                    this.showToast('Database backed up to: ' + result, 'success');
-                    Logger.info('backupDB', result);
-                }
-            } catch (e) {
-                this.showToast('Backup failed: ' + e, 'error');
-                Logger.error('backupDB failed', e);
-            }
-        },
-        
         // R5 — photo GC: two-step scan → delete
         photoScanResult: null,
         backupRunScheduled: false,
@@ -1048,7 +1050,6 @@ function app() {
             let photo = '';
             if (pre && ('photo' in pre)) photo = pre.photo || '';
             else try { photo = await getPhotoAsDataUrl(await API.getResidentPhoto(residentId)); } catch (e) { Logger.warn('card photo fetch failed', e); }
-            Logger.info('card_photo_debug', { residentId, photo_len: photo.length, photo_starts: photo.substring(0, 20) });
             // No fallback: without an upload the slot stays empty and the
             // template hides it — only the resident's actual photo renders.
             // QR via dedicated backend command; on failure the slot stays
@@ -1181,7 +1182,7 @@ function app() {
             doc.querySelectorAll('[data-field]').forEach((el) => {
                 const k = el.getAttribute('data-field');
                 if (!(k in payload) || payload[k] == null || payload[k] === '') return;
-                if (IMG[k] && el.tagName === 'IMG') el.setAttribute('src', payload[k]);
+                if (IMG[k] && el.tagName === 'IMG') { if (isSafeImgSrc(payload[k])) el.setAttribute('src', payload[k]); }
                 else el.textContent = payload[k];
             });
             if (payload.resident_id) doc.title = 'ID Card - ' + payload.resident_id;
@@ -1197,6 +1198,7 @@ function app() {
                 iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
                 document.body.appendChild(iframe);
             }
+            iframe.onload = null;
             iframe.onload = () => {
                 try { iframe.contentWindow.focus(); iframe.contentWindow.print(); }
                 catch (e) { Logger.error('card print failed', e); }
@@ -1242,12 +1244,18 @@ function app() {
         },
 
         showToast(message, type = 'info') {
+            this.toastSeq = (this.toastSeq || 0) + 1;
+            const seq = this.toastSeq;
             this.toast = { show: true, message, type };
             Logger.info('toast', type + ': ' + message);
             const duration = type === 'error' ? 5000 : 3000;
             setTimeout(() => {
-                this.toast.show = false;
+                if (seq === this.toastSeq) this.toast.show = false;
             }, duration);
+        },
+
+        cancelBulkPrint() {
+            this.bulkPrintCancel = true;
         }
     };
 }

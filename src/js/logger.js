@@ -73,7 +73,7 @@ const Logger = (() => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url; a.download = `barangay-frontend-${new Date().toISOString().slice(0,10)}.json`;
-      a.click(); URL.revokeObjectURL(url);
+      a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     },
     clear: () => localStorage.removeItem(BUFFER_KEY)
   };

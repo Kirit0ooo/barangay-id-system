@@ -1,7 +1,7 @@
 use crate::db::{validate_isolated_write_path, AppState};
 use chrono::Local;
+use sqlx::Row;
 use std::collections::HashSet;
-use std::fs;
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
@@ -73,28 +73,61 @@ pub async fn scheduled_backup(
     validate_isolated_write_path(&dest)
         .map_err(|e| format!("Scheduled backup path isolation error: {}", e))?;
     if let Some(parent) = dest.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        let p = parent.to_path_buf();
+        tokio::task::spawn_blocking(move || std::fs::create_dir_all(&p).map_err(|e| e.to_string()))
+            .await
+            .map_err(|e| format!("Backup task failed: {}", e))??;
     }
     // Windows hot-backup: the live DB can be briefly locked by the pool /
     // AV indexer (os error 32 seen in run logs). Retry the plain copy, then
     // fall back to `VACUUM INTO` which produces a consistent snapshot
     // through the SQLite connection instead of the filesystem.
+    // P1 sync-blocking fix: copy and sleep off the async runtime.
     let mut copy_err = String::new();
     let mut copied = false;
     for attempt in 1..=3 {
-        match fs::copy(&source_db, &dest) {
-            Ok(_) => {
+        let src = source_db.clone();
+        let dst = dest.clone();
+        // P0 atomic: copy to a .tmp sibling then rename (mirrors backup_database)
+        // so an interrupted run never leaves a truncated scheduled_*.db that looks
+        // valid by name. fs::copy overwrites the tmp, so retries are safe.
+        let copy_res = tokio::task::spawn_blocking(move || -> Result<(), String> {
+            let tmp = {
+                let mut p = dst.clone();
+                let name = format!(
+                    "{}.tmp",
+                    dst.file_name().ok_or("Invalid backup path")?.to_string_lossy()
+                );
+                p.set_file_name(name);
+                p
+            };
+            std::fs::copy(&src, &tmp).map_err(|e| e.to_string())?;
+            std::fs::rename(&tmp, &dst).map_err(|e| e.to_string())
+        })
+        .await
+        .map_err(|e| e.to_string());
+        match copy_res {
+            Ok(Ok(())) => {
                 copied = true;
                 break;
             }
-            Err(e) => {
-                copy_err = e.to_string();
+            Ok(Err(e)) => {
+                copy_err = e;
                 tracing::warn!(
                     "scheduled_backup copy attempt {}/3 failed: {}",
                     attempt,
                     copy_err
                 );
-                std::thread::sleep(std::time::Duration::from_millis(250 * attempt as u64));
+                tokio::time::sleep(std::time::Duration::from_millis(250 * attempt as u64)).await;
+            }
+            Err(e) => {
+                copy_err = e;
+                tracing::warn!(
+                    "scheduled_backup copy attempt {}/3 join failed: {}",
+                    attempt,
+                    copy_err
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(250 * attempt as u64)).await;
             }
         }
     }
@@ -111,8 +144,20 @@ pub async fn scheduled_backup(
                     .into(),
             );
         }
-        let dest_str = dest.to_string_lossy().replace('\'', "''");
-        let vacuum_sql = format!("VACUUM INTO '{}'", dest_str);
+        // P0 atomic: VACUUM INTO a .tmp then rename. VACUUM INTO errors if the
+        // target already exists (unlike fs::copy), so clear any stale tmp a prior
+        // crashed run left behind — otherwise the safety fallback fails exactly
+        // when it's needed. The allowlist gate above still validates the FINAL
+        // dest name; tmp is only a transient staging name derived from it.
+        let tmp_path = dest.with_extension("db.tmp");
+        let tmp_cleanup = tmp_path.clone();
+        tokio::task::spawn_blocking(move || {
+            let _ = std::fs::remove_file(&tmp_cleanup);
+        })
+        .await
+        .map_err(|e| format!("Scheduled backup tmp cleanup task failed: {}", e))?;
+        let tmp_str = tmp_path.to_string_lossy().replace('\'', "''");
+        let vacuum_sql = format!("VACUUM INTO '{}'", tmp_str);
         sqlx::query(&vacuum_sql)
             .execute(&pool)
             .await
@@ -123,6 +168,11 @@ pub async fn scheduled_backup(
                     e
                 )
             })?;
+        let tmp_rename = tmp_path.clone();
+        let dst_rename = dest.clone();
+        tokio::task::spawn_blocking(move || std::fs::rename(&tmp_rename, &dst_rename).map_err(|e| e.to_string()))
+            .await
+            .map_err(|e| format!("Scheduled backup rename failed: {}", e))??;
         tracing::info!(
             "scheduled_backup used VACUUM INTO fallback after copy retries: {}",
             dest.display()
@@ -133,12 +183,6 @@ pub async fn scheduled_backup(
     // that is meaningless outside the live process, and a post-checkpoint
     // -wal is empty. Skipping them keeps backups self-contained.
     tracing::info!("scheduled_backup created at {}", dest.display());
-    // Phase-1 prerequisite: config signing secrets travel with the backup.
-    if let Some(stem) = dest.file_stem().and_then(|s| s.to_str()) {
-        if let Some(parent) = dest.parent() {
-            crate::db::backup_config_secrets(parent, stem);
-        }
-    }
     // P2-6: retention — keep 30 newest backups (shares budget with manual backups).
     if let Some(parent) = dest.parent() {
         crate::db::prune_oldest_files(parent, &["residents_backup_", "scheduled_"], 30);
@@ -172,45 +216,52 @@ pub async fn photo_gc(
             deleted: 0,
         });
     }
-    // Collect referenced filenames (bare names) under spawn_blocking
-    // to avoid blocking the async runtime and ensure the DB connection
-    // is acquired off-thread, preventing concurrent writes from
-    // invalidating the scan results.
-    let rows: Vec<Option<String>> = tokio::task::spawn_blocking(move || {
-        let rows: Vec<Option<String>> = sqlx::query("SELECT photo_filename FROM residents WHERE photo_filename IS NOT NULL")
+    let rows: Vec<Option<String>> =
+        sqlx::query("SELECT photo_filename FROM residents WHERE photo_filename IS NOT NULL")
             .fetch_all(&pool)
-            .map_err(|e| e.to_string())
-            .map(|rows| rows.into_iter().map(|r| r.get::<Option<String>, usize>(0)).collect());
-        rows
-    })
-    .await
-    .map_err(|e| format!("spawn_blocking failed: {}", e))??;
+            .await
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(|r| r.get::<Option<String>, _>(0))
+            .collect();
     let mut referenced: HashSet<String> = HashSet::new();
     for opt in rows {
         if let Some(v) = opt {
             if let Some(base) = crate::residents::photo_basename(&v) {
-                referenced.insert(base);
+                // M4: Windows FS is case-insensitive — fold so ABC.JPG does
+                // not read as orphan of abc.jpg.
+                referenced.insert(base.to_lowercase());
             } else {
                 // fallback: raw trimming
                 let t = v.trim().to_string();
                 if !t.is_empty() {
-                    referenced.insert(t);
+                    referenced.insert(t.to_lowercase());
                 }
             }
         }
     }
-    let mut total = 0usize;
-    let mut orphans: Vec<String> = Vec::new();
-    for entry in fs::read_dir(&photos_dir).map_err(|e| e.to_string())? {
-        let e = entry.map_err(|e| e.to_string())?;
-        if e.file_type().map_err(|e| e.to_string())?.is_file() {
-            total += 1;
-            let name = e.file_name().to_string_lossy().to_string();
-            if !referenced.contains(&name) {
-                orphans.push(name);
+    // P1 sync-blocking fix: read_dir off the async runtime.
+    let (total, orphans) = {
+        let dir = photos_dir.clone();
+        let refs = referenced.clone();
+        tokio::task::spawn_blocking(move || -> Result<(usize, Vec<String>), String> {
+            let mut total = 0usize;
+            let mut orphans: Vec<String> = Vec::new();
+            for entry in std::fs::read_dir(&dir).map_err(|e| e.to_string())? {
+                let e = entry.map_err(|e| e.to_string())?;
+                if e.file_type().map_err(|e| e.to_string())?.is_file() {
+                    total += 1;
+                    let name = e.file_name().to_string_lossy().to_string();
+                    if !refs.contains(&name.to_lowercase()) {
+                        orphans.push(name);
+                    }
+                }
             }
-        }
-    }
+            Ok((total, orphans))
+        })
+        .await
+        .map_err(|e| format!("photo_gc task failed: {}", e))??
+    };
     let orphan_count = orphans.len();
     let referenced_count = total.saturating_sub(orphan_count);
     tracing::info!(
@@ -226,12 +277,18 @@ pub async fn photo_gc(
             let p = photos_dir.join(name);
             // Validate isolated before delete (stay inside project)
             if validate_isolated_write_path(&p).is_ok() && p.is_file() {
-                match fs::remove_file(&p) {
-                    Ok(_) => {
+                let p_clone = p.clone();
+                let name_clone = name.clone();
+                let res = tokio::task::spawn_blocking(move || std::fs::remove_file(&p_clone))
+                    .await
+                    .map_err(|e| e.to_string());
+                match res {
+                    Ok(Ok(_)) => {
                         deleted += 1;
-                        tracing::info!("photo_gc deleted orphan {}", name);
+                        tracing::info!("photo_gc deleted orphan {}", name_clone);
                     }
-                    Err(e) => tracing::warn!("photo_gc failed to delete {}: {}", name, e),
+                    Ok(Err(e)) => tracing::warn!("photo_gc failed to delete {}: {}", name_clone, e),
+                    Err(e) => tracing::warn!("photo_gc join failed for {}: {}", name_clone, e),
                 }
             }
         }

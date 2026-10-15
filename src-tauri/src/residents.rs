@@ -27,7 +27,6 @@ pub struct Resident {
     pub citizenship: Option<String>,
     pub occupation: Option<String>,
     pub contact_number: Option<String>,
-    pub email: Option<String>,
     pub address_street: Option<String>,
     pub address_purok: Option<String>,
     pub address_barangay: Option<String>,
@@ -57,13 +56,20 @@ pub struct Resident {
     pub valid_until: Option<String>,
     /// Legacy PDF audit trail (last generated ID PDF path + timestamp).
     /// DORMANT since PDF removal: never written, kept in struct + schema so
-    /// existing DBs (SELECT *) keep mapping without migration errors.
+    /// existing DBs keep mapping without migration errors.
     pub last_pdf_path: Option<String>,
     pub last_pdf_generated_at: Option<String>,
     /// Free-form address for a non-resident emergency contact. Appended last
-    /// so SELECT * column order stays aligned with fresh CREATE TABLE order.
+    /// so column order stays aligned with fresh CREATE TABLE order.
     pub emergency_contact_address: Option<String>,
 }
+
+/// Explicit column list for all Resident queries — P2 fragility fix.
+/// Replaces `SELECT *` so schema drift (e.g. future DROP of last_pdf_*)
+/// is caught at compile-time via column count, and legacy `email` column
+/// (dropped in init_db) is never selected. Order matches struct field order
+/// for readability; sqlx maps by name, not position.
+pub const RESIDENT_COLUMNS: &str = "id, resident_id, last_name, first_name, middle_name, suffix, birth_date, birth_place, gender, civil_status, citizenship, occupation, contact_number, address_street, address_purok, address_barangay, address_city, address_province, religion, blood_type, height, weight, philhealth, sss, tin, voters_id, emergency_contact_name, emergency_contact_relation, emergency_contact_number, emergency_contact_resident_id, photo_filename, is_active, date_registered, date_updated, remarks, valid_until, last_pdf_path, last_pdf_generated_at, emergency_contact_address";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ResidentInput {
@@ -161,7 +167,6 @@ pub fn format_contact_for_display(raw: &str) -> String {
 /// so a card is never printed from a partial record.
 /// Required: names, past birth_date, gender, purok allowlist, resident_id.
 /// Returns Err("Incomplete record — missing X") on the first gap.
-#[cfg(test)]
 pub fn validate_resident_complete(r: &Resident) -> Result<(), String> {
     if r.last_name.trim().is_empty() {
         return Err("Incomplete record — missing last name".into());
@@ -236,7 +241,7 @@ pub fn normalize_birth_date(raw: &str) -> Result<String, String> {
     Ok(iso)
 }
 
-/// Auto-uppercase helper: trim + to_uppercase for all text fields except email (lower) and birth_date (ISO canonical).
+/// Auto-uppercase helper: trim + to_uppercase for all text fields except birth_date (ISO canonical).
 fn upper_opt(o: &Option<String>) -> Option<String> {
     o.as_ref().map(|s| s.trim().to_uppercase())
 }
@@ -263,6 +268,7 @@ async fn check_emergency_fk_conn(
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn check_emergency_fk_pool(pool: &SqlitePool, fk: &Option<String>) -> Result<(), String> {
     if let Some(f) = fk {
         let t = f.trim();
@@ -279,6 +285,138 @@ async fn check_emergency_fk_pool(pool: &SqlitePool, fk: &Option<String>) -> Resu
         }
     }
     Ok(())
+}
+
+/// Duplicate-person gate (single owner — was copy-pasted in create, update, and
+/// is now also enforced on import). Matches the same normalized name + same ISO
+/// birth date. suffix is included so JR/SR/II/III father-son pairs are not
+/// collapsed; TRIM() + UPPER() keep legacy mixed-case / trailing-space rows
+/// comparable. `exclude_id` lets update/import exclude the row being edited
+/// (self is never a duplicate); create passes None (a new row has no id yet).
+/// Returns the conflicting resident_id, or None if no duplicate.
+pub(crate) async fn duplicate_person_gate(
+    conn: &mut sqlx::SqliteConnection,
+    r: &Resident,
+    exclude_id: Option<i64>,
+) -> Result<Option<String>, String> {
+    let dup: Option<String> = if let Some(eid) = exclude_id {
+        sqlx::query_scalar(
+            "SELECT resident_id FROM residents WHERE TRIM(UPPER(last_name)) = TRIM(UPPER(?)) AND TRIM(UPPER(first_name)) = TRIM(UPPER(?)) AND TRIM(COALESCE(UPPER(middle_name), '')) = TRIM(COALESCE(UPPER(?), '')) AND TRIM(COALESCE(UPPER(suffix), '')) = TRIM(COALESCE(UPPER(?), '')) AND birth_date = ? AND id != ? LIMIT 1",
+        )
+        .bind(&r.last_name)
+        .bind(&r.first_name)
+        .bind(r.middle_name.clone().unwrap_or_default())
+        .bind(r.suffix.clone().unwrap_or_default())
+        .bind(&r.birth_date)
+        .bind(eid)
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(|e| e.to_string())?
+    } else {
+        sqlx::query_scalar(
+            "SELECT resident_id FROM residents WHERE TRIM(UPPER(last_name)) = TRIM(UPPER(?)) AND TRIM(UPPER(first_name)) = TRIM(UPPER(?)) AND TRIM(COALESCE(UPPER(middle_name), '')) = TRIM(COALESCE(UPPER(?), '')) AND TRIM(COALESCE(UPPER(suffix), '')) = TRIM(COALESCE(UPPER(?), '')) AND birth_date = ? LIMIT 1",
+        )
+        .bind(&r.last_name)
+        .bind(&r.first_name)
+        .bind(r.middle_name.clone().unwrap_or_default())
+        .bind(r.suffix.clone().unwrap_or_default())
+        .bind(&r.birth_date)
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(|e| e.to_string())?
+    };
+    Ok(dup)
+}
+
+/// resident_id uniqueness pre-check (single owner — was copy-pasted in create
+/// and update). Returns true if another resident already holds `resident_id`.
+/// `exclude_id` (update) lets a resident keep their own id; create passes None.
+pub(crate) async fn resident_id_clash(
+    conn: &mut sqlx::SqliteConnection,
+    resident_id: &str,
+    exclude_id: Option<i64>,
+) -> Result<bool, String> {
+    let hit: Option<i64> = if let Some(eid) = exclude_id {
+        sqlx::query_scalar("SELECT id FROM residents WHERE resident_id = ? AND id != ? LIMIT 1")
+            .bind(resident_id)
+            .bind(eid)
+            .fetch_optional(&mut *conn)
+            .await
+            .map_err(|e| e.to_string())?
+    } else {
+        sqlx::query_scalar("SELECT id FROM residents WHERE resident_id = ? LIMIT 1")
+            .bind(resident_id)
+            .fetch_optional(&mut *conn)
+            .await
+            .map_err(|e| e.to_string())?
+    };
+    Ok(hit.is_some())
+}
+
+/// UPDATE row (single owner — was copy-pasted 3×: update_resident, import
+/// chunk-flush, import remainder-flush). Owns ONLY the column list — the thing
+/// that actually drifts. Callers keep their own policy: photo-swap resolution,
+/// date_updated, the gates, and txn COMMIT/ROLLBACK. Sets resident_id =
+/// r.resident_id (a real change on edit; a NO-OP on import, which matches by
+/// resident_id and never rewrites it). Returns rows_affected.
+pub(crate) async fn update_resident_row(
+    conn: &mut sqlx::SqliteConnection,
+    r: &Resident,
+) -> Result<u64, String> {
+    sqlx::query(
+        r#"UPDATE residents SET
+            resident_id = ?, last_name = ?, first_name = ?, middle_name = ?, suffix = ?,
+            birth_date = ?, birth_place = ?, gender = ?, civil_status = ?, citizenship = ?,
+            occupation = ?, contact_number = ?,
+            address_street = ?, address_purok = ?,
+            address_barangay = ?, address_city = ?, address_province = ?,
+            religion = ?, blood_type = ?, height = ?, weight = ?,
+            philhealth = ?, sss = ?, tin = ?, voters_id = ?,
+            emergency_contact_name = ?, emergency_contact_relation = ?, emergency_contact_number = ?,
+            photo_filename = ?, date_updated = ?, remarks = ?, valid_until = ?,
+            emergency_contact_resident_id = ?,
+            emergency_contact_address = ?
+            WHERE id = ?"#,
+    )
+    .bind(&r.resident_id)
+    .bind(&r.last_name)
+    .bind(&r.first_name)
+    .bind(&r.middle_name)
+    .bind(&r.suffix)
+    .bind(&r.birth_date)
+    .bind(&r.birth_place)
+    .bind(&r.gender)
+    .bind(&r.civil_status)
+    .bind(&r.citizenship)
+    .bind(&r.occupation)
+    .bind(&r.contact_number)
+    .bind(&r.address_street)
+    .bind(&r.address_purok)
+    .bind(&r.address_barangay)
+    .bind(&r.address_city)
+    .bind(&r.address_province)
+    .bind(&r.religion)
+    .bind(&r.blood_type)
+    .bind(&r.height)
+    .bind(&r.weight)
+    .bind(&r.philhealth)
+    .bind(&r.sss)
+    .bind(&r.tin)
+    .bind(&r.voters_id)
+    .bind(&r.emergency_contact_name)
+    .bind(&r.emergency_contact_relation)
+    .bind(&r.emergency_contact_number)
+    .bind(&r.photo_filename)
+    .bind(&r.date_updated)
+    .bind(&r.remarks)
+    .bind(&r.valid_until)
+    .bind(&r.emergency_contact_resident_id)
+    .bind(&r.emergency_contact_address)
+    .bind(r.id)
+    .execute(&mut *conn)
+    .await
+    .map(|res| res.rows_affected())
+    .map_err(|e| e.to_string())
 }
 
 pub(crate) fn normalize_resident_strings(r: &mut Resident) {
@@ -328,8 +466,6 @@ pub(crate) fn normalize_resident_strings(r: &mut Resident) {
     r.emergency_contact_address = upper_opt(&r.emergency_contact_address);
     r.remarks = upper_opt(&r.remarks);
     r.valid_until = upper_opt(&r.valid_until);
-    // Email stays lowercased trimmed, not uppercased
-    r.email = r.email.as_ref().map(|s| s.trim().to_lowercase());
     // birth_date is ISO canonical YYYY-MM-DD — leave as-trimmed here; normalized via normalize_birth_date afterwards
     r.birth_date = r.birth_date.trim().to_string();
 }
@@ -440,25 +576,6 @@ pub(crate) fn validate_resident_input(r: &Resident) -> Result<(), String> {
             return Err("Purok must be one of: AVOCADO, RIMAS, PASAYAN, BUBUNAO, ASLUM".into());
         }
     }
-    // F9: email — stricter than contains('@'): local@domain.tld, no spaces.
-    if let Some(e) = &r.email {
-        if e.len() > 254 {
-            return Err("Email too long".into());
-        }
-        let t = e.trim();
-        if !t.is_empty() {
-            if t.contains(' ') {
-                return Err("Invalid email (spaces not allowed)".into());
-            }
-            let parts: Vec<&str> = t.split('@').collect();
-            if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() {
-                return Err("Invalid email".into());
-            }
-            if !parts[1].contains('.') || parts[1].starts_with('.') || parts[1].ends_with('.') {
-                return Err("Invalid email domain".into());
-            }
-        }
-    }
     if r.resident_id.len() > 32 {
         return Err("Resident ID too long".into());
     }
@@ -474,7 +591,7 @@ pub async fn create_resident(
     input: ResidentInput,
 ) -> Result<i64, String> {
     let mut resident = input.resident;
-    // Auto-uppercase all text fields except email (lower) and birth_date (ISO canonical) before any validation/storage
+    // Auto-uppercase all text fields except birth_date (ISO canonical) before any validation/storage
     normalize_resident_strings(&mut resident);
 
     // R3 — normalize DOB to canonical YYYY-MM-DD before any storage/validation (accepts DD-MM-YYYY, DD/MM/YYYY, YYYY-MM-DD).
@@ -519,10 +636,19 @@ pub async fn create_resident(
             let (filename, jpeg) = process_photo_bounded(photo_data)
                 .await
                 .map_err(|e| format!("Failed to save photo: {}", e))?;
-            std::fs::create_dir_all(app_data_dir.join("photos"))
-                .map_err(|e| format!("Failed to save photo: {}", e))?;
-            fs::write(app_data_dir.join("photos").join(&filename), &jpeg)
-                .map_err(|e| format!("Failed to save photo: {}", e))?;
+            // P1 sync-blocking fix: photo write off the async runtime.
+            let photos_dir = app_data_dir.join("photos");
+            let fname = filename.clone();
+            let data = jpeg.clone();
+            tokio::task::spawn_blocking(move || -> Result<(), String> {
+                std::fs::create_dir_all(&photos_dir)
+                    .map_err(|e| format!("Failed to save photo: {}", e))?;
+                std::fs::write(photos_dir.join(&fname), &data)
+                    .map_err(|e| format!("Failed to save photo: {}", e))?;
+                Ok(())
+            })
+            .await
+            .map_err(|e| format!("Photo save task failed: {}", e))??;
             saved_photo = Some(filename.clone());
             resident.photo_filename = Some(filename);
         }
@@ -540,6 +666,10 @@ pub async fn create_resident(
     // Orphan photo is cleaned on each definitive failure, retained across retry if it succeeds.
     let mut attempt: u8 = 0;
     let mut current = resident;
+    // C2: track whether the caller supplied an explicit ID. Only auto-filled
+    // (empty-input) IDs may retry with a fresh MAX on collision; an explicit
+    // ID collision must error so operator typos are never silently reassigned.
+    let explicit_id = !current.resident_id.trim().is_empty();
     loop {
         let mut conn = pool.acquire().await.map_err(|e| e.to_string())?;
         sqlx::query("BEGIN IMMEDIATE")
@@ -573,62 +703,44 @@ pub async fn create_resident(
 
         // F3 (create path): fail fast on duplicate resident_id with a clear message.
         // If this is the first attempt, treat it as retryable race and retry with a fresh MAX.
-        {
-            let dup: Option<i64> =
-                sqlx::query_scalar("SELECT id FROM residents WHERE resident_id = ? LIMIT 1")
-                    .bind(&current.resident_id)
-                    .fetch_optional(&mut *conn)
-                    .await
-                    .map_err(|e| e.to_string())?;
-            if dup.is_some() {
-                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-                let msg = "Resident ID already exists".to_string();
-                let is_retryable = attempt == 0;
-                if is_retryable {
-                    attempt += 1;
-                    // Clear ID so next loop re-queries MAX with BEGIN IMMEDIATE and generates a fresh suffix.
-                    // On each failure intermediate orphan is NOT deleted — retained for retry success.
-                    tracing::warn!(
-                        "create_resident duplicate pre-check, retrying with fresh MAX (attempt {})",
-                        attempt
-                    );
-                    current.resident_id = String::new();
-                    continue;
-                }
-                if let Some(fname) = saved_photo.as_ref() {
-                    let p = app_data_dir.join("photos").join(fname);
-                    let _ = fs::remove_file(p);
-                }
-                return Err(msg);
+        if resident_id_clash(&mut *conn, &current.resident_id, None).await? {
+            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            let msg = "Resident ID already exists".to_string();
+            let is_retryable = attempt == 0 && !explicit_id;
+            if is_retryable {
+                attempt += 1;
+                // Clear ID so next loop re-queries MAX with BEGIN IMMEDIATE and generates a fresh suffix.
+                // On each failure intermediate orphan is NOT deleted — retained for retry success.
+                tracing::warn!(
+                    "create_resident duplicate pre-check, retrying with fresh MAX (attempt {})",
+                    attempt
+                );
+                current.resident_id = String::new();
+                continue;
             }
+            if let Some(fname) = saved_photo.as_ref() {
+                let p = app_data_dir.join("photos").join(fname);
+                let _ = fs::remove_file(p);
+            }
+            return Err(msg);
         }
 
         // Duplicate-person gate: same normalized name + same ISO birth date
         // (normalize_resident_strings already uppercased names; UPPER() keeps
-        // legacy mixed-case rows comparable). Runs in-txn so the check and
-        // the INSERT below are atomic under BEGIN IMMEDIATE.
-        {
-            let dup_person: Option<String> = sqlx::query_scalar(
-                "SELECT resident_id FROM residents WHERE UPPER(last_name) = UPPER(?) AND UPPER(first_name) = UPPER(?) AND COALESCE(UPPER(middle_name), '') = COALESCE(UPPER(?), '') AND birth_date = ? LIMIT 1",
-            )
-            .bind(&current.last_name)
-            .bind(&current.first_name)
-            .bind(current.middle_name.clone().unwrap_or_default())
-            .bind(&current.birth_date)
-            .fetch_optional(&mut *conn)
-            .await
-            .map_err(|e| e.to_string())?;
-            if let Some(other) = dup_person {
-                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-                if let Some(fname) = saved_photo.as_ref() {
-                    let p = app_data_dir.join("photos").join(fname);
-                    let _ = fs::remove_file(p);
-                }
-                return Err(format!(
-                    "Possible duplicate: a resident with the same name and birth date already exists (ID: {}). Use Edit instead, or confirm this is a different person.",
-                    other
-                ));
+        // legacy mixed-case rows comparable). TRIM() handles legacy trailing
+        // spaces; suffix is included so JR/SR/II/III father-son pairs are not
+        // collapsed. Runs in-txn so the check and the INSERT below are atomic
+        // under BEGIN IMMEDIATE.
+        if let Some(other) = duplicate_person_gate(&mut *conn, &current, None).await? {
+            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            if let Some(fname) = saved_photo.as_ref() {
+                let p = app_data_dir.join("photos").join(fname);
+                let _ = fs::remove_file(p);
             }
+            return Err(format!(
+                "Possible duplicate: a resident with the same name and birth date already exists (ID: {}). Use Edit instead, or confirm this is a different person.",
+                other
+            ));
         }
 
         // FK gate: emergency_contact_resident_id must match an existing resident.
@@ -659,7 +771,7 @@ pub async fn create_resident(
             r#"INSERT INTO residents (
                 resident_id, last_name, first_name, middle_name, suffix,
                 birth_date, birth_place, gender, civil_status, citizenship,
-                occupation, contact_number, email,
+                occupation, contact_number,
                 address_street, address_purok,
                 address_barangay, address_city, address_province,
                 religion, blood_type, height, weight,
@@ -668,7 +780,7 @@ pub async fn create_resident(
                 photo_filename, is_active, date_registered, date_updated, remarks, valid_until,
                 emergency_contact_resident_id,
                 emergency_contact_address
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(&current.resident_id)
         .bind(&current.last_name)
@@ -682,7 +794,6 @@ pub async fn create_resident(
         .bind(&current.citizenship)
         .bind(&current.occupation)
         .bind(&current.contact_number)
-        .bind(&current.email)
         .bind(&current.address_street)
         .bind(&current.address_purok)
         .bind(&current.address_barangay)
@@ -727,7 +838,7 @@ pub async fn create_resident(
                 let is_unique = msg.contains("UNIQUE")
                     || msg.to_lowercase().contains("unique")
                     || msg.contains("resident_id");
-                if is_unique && attempt == 0 {
+                if is_unique && attempt == 0 && !explicit_id {
                     attempt += 1;
                     tracing::warn!("create_resident UNIQUE violation, retrying with fresh MAX (attempt {}): {}", attempt, msg);
                     // Clean up photo only on final failure; retain for retry success -> so no delete here.
@@ -755,11 +866,14 @@ pub async fn get_resident(
 ) -> Result<Resident, String> {
     let pool = { state.lock().await.pool.clone() };
 
-    let resident = sqlx::query_as::<_, Resident>("SELECT * FROM residents WHERE id = ?")
-        .bind(id)
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let resident = sqlx::query_as::<_, Resident>(&format!(
+        "SELECT {} FROM residents WHERE id = ?",
+        RESIDENT_COLUMNS
+    ))
+    .bind(id)
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| e.to_string())?;
 
     Ok(resident)
 }
@@ -770,7 +884,7 @@ pub async fn update_resident(
     input: ResidentInput,
 ) -> Result<bool, String> {
     let mut resident = input.resident;
-    // Auto-uppercase all text fields except email (lower) and birth_date (ISO canonical) before any validation/storage
+    // Auto-uppercase all text fields except birth_date (ISO canonical) before any validation/storage
     normalize_resident_strings(&mut resident);
 
     // R3 — normalize DOB before validation/storage (same helper as create).
@@ -813,144 +927,127 @@ pub async fn update_resident(
         (s.pool.clone(), s.app_data_dir.clone())
     };
     let mut new_photo_written: Option<PathBuf> = None;
-    // F3: resident_id uniqueness pre-check (friendly error before hitting UNIQUE).
-    {
-        let clash: Option<i64> = sqlx::query_scalar(
-            "SELECT id FROM residents WHERE resident_id = ? AND id != ? LIMIT 1",
-        )
-        .bind(&resident.resident_id)
-        .bind(resident.id)
-        .fetch_optional(&pool)
+    // P0-2: write-new BEFORE the write txn so COMMIT never points at a
+    // missing file. Orphan cleanup on every failure path below.
+    // (Photo CPU above already ran lock-free; this is fast file I/O only.)
+    if let Some((filename, jpeg)) = &new_photo {
+        let photos_dir = app_data_dir.join("photos");
+        let fname = filename.clone();
+        let data = jpeg.clone();
+        let new_path =
+            tokio::task::spawn_blocking(move || -> Result<std::path::PathBuf, String> {
+                std::fs::create_dir_all(&photos_dir)
+                    .map_err(|e| format!("Failed to save photo: {}", e))?;
+                let p = photos_dir.join(&fname);
+                std::fs::write(&p, &data).map_err(|e| format!("Failed to save photo: {}", e))?;
+                Ok(p)
+            })
+            .await
+            .map_err(|e| format!("Photo save task failed: {}", e))??;
+        new_photo_written = Some(new_path);
+        resident.photo_filename = Some(filename.clone());
+    }
+    // C3: authoritative checks + UPDATE run atomically under BEGIN IMMEDIATE
+    // on one connection (no check-then-UPDATE race). Photo bytes/file I/O
+    // stay outside the txn; only fast SELECTs + UPDATE hold it.
+    let mut conn = pool.acquire().await.map_err(|e| e.to_string())?;
+    sqlx::query("BEGIN IMMEDIATE")
+        .execute(&mut *conn)
         .await
-        .map_err(|e| e.to_string())?;
-        if clash.is_some() {
-            return Err("Resident ID already exists".into());
+        .map_err(|e| {
+            if let Some(p) = new_photo_written.as_ref() {
+                let _ = fs::remove_file(p);
+            }
+            e.to_string()
+        })?;
+    // F3: resident_id uniqueness pre-check (friendly error before hitting UNIQUE).
+    if resident_id_clash(&mut *conn, &resident.resident_id, resident.id).await? {
+        let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+        if let Some(p) = new_photo_written.as_ref() {
+            let _ = fs::remove_file(p);
         }
+        return Err("Resident ID already exists".into());
     }
     // FK gate: emergency_contact_resident_id must match an existing resident.
-    check_emergency_fk_pool(&pool, &resident.emergency_contact_resident_id).await?;
-    // Duplicate-person gate (update path): same check as create, excluding self.
+    if let Err(e) =
+        check_emergency_fk_conn(&mut *conn, &resident.emergency_contact_resident_id).await
     {
-        let dup_person: Option<String> = sqlx::query_scalar(
-            "SELECT resident_id FROM residents WHERE UPPER(last_name) = UPPER(?) AND UPPER(first_name) = UPPER(?) AND COALESCE(UPPER(middle_name), '') = COALESCE(UPPER(?), '') AND birth_date = ? AND id != ? LIMIT 1",
-        )
-        .bind(&resident.last_name)
-        .bind(&resident.first_name)
-        .bind(resident.middle_name.clone().unwrap_or_default())
-        .bind(&resident.birth_date)
-        .bind(resident.id)
-        .fetch_optional(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
-        if let Some(other) = dup_person {
-            return Err(format!(
-                "Possible duplicate: a resident with the same name and birth date already exists (ID: {}). Use Edit instead, or confirm this is a different person.",
-                other
-            ));
+        let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+        if let Some(p) = new_photo_written.as_ref() {
+            let _ = fs::remove_file(p);
         }
+        return Err(e);
     }
-    // P0-2: write-new → DB commit → delete-old. Old file is fetched from the
-    // DB (not the stale input echo) and removed only after the UPDATE
-    // succeeds, so a failed write/commit never loses the existing photo.
+    // Duplicate-person gate (update path): same check as create, excluding self.
+    // TRIM() + suffix included for parity (see create gate above).
+    if let Some(other) = duplicate_person_gate(&mut *conn, &resident, resident.id).await? {
+        let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+        if let Some(p) = new_photo_written.as_ref() {
+            let _ = fs::remove_file(p);
+        }
+        return Err(format!(
+            "Possible duplicate: a resident with the same name and birth date already exists (ID: {}). Use Edit instead, or confirm this is a different person.",
+            other
+        ));
+    }
+    // P0-2: old file is fetched from the DB (not the stale input echo) inside
+    // the txn so the read is consistent with the UPDATE below.
     let old_photo_filename: Option<String> =
         sqlx::query_scalar("SELECT photo_filename FROM residents WHERE id = ?")
             .bind(resident.id)
-            .fetch_optional(&pool)
+            .fetch_optional(&mut *conn)
             .await
             .map_err(|e| e.to_string())?
             .flatten();
-    match new_photo {
-        Some((filename, jpeg)) => {
-            std::fs::create_dir_all(app_data_dir.join("photos"))
-                .map_err(|e| format!("Failed to save photo: {}", e))?;
-            let new_path = app_data_dir.join("photos").join(&filename);
-            fs::write(&new_path, &jpeg).map_err(|e| format!("Failed to save photo: {}", e))?;
-            new_photo_written = Some(new_path);
-            resident.photo_filename = Some(filename);
-        }
-        None => {
-            // P2-12: no new upload — never trust the echoed client filename.
-            // Explicit empty = operator pressed Remove Photo → clear;
-            // otherwise keep the DB value (stale echoes can't overwrite it).
-            let echo_empty = resident
-                .photo_filename
-                .as_deref()
-                .map(|s| s.trim().is_empty())
-                .unwrap_or(true);
-            resident.photo_filename = if echo_empty {
-                None
-            } else {
-                old_photo_filename.clone()
-            };
-        }
+    if new_photo.is_none() {
+        // P2-12: no new upload — never trust the echoed client filename.
+        // Explicit empty = operator pressed Remove Photo → clear;
+        // otherwise keep the DB value (stale echoes can't overwrite it).
+        let echo_empty = resident
+            .photo_filename
+            .as_deref()
+            .map(|s| s.trim().is_empty())
+            .unwrap_or(true);
+        resident.photo_filename = if echo_empty {
+            None
+        } else {
+            old_photo_filename.clone()
+        };
     }
 
     let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     resident.date_updated = Some(now);
 
-    let result = sqlx::query(
-        r#"UPDATE residents SET
-            resident_id = ?, last_name = ?, first_name = ?, middle_name = ?, suffix = ?,
-            birth_date = ?, birth_place = ?, gender = ?, civil_status = ?, citizenship = ?,
-            occupation = ?, contact_number = ?, email = ?,
-            address_street = ?, address_purok = ?,
-            address_barangay = ?, address_city = ?, address_province = ?,
-            religion = ?, blood_type = ?, height = ?, weight = ?,
-            philhealth = ?, sss = ?, tin = ?, voters_id = ?,
-            emergency_contact_name = ?, emergency_contact_relation = ?, emergency_contact_number = ?,
-            photo_filename = ?, date_updated = ?, remarks = ?, valid_until = ?,
-            emergency_contact_resident_id = ?,
-            emergency_contact_address = ?
-            WHERE id = ?"#,
-    )
-    .bind(&resident.resident_id)
-    .bind(&resident.last_name)
-    .bind(&resident.first_name)
-    .bind(&resident.middle_name)
-    .bind(&resident.suffix)
-    .bind(&resident.birth_date)
-    .bind(&resident.birth_place)
-    .bind(&resident.gender)
-    .bind(&resident.civil_status)
-    .bind(&resident.citizenship)
-    .bind(&resident.occupation)
-    .bind(&resident.contact_number)
-    .bind(&resident.email)
-    .bind(&resident.address_street)
-    .bind(&resident.address_purok)
-    .bind(&resident.address_barangay)
-    .bind(&resident.address_city)
-    .bind(&resident.address_province)
-    .bind(&resident.religion)
-    .bind(&resident.blood_type)
-    .bind(&resident.height)
-    .bind(&resident.weight)
-    .bind(&resident.philhealth)
-    .bind(&resident.sss)
-    .bind(&resident.tin)
-    .bind(&resident.voters_id)
-    .bind(&resident.emergency_contact_name)
-    .bind(&resident.emergency_contact_relation)
-    .bind(&resident.emergency_contact_number)
-    .bind(&resident.photo_filename)
-    .bind(&resident.date_updated)
-    .bind(&resident.remarks)
-    .bind(&resident.valid_until)
-    .bind(&resident.emergency_contact_resident_id)
-    .bind(&resident.emergency_contact_address)
-    .bind(resident.id)
-    .execute(&pool)
-    .await
-    .map_err(|e| {
-        if let Some(p) = new_photo_written.as_ref() { let _ = fs::remove_file(p); }
-        e.to_string()
-    })?;
+    let result = update_resident_row(&mut *conn, &resident).await;
+    let result = match result {
+        Ok(n) => n,
+        Err(msg) => {
+            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            if let Some(p) = new_photo_written.as_ref() {
+                let _ = fs::remove_file(p);
+            }
+            if msg.contains("UNIQUE") || msg.to_lowercase().contains("unique") {
+                return Err("Resident ID already exists".into());
+            }
+            return Err(msg);
+        }
+    };
 
-    if result.rows_affected() == 0 {
+    if result == 0 {
+        let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
         if let Some(p) = new_photo_written.as_ref() {
             let _ = fs::remove_file(p);
         }
-    } else if let Some(new_path) = new_photo_written.as_ref() {
+        return Ok(false);
+    }
+    if sqlx::query("COMMIT").execute(&mut *conn).await.is_err() {
+        let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+        if let Some(p) = new_photo_written.as_ref() {
+            let _ = fs::remove_file(p);
+        }
+        return Err("Failed to commit resident update".into());
+    }
+    if let Some(new_path) = new_photo_written.as_ref() {
         // P0-2: commit won — now safe to drop the replaced file (basename-
         // gated so a stale absolute/relative DB value can never escape photos/).
         if let Some(old) = old_photo_filename.as_deref() {
@@ -962,7 +1059,7 @@ pub async fn update_resident(
             }
         }
     }
-    Ok(result.rows_affected() > 0)
+    Ok(result > 0)
 }
 
 #[tauri::command]
@@ -971,6 +1068,48 @@ pub async fn delete_resident(
     id: i64,
 ) -> Result<bool, String> {
     let pool = { state.lock().await.pool.clone() };
+
+    // P0 FK orphan guard: prevent soft-deleting a resident that is still
+    // referenced as emergency contact (emergency_contact_resident_id). The DB
+    // has no FK constraint (single-table legacy), so the app must enforce it.
+    let resident_id: Option<String> =
+        sqlx::query_scalar("SELECT resident_id FROM residents WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&pool)
+            .await
+            .map_err(|e| e.to_string())?
+            .flatten();
+    if let Some(rid) = resident_id {
+        let ref_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM residents WHERE emergency_contact_resident_id = ? AND is_active = 1 AND id != ?",
+        )
+        .bind(&rid)
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+        if ref_count > 0 {
+            return Err(format!(
+                "Cannot deactivate {}: still referenced as emergency contact by {} active resident(s). Update those records first.",
+                rid, ref_count
+            ));
+        }
+        // Legacy path where operator stored BRGY- ID in emergency_contact_number
+        let legacy_ref: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM residents WHERE UPPER(TRIM(emergency_contact_number)) = UPPER(TRIM(?)) AND is_active = 1 AND id != ?",
+        )
+        .bind(&rid)
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+        if legacy_ref > 0 {
+            return Err(format!(
+                "Cannot deactivate {}: still referenced (legacy emergency_contact_number) by {} active resident(s). Update those records first.",
+                rid, legacy_ref
+            ));
+        }
+    }
 
     let result = sqlx::query(
         "UPDATE residents SET is_active = 0, date_updated = datetime('now') WHERE id = ?",
@@ -982,6 +1121,8 @@ pub async fn delete_resident(
 
     Ok(result.rows_affected() > 0)
 }
+
+pub const SEARCH_RESULT_LIMIT: i64 = 2000;
 
 #[tauri::command]
 pub async fn search_residents(
@@ -1007,15 +1148,17 @@ pub async fn search_residents(
     let purok_filter = purok.unwrap_or_default();
 
     // ponytail: digit-strip via nested REPLACE (no new column/migration); matches the write-side 09XX-XXX-XXXX invariant.
-    let residents = sqlx::query_as::<_, Resident>(
-        r#"SELECT * FROM residents
+    let sql = format!(
+        r#"SELECT {} FROM residents
                WHERE (last_name LIKE ? ESCAPE '\' OR first_name LIKE ? ESCAPE '\' OR resident_id LIKE ? ESCAPE '\' OR contact_number LIKE ? ESCAPE '\'
                  OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(contact_number, '-', ''), ' ', ''), '(', ''), ')', ''), '+', '') LIKE ?
                  OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(emergency_contact_number, '-', ''), ' ', ''), '(', ''), ')', ''), '+', '') LIKE ?)
-               AND (?7 = '' OR address_purok = ?7)
-               AND (?8 = 1 OR is_active = 1)
-               ORDER BY last_name, first_name LIMIT 500"#,
-        )
+                AND (? = '' OR address_purok = ?)
+                AND (? = 1 OR is_active = 1)
+                ORDER BY last_name, first_name LIMIT ?"#,
+        RESIDENT_COLUMNS
+    );
+    let residents = sqlx::query_as::<_, Resident>(&sql)
         .bind(&search)
         .bind(&search)
         .bind(&search)
@@ -1023,7 +1166,9 @@ pub async fn search_residents(
         .bind(&digits_search)
         .bind(&digits_search)
         .bind(&purok_filter)
+        .bind(&purok_filter)
         .bind(show_all)
+        .bind(SEARCH_RESULT_LIMIT)
         .fetch_all(&pool)
         .await
         .map_err(|e| e.to_string())?;
@@ -1041,9 +1186,10 @@ pub async fn get_all_residents(
     let per = per_page.unwrap_or(5000).clamp(1, 5000);
     let pg = page.unwrap_or(1).max(1);
     let offset = (pg - 1) * per;
-    let residents = sqlx::query_as::<_, Resident>(
-        "SELECT * FROM residents WHERE is_active = 1 ORDER BY last_name, first_name LIMIT ? OFFSET ?",
-    )
+    let residents = sqlx::query_as::<_, Resident>(&format!(
+        "SELECT {} FROM residents WHERE is_active = 1 ORDER BY last_name, first_name LIMIT ? OFFSET ?",
+        RESIDENT_COLUMNS
+    ))
     .bind(per)
     .bind(offset)
     .fetch_all(&pool)
@@ -1080,58 +1226,27 @@ pub async fn get_dashboard_stats(
 ) -> Result<DashboardStats, String> {
     let pool = { state.lock().await.pool.clone() };
     let year = Local::now().format("%Y").to_string();
-    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM residents WHERE is_active = 1")
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
-    let this_year: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM residents WHERE is_active = 1 AND substr(date_registered, 1, 4) = ?",
+    // P2: single aggregate query replaces 8 round-trips — same predicates,
+    // one table scan. Mirrors the previous per-status semantics exactly:
+    // active bucket includes NULL/blank remarks as ACTIVE; gender/status
+    // via UPPER() for legacy mixed-case rows; is_active=1 gate always.
+    let row: (i64, i64, i64, i64, i64, i64, i64, i64) = sqlx::query_as(
+        "SELECT \
+            COUNT(*) , \
+            COALESCE(SUM(CASE WHEN substr(date_registered, 1, 4) = ? THEN 1 ELSE 0 END),0), \
+            COALESCE(SUM(CASE WHEN UPPER(gender) = 'MALE' THEN 1 ELSE 0 END),0), \
+            COALESCE(SUM(CASE WHEN UPPER(gender) = 'FEMALE' THEN 1 ELSE 0 END),0), \
+            COALESCE(SUM(CASE WHEN (remarks IS NULL OR TRIM(remarks) = '' OR UPPER(remarks) = 'ACTIVE') THEN 1 ELSE 0 END),0), \
+            COALESCE(SUM(CASE WHEN UPPER(remarks) = 'RENEW' THEN 1 ELSE 0 END),0), \
+            COALESCE(SUM(CASE WHEN UPPER(remarks) = 'LOST' THEN 1 ELSE 0 END),0), \
+            COALESCE(SUM(CASE WHEN UPPER(remarks) = 'DAMAGE' THEN 1 ELSE 0 END),0) \
+         FROM residents WHERE is_active = 1",
     )
     .bind(&year)
     .fetch_one(&pool)
     .await
     .map_err(|e| e.to_string())?;
-    // P0-1: gender is stored UPPERCASED by normalize_resident_strings
-    // (MALE/FEMALE) — compare case-insensitively so stats are never 0.
-    let male: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM residents WHERE is_active = 1 AND UPPER(gender) = 'MALE'",
-    )
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| e.to_string())?;
-    let female: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM residents WHERE is_active = 1 AND UPPER(gender) = 'FEMALE'",
-    )
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| e.to_string())?;
-    // Card-status counts mirror statusLabel(): active residents bucketed by
-    // remarks (NULL/blank legacy rows count as ACTIVE); soft-deleted rows
-    // never appear in any bucket. UPPER() keeps legacy mixed-case comparable.
-    let active: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM residents WHERE is_active = 1 AND (remarks IS NULL OR TRIM(remarks) = '' OR UPPER(remarks) = 'ACTIVE')",
-    )
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| e.to_string())?;
-    let renew: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM residents WHERE is_active = 1 AND UPPER(remarks) = 'RENEW'",
-    )
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| e.to_string())?;
-    let lost: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM residents WHERE is_active = 1 AND UPPER(remarks) = 'LOST'",
-    )
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| e.to_string())?;
-    let damage: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM residents WHERE is_active = 1 AND UPPER(remarks) = 'DAMAGE'",
-    )
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let (total, this_year, male, female, active, renew, lost, damage) = row;
     Ok(DashboardStats {
         total,
         this_year,
@@ -1151,9 +1266,10 @@ pub async fn get_recent_residents(
 ) -> Result<Vec<Resident>, String> {
     let pool = { state.lock().await.pool.clone() };
     let n = limit.unwrap_or(10).clamp(1, 50);
-    let residents = sqlx::query_as::<_, Resident>(
-        "SELECT * FROM residents WHERE is_active = 1 ORDER BY date_registered DESC LIMIT ?",
-    )
+    let residents = sqlx::query_as::<_, Resident>(&format!(
+        "SELECT {} FROM residents WHERE is_active = 1 ORDER BY date_registered DESC LIMIT ?",
+        RESIDENT_COLUMNS
+    ))
     .bind(n)
     .fetch_all(&pool)
     .await
@@ -1168,9 +1284,10 @@ pub async fn get_residents_by_purok(
 ) -> Result<Vec<Resident>, String> {
     let pool = { state.lock().await.pool.clone() };
 
-    let residents = sqlx::query_as::<_, Resident>(
-        "SELECT * FROM residents WHERE is_active = 1 AND address_purok = ? ORDER BY last_name, first_name",
-    )
+    let residents = sqlx::query_as::<_, Resident>(&format!(
+        "SELECT {} FROM residents WHERE is_active = 1 AND address_purok = ? ORDER BY last_name, first_name",
+        RESIDENT_COLUMNS
+    ))
     .bind(purok)
     .fetch_all(&pool)
     .await
@@ -1207,7 +1324,10 @@ fn process_photo_to_jpeg(base64_data: &str) -> Result<(String, Vec<u8>)> {
         let mime_type = mime.split(';').next().unwrap_or("");
         match mime_type {
             "image/png" | "image/jpeg" | "image/jpg" => {}
-            other => anyhow::bail!("Unsupported photo format: {} (only PNG, JPG, JPEG accepted)", other),
+            other => anyhow::bail!(
+                "Unsupported photo format: {} (only PNG, JPG, JPEG accepted)",
+                other
+            ),
         }
         (mime_type, parts.get(1).unwrap_or(&base64_data).to_string())
     } else {
@@ -1219,8 +1339,40 @@ fn process_photo_to_jpeg(base64_data: &str) -> Result<(String, Vec<u8>)> {
         anyhow::bail!("Decoded photo too large (max 6MB)");
     }
 
+    // P0 dimension bomb guard: header check BEFORE full decode so a
+    // 12000×12000 highly-compressed JPEG (still <6MB) cannot allocate ~500MB.
+    const MAX_DIM: u32 = 8000;
+    const MAX_PIXELS: u64 = 36_000_000; // ~108MB RGB8
+                                        // image 0.24: header-only dimensions via io::Reader (no full pixel alloc).
+    if let Ok(reader) = image::io::Reader::new(std::io::Cursor::new(&bytes)).with_guessed_format() {
+        if let Ok((hw, hh)) = reader.into_dimensions() {
+            if hw > MAX_DIM || hh > MAX_DIM || (hw as u64 * hh as u64) > MAX_PIXELS {
+                anyhow::bail!(
+                    "Photo dimensions too large ({}×{} > {}×{} or {}MP) — use a smaller image",
+                    hw,
+                    hh,
+                    MAX_DIM,
+                    MAX_DIM,
+                    MAX_PIXELS / 1_000_000
+                );
+            }
+        }
+    }
     // §7 photo processing: normalize EXIF orientation (phone photos) before resize.
     let img = load_photo_oriented(&bytes)?;
+    // Second guard after decode (covers orientation swap and cases where
+    // header check was skipped due to unknown format).
+    let (w, h) = (img.width(), img.height());
+    if w > MAX_DIM || h > MAX_DIM || (w as u64 * h as u64) > MAX_PIXELS {
+        anyhow::bail!(
+            "Photo dimensions too large ({}×{} > {}×{} or {}MP) — use a smaller image",
+            w,
+            h,
+            MAX_DIM,
+            MAX_DIM,
+            MAX_PIXELS / 1_000_000
+        );
+    }
     let resized = storage_resize(img);
 
     let filename = format!("{}.jpg", Uuid::new_v4());
@@ -1431,11 +1583,14 @@ pub async fn get_resident_photo(
         let s = state.lock().await;
         (s.pool.clone(), s.app_data_dir.clone())
     };
-    let resident = sqlx::query_as::<_, Resident>("SELECT * FROM residents WHERE id = ?")
-        .bind(id)
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let resident = sqlx::query_as::<_, Resident>(&format!(
+        "SELECT {} FROM residents WHERE id = ?",
+        RESIDENT_COLUMNS
+    ))
+    .bind(id)
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| e.to_string())?;
     if let Some(fname) = resident.photo_filename {
         if let Some(b64) = get_photo_base64(&fname, &app_data_dir) {
             return Ok(Some(b64));
@@ -1601,7 +1756,6 @@ mod validity_tests {
             citizenship: None,
             occupation: None,
             contact_number: Some("09171234567".to_string()),
-            email: None,
             address_street: None,
             address_purok: Some("AVOCADO".to_string()),
             address_barangay: None,

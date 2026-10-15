@@ -39,6 +39,16 @@ check('bulk progress state (JS loop)', appJs.includes('bulkProgress: { current: 
 check('bulk updates percent live', appJs.includes('bulkProgress.percent = Math.round'));
 check('bulk counts failures without backend', appJs.includes('bulkProgress.failures++'));
 check('bulk prints via hidden iframe', appJs.includes('printFilledCard(bulkHtml)'));
+check('bulk guards empty search (no silent full-registry print)', appJs.includes('No active residents to print') && !appJs.includes(': await this.fetchAllResidentsPaged()'));
+check('bulk confirms large jobs (>50)', /async printAllCards[\s\S]{0,3000}?confirm/.test(appJs));
+check('bulk supports cancel flag', appJs.includes('bulkPrintCancel') || appJs.includes('cancelBulk'));
+check('toast uses sequence token (no stale hide)', /showToast[\s\S]{0,600}?(toastSeq|toastToken|seq \+ 1|seq \+= 1)/.test(appJs));
+check('validDaysLeft uses UTC midnight (DST-safe)', /validDaysLeft[\s\S]{0,1200}?Date\.UTC/.test(appJs));
+const viewFn = /async viewResident[\s\S]*?^        \},/m.exec(appJs)?.[0] || '';
+const editFn = /async editResident[\s\S]*?^        \},/m.exec(appJs)?.[0] || '';
+check('view/edit loads resident+photo in parallel', viewFn.includes('Promise.all') && editFn.includes('Promise.all'));
+const printFn = /printFilledCard\(html\)[\s\S]*?^        \},/m.exec(appJs)?.[0] || '';
+check('printFilledCard avoids shared onload race', printFn.includes('onload = null') || printFn.includes('onload=null') || (printFn.includes('new iframe') && printFn.includes('new Promise')));
 check('no backend bulk invoke', !appJs.includes('generateAllIdCardsPdf') && !appJs.includes('generateIdCardPdf'));
 check('index.html Print All button', indexHtml.includes('printAllCards') && !indexHtml.includes('downloadAllIDPDF'));
 check('index.html progress bar bound to percent', indexHtml.includes('bulkProgress.percent'));

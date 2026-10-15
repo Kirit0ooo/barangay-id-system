@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const html = readFileSync(join(root, 'src/index.html'), 'utf8');
+const styleCss = readFileSync(join(root, 'src/css/style.css'), 'utf8');
 
 const VOID = new Set(['meta', 'img', 'input', 'br', 'hr', 'link', 'source', 'circle', 'path', 'rect', 'use', 'polygon']);
 
@@ -108,5 +109,13 @@ describe('view-root nesting', () => {
     }
     assert.ok(toastChain, 'toast div not found');
     assert.ok(toastChain.includes('div#app'), 'toast must be inside #app');
+  });
+
+  it('app backdrop is paper token, not amber-neon red (C1)', () => {
+    const bodies = [...styleCss.matchAll(/^body\s*\{([^}]*)\}/gm)].map(m => m[1]);
+    assert.ok(bodies.length >= 1, 'no body rule found in style.css');
+    const last = bodies[bodies.length - 1];
+    assert.match(last, /var\(--paper\)/, 'final body background must use --paper token');
+    assert.doesNotMatch(last, /--amber-neon/, 'final body background must not use --amber-neon red');
   });
 });

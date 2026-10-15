@@ -53,14 +53,21 @@ pub async fn export_to_excel(
     // M-1: clone pool and release lock before DB await
     let pool = { state.lock().await.pool.clone() };
 
-    let residents = sqlx::query_as::<_, Resident>(
-        "SELECT * FROM residents WHERE is_active = 1 ORDER BY last_name, first_name",
-    )
+    let residents = sqlx::query_as::<_, Resident>(&format!(
+        "SELECT {} FROM residents WHERE is_active = 1 ORDER BY last_name, first_name",
+        crate::residents::RESIDENT_COLUMNS
+    ))
     .fetch_all(&pool)
     .await
     .map_err(|e| format!("Failed to fetch residents: {}", e))?;
 
-    write_excel(&residents, &save_path).map_err(|e| format!("Excel export failed: {}", e))?;
+    // P1 sync-blocking fix: workbook.save() does heavy zip+IO synchronously —
+    // offload to blocking thread so the Tauri async runtime stays responsive.
+    let sp = save_path.clone();
+    tokio::task::spawn_blocking(move || write_excel(&residents, &sp))
+        .await
+        .map_err(|e| format!("Export task failed: {}", e))?
+        .map_err(|e| format!("Excel export failed: {}", e))?;
 
     Ok(true)
 }
@@ -480,9 +487,11 @@ fn opt_cell(row: &[String], idx: Option<usize>) -> Option<String> {
     }
 }
 
-/// Phase-1 strict valid_until for Excel import: `None` (blank cell) clears,
-/// parseable values normalize to ISO, unparseable values are Err (caller
-/// skips the row — never stores raw).
+/// Phase-1 strict valid_until for Excel import: whitespace-only input yields
+/// `None` (clears), parseable values normalize to ISO, unparseable values
+/// are Err (caller skips the row — never stores raw). Note: a truly blank
+/// cell never reaches here — the caller only invokes this on `Some(cell)`,
+/// so blank keeps the existing DB value.
 fn strict_valid_until_opt(raw: &str) -> Result<Option<String>, String> {
     let t = raw.trim();
     if t.is_empty() {
@@ -541,11 +550,33 @@ pub async fn import_from_excel(
     {
         return Err("Import file must be an .xlsx workbook".to_string());
     }
+    // P0 OOM guard: reject huge files before loading entire sheet into RAM.
+    // 15 MB xlsx is already ~tens of thousands of rows; cap protects against
+    // zip bombs and 1M-row sheets that would OOM via Vec<Vec<String>>.
+    if let Ok(meta) = std::fs::metadata(&validated) {
+        const MAX_XLSX_BYTES: u64 = 15 * 1024 * 1024;
+        if meta.len() > MAX_XLSX_BYTES {
+            return Err(format!(
+                "Excel file too large ({} MB > {} MB) — split into smaller files",
+                meta.len() / (1024 * 1024),
+                MAX_XLSX_BYTES / (1024 * 1024)
+            ));
+        }
+    }
     // calamine is blocking I/O — parse off the async runtime.
     let path_clone = validated.clone();
     let (headers, rows) = tokio::task::spawn_blocking(move || parse_excel_rows(&path_clone))
         .await
         .map_err(|e| format!("Import task failed: {}", e))??;
+    // P0 row cap after parse (calamine already materialized the sheet).
+    const MAX_IMPORT_ROWS: usize = 20_000;
+    if rows.len() > MAX_IMPORT_ROWS {
+        return Err(format!(
+            "Excel has {} rows > {} max — split into smaller files",
+            rows.len(),
+            MAX_IMPORT_ROWS
+        ));
+    }
 
     // R4 — import column guard: widths/headers contract is 37 columns (write_excel invariant).
     // Reject severely mismatched sheets early; warn on partial legacy exports.
@@ -639,15 +670,18 @@ pub async fn import_from_excel(
     let mut skipped = 0usize;
     let mut errors: Vec<String> = Vec::new();
     // Collect validated updates to apply in chunked transactions (100 per tx)
-    let mut pending: Vec<crate::residents::Resident> = Vec::new();
+    let mut pending: Vec<(crate::residents::Resident, usize)> = Vec::new();
     // P2-7: imports >100 rows preload all residents once instead of N+1 SELECTs.
     let mut bulk_cache: Option<std::collections::HashMap<String, crate::residents::Resident>> =
         if rows.len() > 100 {
             let all: Vec<crate::residents::Resident> =
-                sqlx::query_as::<_, crate::residents::Resident>("SELECT * FROM residents")
-                    .fetch_all(&pool)
-                    .await
-                    .map_err(|e| e.to_string())?;
+                sqlx::query_as::<_, crate::residents::Resident>(&format!(
+                    "SELECT {} FROM residents",
+                    crate::residents::RESIDENT_COLUMNS
+                ))
+                .fetch_all(&pool)
+                .await
+                .map_err(|e| e.to_string())?;
             Some(
                 all.into_iter()
                     .map(|r| (r.resident_id.clone(), r))
@@ -681,11 +715,14 @@ pub async fn import_from_excel(
         let existing: Option<Resident> = match bulk_cache.as_ref().and_then(|c| c.get(&id_no)) {
             Some(r) => Some(r.clone()),
             None if bulk_cache.is_some() => None,
-            _ => sqlx::query_as::<_, Resident>("SELECT * FROM residents WHERE resident_id = ?")
-                .bind(&id_no)
-                .fetch_optional(&pool)
-                .await
-                .map_err(|e| e.to_string())?,
+            _ => sqlx::query_as::<_, Resident>(&format!(
+                "SELECT {} FROM residents WHERE resident_id = ?",
+                crate::residents::RESIDENT_COLUMNS
+            ))
+            .bind(&id_no)
+            .fetch_optional(&pool)
+            .await
+            .map_err(|e| e.to_string())?,
         };
         let mut base = match existing {
             Some(r) => r,
@@ -822,64 +859,30 @@ pub async fn import_from_excel(
         if let Some(c) = bulk_cache.as_mut() {
             c.insert(base.resident_id.clone(), base.clone());
         }
-        pending.push(base);
+        pending.push((base, excel_row));
         // Flush every 100 rows in a single transaction to avoid holding a long txn across the whole file
         if pending.len() >= 100 {
             let chunk: Vec<_> = pending.drain(..).collect();
             let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
-            for b in chunk {
-                let res = sqlx::query(
-                    r#"UPDATE residents SET
-                        last_name = ?, first_name = ?, middle_name = ?, suffix = ?,
-                        birth_date = ?, birth_place = ?, gender = ?, civil_status = ?, citizenship = ?,
-                        occupation = ?, contact_number = ?,
-                        address_street = ?, address_purok = ?,
-                        address_barangay = ?, address_city = ?, address_province = ?,
-                        religion = ?, blood_type = ?, height = ?, weight = ?,
-                        philhealth = ?, sss = ?, tin = ?, voters_id = ?,
-                        emergency_contact_name = ?, emergency_contact_relation = ?, emergency_contact_number = ?,
-                        emergency_contact_address = ?, emergency_contact_resident_id = ?,
-                        photo_filename = ?, date_updated = ?, remarks = ?, valid_until = ?
-                        WHERE id = ?"#,
-                )
-                .bind(&b.last_name)
-                .bind(&b.first_name)
-                .bind(&b.middle_name)
-                .bind(&b.suffix)
-                .bind(&b.birth_date)
-                .bind(&b.birth_place)
-                .bind(&b.gender)
-                .bind(&b.civil_status)
-                .bind(&b.citizenship)
-                .bind(&b.occupation)
-                .bind(&b.contact_number)
-                .bind(&b.address_street)
-                .bind(&b.address_purok)
-                .bind(&b.address_barangay)
-                .bind(&b.address_city)
-                .bind(&b.address_province)
-                .bind(&b.religion)
-                .bind(&b.blood_type)
-                .bind(&b.height)
-                .bind(&b.weight)
-                .bind(&b.philhealth)
-                .bind(&b.sss)
-                .bind(&b.tin)
-                .bind(&b.voters_id)
-                .bind(&b.emergency_contact_name)
-                .bind(&b.emergency_contact_relation)
-                .bind(&b.emergency_contact_number)
-                .bind(&b.emergency_contact_address)
-                .bind(&b.emergency_contact_resident_id)
-                .bind(&b.photo_filename)
-                .bind(&b.date_updated)
-                .bind(&b.remarks)
-                .bind(&b.valid_until)
-                .bind(b.id)
-                .execute(&mut *tx)
-                .await
-                .map_err(|e| e.to_string())?;
-                if res.rows_affected() > 0 {
+            for (b, excel_row) in chunk {
+                // Duplicate-person gate (import path — the one intentional
+                // behavior change): same check as create/edit, excluding self
+                // (b.id). Runs INSIDE the flush txn so SQLite sees this txn's
+                // own earlier writes — two rows in one file converging on the
+                // same name+birth date are caught, not just collisions with
+                // already-committed rows.
+                if let Some(other) =
+                    crate::residents::duplicate_person_gate(&mut *tx, &b, b.id).await?
+                {
+                    skipped += 1;
+                    errors.push(format!(
+                        "Row {} ({}): possible duplicate — a resident with the same name and birth date already exists (ID: {}) — skipped",
+                        excel_row, b.resident_id, other
+                    ));
+                    continue;
+                }
+                let res = crate::residents::update_resident_row(&mut *tx, &b).await?;
+                if res > 0 {
                     updated += 1;
                 } else {
                     skipped += 1;
@@ -891,59 +894,18 @@ pub async fn import_from_excel(
     // Flush remainder
     if !pending.is_empty() {
         let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
-        for b in pending.drain(..) {
-            let res = sqlx::query(
-                r#"UPDATE residents SET
-                    last_name = ?, first_name = ?, middle_name = ?, suffix = ?,
-                    birth_date = ?, birth_place = ?, gender = ?, civil_status = ?, citizenship = ?,
-                    occupation = ?, contact_number = ?,
-                    address_street = ?, address_purok = ?,
-                    address_barangay = ?, address_city = ?, address_province = ?,
-                    religion = ?, blood_type = ?, height = ?, weight = ?,
-                    philhealth = ?, sss = ?, tin = ?, voters_id = ?,
-                    emergency_contact_name = ?, emergency_contact_relation = ?, emergency_contact_number = ?,
-                    emergency_contact_address = ?, emergency_contact_resident_id = ?,
-                    photo_filename = ?, date_updated = ?, remarks = ?, valid_until = ?
-                    WHERE id = ?"#,
-            )
-            .bind(&b.last_name)
-            .bind(&b.first_name)
-            .bind(&b.middle_name)
-            .bind(&b.suffix)
-            .bind(&b.birth_date)
-            .bind(&b.birth_place)
-            .bind(&b.gender)
-            .bind(&b.civil_status)
-            .bind(&b.citizenship)
-            .bind(&b.occupation)
-            .bind(&b.contact_number)
-            .bind(&b.address_street)
-            .bind(&b.address_purok)
-            .bind(&b.address_barangay)
-            .bind(&b.address_city)
-            .bind(&b.address_province)
-            .bind(&b.religion)
-            .bind(&b.blood_type)
-            .bind(&b.height)
-            .bind(&b.weight)
-            .bind(&b.philhealth)
-            .bind(&b.sss)
-            .bind(&b.tin)
-            .bind(&b.voters_id)
-            .bind(&b.emergency_contact_name)
-            .bind(&b.emergency_contact_relation)
-            .bind(&b.emergency_contact_number)
-            .bind(&b.emergency_contact_address)
-            .bind(&b.emergency_contact_resident_id)
-            .bind(&b.photo_filename)
-            .bind(&b.date_updated)
-            .bind(&b.remarks)
-            .bind(&b.valid_until)
-            .bind(b.id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| e.to_string())?;
-            if res.rows_affected() > 0 {
+        for (b, excel_row) in pending.drain(..) {
+            if let Some(other) = crate::residents::duplicate_person_gate(&mut *tx, &b, b.id).await?
+            {
+                skipped += 1;
+                errors.push(format!(
+                    "Row {} ({}): possible duplicate — a resident with the same name and birth date already exists (ID: {}) — skipped",
+                    excel_row, b.resident_id, other
+                ));
+                continue;
+            }
+            let res = crate::residents::update_resident_row(&mut *tx, &b).await?;
+            if res > 0 {
                 updated += 1;
             } else {
                 skipped += 1;

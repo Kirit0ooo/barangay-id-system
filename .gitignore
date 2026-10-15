@@ -20,6 +20,13 @@ data/backups/*
 # app never creates anymore (print is HTML-only; see Documents/README.md).
 Documents/Excel/*
 !Documents/Excel/.gitkeep
+Documents/Verify/*
+!Documents/Verify/.gitkeep
+!Documents/Verify/README.md
+config/qr_hmac_secret
+config/qr_hmac_secret.tmp
+config/id_verify_private
+config/id_verify_private.tmp
 !Documents/README.md
 tmp/
 logs/*.log
@@ -32,3 +39,7 @@ Thumbs.db
 # Keep installer artifacts isolated
 src-tauri/target/release/bundle/
 data/.last_optimize
+
+# Pi agent state (task output / session artifacts — not project source)
+.pi/
+.superpowers/

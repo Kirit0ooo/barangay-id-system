@@ -8,7 +8,6 @@
  <script defer src="vendor/alpine.min.js"></script>
  
  <link rel="stylesheet" href="css/style.css">
- <style>/* single-source tokens live in css/style.css — no inline duplicates */</style>
  <script src="js/verbose.js"></script>
 </head>
 <body class="min-h-screen text-slate-900 antialiased selection:bg-amber-200 selection:text-slate-900">
@@ -19,7 +18,7 @@
  <nav class="sticky top-0 z-50 border-b border-slate-800 bg-[#0F2B5E] text-white" aria-label="Primary">
  <div class="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3 sm:gap-4">
  <div class="flex items-center gap-3 min-w-0 flex-1">
- <img src="barangay.png" alt="Barangay Logo" width="48" height="48" class="w-12 h-12 object-contain flex-shrink-0" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.45));">
+ <img src="barangay.png" alt="Barangay Logo" width="48" height="48" class="w-12 h-12 object-contain flex-shrink-0 nav-logo">
  <div class="min-w-0">
  <h1 class="text-[13px] sm:text-[15px] font-extrabold tracking-tight leading-none truncate uppercase">RESIDENT ID SYSTEM</h1>
  <p class="text-[11px] tracking-wide text-slate-300 truncate">Barangay Nouvelas Occidental (Balud), Basey Samar</p>
@@ -55,55 +54,45 @@
  </div>
  </div>
  
- <!-- Population hero — totals flank the pie: Total | donut | This Year -->
+ <!-- Population hero — civic overview: totals left, gauge center -->
  <div class="stat-card stat-hero" role="region" aria-label="Population overview">
+ <div class="stat-hero__accent" aria-hidden="true"></div>
  <div class="stat-hero__layout">
  <div class="stat-hero__side stat-hero__side--left">
  <div class="stat-hero__stat stat-hero__stat--total">
+ <div class="stat-hero__stat-head">
  <div class="stat-card__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
- <div class="stat-card__label"><span>Total Residents</span></div>
+ <div class="stat-card__label"><span>Total Residents</span><span class="stat-hero__dot" aria-hidden="true"></span></div>
+ </div>
  <div class="stat-card__value" x-text="stats.total">0</div>
- <div class="stat-card__meta">All registered (active)</div>
+ <div class="stat-card__meta">Active records in registry</div>
  </div>
  <div class="stat-hero__stat stat-hero__stat--year">
+ <div class="stat-hero__stat-head">
  <div class="stat-card__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"/></svg></div>
- <div class="stat-card__label"><span>This Year</span><template x-if="stats.thisYear > 0"><span class="text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full ml-2">new</span></template></div>
+ <div class="stat-card__label"><span>This Year</span><span x-show="stats.thisYear > 0" class="stat-hero__badge">new</span></div>
+ </div>
  <div class="stat-card__value" x-text="stats.thisYear">0</div>
- <div class="stat-card__meta">Registered <span x-text="new Date().getFullYear()">2026</span> · soft-delete safe</div>
+ <div class="stat-card__meta">Registered <span x-text="new Date().getFullYear()">2026</span> · current year</div>
  </div>
  </div>
  <div class="stat-hero__divider" aria-hidden="true"></div>
  <div class="stat-hero__chart">
- <div class="pie-wrap">
- <svg class="pie" viewBox="0 0 140 126" role="img" :aria-label="'Male ' + stats.male + ', Female ' + stats.female">
- <defs><filter id="pieSoft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="2"/></filter><radialGradient id="pieGradMale" cx="0.5" cy="0.5" r="0.8"><stop offset="0" stop-color="#8ab6fa"/><stop offset="1" stop-color="#2563eb"/></radialGradient><radialGradient id="pieGradFemale" cx="0.5" cy="0.5" r="0.8"><stop offset="0" stop-color="#f5a3c7"/><stop offset="1" stop-color="#ec4899"/></radialGradient></defs>
- <ellipse cx="70" cy="116" rx="42" ry="6" class="pie-shadow" filter="url(#pieSoft)" aria-hidden="true"/>
- <circle cx="70" cy="58" r="45" fill="none" stroke="#e8edf3" stroke-width="22" aria-hidden="true"/>
- <circle cx="70" cy="58" r="56.5" fill="none" stroke="#dbe2ea" stroke-width="1.5" aria-hidden="true"/>
- <circle cx="70" cy="58" r="33.5" fill="none" stroke="#dbe2ea" stroke-width="1.5" aria-hidden="true"/>
- <template x-for="i in [5,4,3,2,1]" :key="i">
- <g aria-hidden="true">
- <circle cx="70" :cy="58 + i" r="45" fill="none" stroke="#1e40af" stroke-width="22" pathLength="100" :stroke-dasharray="pieSeg(stats.male) + ' 100'" :transform="'rotate(-90 70 ' + (58 + i) + ')'" :opacity="0.35 + i * 0.06"/>
- <circle cx="70" :cy="58 + i" r="45" fill="none" stroke="#be185d" stroke-width="22" pathLength="100" :stroke-dasharray="pieSeg(stats.female) + ' 100'" :stroke-dashoffset="pieOff()" :transform="'rotate(-90 70 ' + (58 + i) + ')'" :opacity="0.35 + i * 0.06"/>
- </g>
- </template>
- <circle cx="70" cy="58" r="45" fill="none" stroke="url(#pieGradMale)" stroke-width="22" pathLength="100" :stroke-dasharray="pieSeg(stats.male) + ' 100'" transform="rotate(-90 70 58)" stroke-linecap="round"/>
- <circle cx="70" cy="58" r="45" fill="none" stroke="url(#pieGradFemale)" stroke-width="22" pathLength="100" :stroke-dasharray="pieSeg(stats.female) + ' 100'" :stroke-dashoffset="pieOff()" transform="rotate(-90 70 58)" stroke-linecap="round"/>
- <template x-if="pieBoth()">
- <g stroke="#ffffff" stroke-width="3" stroke-linecap="round" aria-hidden="true">
- <line x1="70" y1="1" x2="70" y2="25"/>
- <line x1="70" y1="1" x2="70" y2="25" :transform="'rotate(' + pieSpan() + ' 70 58)'"/>
- </g>
- </template>
+ <div class="gauge-wrap">
+ <svg class="gauge" viewBox="0 0 200 122" role="img" :aria-label="'Male ' + stats.male + ', Female ' + stats.female">
+ <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#eef2f7" stroke-width="14" stroke-linecap="round" class="gauge-track" aria-hidden="true"/>
+ <g class="gauge-ticks" aria-hidden="true" fill="#cbd5e1"><circle class="gauge-tick" cx="43.4" cy="43.4" r="2.5"/><circle class="gauge-tick" cx="100" cy="20" r="2.5"/><circle class="gauge-tick" cx="156.6" cy="43.4" r="2.5"/></g>
+ <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#2563eb" stroke-width="14" stroke-linecap="round" pathLength="100" class="gauge-arc gauge-arc--male" :stroke-dasharray="gaugeArcs().mLen + ' 100'"/>
+ <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#ec4899" stroke-width="14" stroke-linecap="round" pathLength="100" class="gauge-arc gauge-arc--female" :stroke-dasharray="gaugeArcs().fLen + ' 100'" :stroke-dashoffset="gaugeArcs().fOff"/>
  </svg>
- <div class="pie-center" aria-hidden="true">
- <span class="pie-center__value" x-text="stats.total">0</span>
- <span class="pie-center__label">residents</span>
+ <div class="gauge-center" aria-hidden="true">
+ <span class="gauge-center__value" x-text="stats.total">0</span>
+ <span class="gauge-center__label">Total residents</span>
  </div>
  </div>
- <div class="pie-legend">
- <div class="pie-legend__row"><span class="pie-dot pie-dot--male" aria-hidden="true"></span><span>Male</span><span class="pie-legend__count" x-text="stats.male">0</span><span class="pie-legend__pct pie-legend__pct--male" x-text="stats.total ? Math.round(stats.male/stats.total*100)+'%' : '—'">—</span><div class="pie-legend__bar stat-card__bar" aria-hidden="true"><div class="stat-card__bar-fill pie-legend__fill--male" :style="'width:' + (stats.total ? (stats.male/stats.total*100) : 0) + '%'"></div></div></div>
- <div class="pie-legend__row"><span class="pie-dot pie-dot--female" aria-hidden="true"></span><span>Female</span><span class="pie-legend__count" x-text="stats.female">0</span><span class="pie-legend__pct pie-legend__pct--female" x-text="stats.total ? Math.round(stats.female/stats.total*100)+'%' : '—'">—</span><div class="pie-legend__bar stat-card__bar" aria-hidden="true"><div class="stat-card__bar-fill pie-legend__fill--female" :style="'width:' + (stats.total ? (stats.female/stats.total*100) : 0) + '%'"></div></div></div>
+ <div class="gauge-legend" role="list" aria-label="Gender breakdown">
+ <div class="gauge-chip gauge-chip--male" role="listitem"><span class="gauge-dot gauge-dot--male" aria-hidden="true"></span><span class="gauge-chip__label">Male</span><span class="gauge-chip__count" x-text="stats.male">0</span><span class="gauge-chip__pct" x-text="stats.total ? Math.round(stats.male/stats.total*100)+'%' : '—'">—</span><div class="gauge-chip__bar" aria-hidden="true"><div class="gauge-fill--male" :style="'width:' + (stats.total ? (stats.male/stats.total*100) : 0) + '%'"></div></div></div>
+ <div class="gauge-chip gauge-chip--female" role="listitem"><span class="gauge-dot gauge-dot--female" aria-hidden="true"></span><span class="gauge-chip__label">Female</span><span class="gauge-chip__count" x-text="stats.female">0</span><span class="gauge-chip__pct" x-text="stats.total ? Math.round(stats.female/stats.total*100)+'%' : '—'">—</span><div class="gauge-chip__bar" aria-hidden="true"><div class="gauge-fill--female" :style="'width:' + (stats.total ? (stats.female/stats.total*100) : 0) + '%'"></div></div></div>
  </div>
  </div>
 
@@ -138,10 +127,11 @@
  </div>
  </div>
 
- <div class="card card-hover">
+ <div class="card recent-card">
  <div class="section-head">
+ <div class="section-head__icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
  <div class="section-head__title">Recent Registrations</div>
- <span class="ml-auto inline-flex items-center bg-slate-900 text-white text-xs font-semibold px-2.5 py-1 rounded-full" x-text="recentResidents.length + ' shown'" aria-live="polite">0 shown</span>
+ <span class="recent-count" x-text="recentResidents.length + ' shown'" aria-live="polite">0 shown</span>
  </div>
  <div class="overflow-x-auto scrollbar-thin">
  <table class="data-table" role="grid">
@@ -164,7 +154,7 @@
  <div class="font-semibold text-slate-900 leading-none" x-text="resident.last_name + ', ' + resident.first_name"></div>
  <div class="text-xs text-slate-500 mt-0.5" x-text="resident.middle_name || 'N/A'"></div>
  </td>
- <td><span class="inline-flex bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-full text-xs font-semibold" x-text="resident.address_purok || 'N/A'"></span></td>
+ <td><span class="purok-pill" x-text="resident.address_purok || 'N/A'"></span></td>
  <td class="text-slate-700" x-text="resident.gender"></td>
  <td class="text-slate-500 text-xs" x-text="resident.date_registered?.substring(0, 10)"></td>
  <td>
@@ -225,7 +215,7 @@
  <div class="sm:col-span-2">
  <label for="resident-id" class="form-field__label">Resident ID No. <span class="form-field__req" aria-hidden="true">*</span></label>
  <div class="flex gap-2">
- <input id="resident-id" type="text" x-model="form.resident_id" @input="onInputUpper($event, 'resident_id')" required placeholder="BRGY-2026-00001" autocomplete="off" spellcheck="false" aria-describedby="resident-id-help" class="form-field__input font-mono text-sm bg-slate-50" aria-describedby="resident-id-help">
+ <input id="resident-id" type="text" x-model="form.resident_id" @input="onInputUpper($event, 'resident_id')" required placeholder="BRGY-2026-00001" autocomplete="off" spellcheck="false" aria-describedby="resident-id-help" class="form-field__input font-mono text-sm bg-slate-50">
  <button type="button" @click="generateID" aria-label="Generate next resident ID" class="shrink-0 action-btn action-btn--primary">Generate</button>
  </div>
  <p id="resident-id-help" class="form-field__help">Auto MAX suffix per year · orphan photo cleaned on duplicate.</p>
@@ -312,7 +302,7 @@
  <!-- Actions -->
  <div class="register-actions">
  <button type="button" x-show="!editingResident" @click="clearForm" :disabled="saving" :class="['action-btn', 'action-btn--secondary', { 'opacity-55 cursor-not-allowed': saving }]" title="Clear the form">Cancel</button>
- <button type="submit" :disabled="saving" :class="['action-btn', 'action-btn--primary', { 'opacity-55 cursor-not-allowed': saving }]" style="min-width: 160px;">
+ <button type="submit" :disabled="saving" :class="['action-btn', 'action-btn--primary', 'register-submit', { 'opacity-55 cursor-not-allowed': saving }]">
  <svg x-show="saving" class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/><path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75"/></svg>
  <span x-text="saving ? 'Saving...' : (editingResident ? 'Update Resident' : 'Register Resident')">Register Resident</span>
  </button>
@@ -382,7 +372,7 @@
  <tr :class="{inactive: resident.is_active === 0}">
  <td class="font-mono text-[13px] font-bold text-blue-700" x-text="resident.resident_id"></td>
  <td class="font-semibold text-slate-900" x-text="resident.last_name + ', ' + resident.first_name + (resident.middle_name ? ' ' + resident.middle_name : '')"></td>
- <td><span class="inline-flex bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-full text-xs font-semibold" x-text="resident.address_purok || 'N/A'"></span></td>
+ <td><span class="purok-pill" x-text="resident.address_purok || 'N/A'"></span></td>
  <td class="text-slate-700" x-text="resident.gender"></td>
  <td class="text-slate-500 text-xs" x-text="formatDateDDMMYYYY(resident.birth_date)"></td>
  <td class="text-slate-700" x-text="resident.contact_number || 'N/A'"></td>
@@ -393,15 +383,13 @@
  <div class="flex justify-end items-center gap-1.5" role="group" :aria-label="`Actions for ${resident.last_name}, ${resident.first_name}`">
  <button @click="viewResident(resident.id)" class="action-btn action-btn--view" aria-label="View details" title="View details"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg><span class="hidden sm:inline">View</span></button>
  <button @click="editResident(resident.id)" class="action-btn action-btn--edit" aria-label="Edit resident" title="Edit resident"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg><span class="hidden sm:inline">Edit</span></button>
- <template x-if="isExpired(resident)">
- <button @click="renewResident(resident.id)" class="action-btn action-btn--renew" aria-label="Renew ID card" title="Renew ID card (extends validity 1 year)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12a9 9 0 11-2.6-6.4"/><path d="M21 3v6h-6"/></svg><span class="hidden sm:inline">Renew</span></button>
- </template>
+ <button x-show="isExpired(resident)" @click="renewResident(resident.id)" class="action-btn action-btn--renew" aria-label="Renew ID card" title="Renew ID card (extends validity 1 year)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12a9 9 0 11-2.6-6.4"/><path d="M21 3v6h-6"/></svg><span class="hidden sm:inline">Renew</span></button>
  <button @click="deleteResident(resident.id)" class="action-btn action-btn--delete" aria-label="Mark as inactive" title="Mark as inactive"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg><span class="hidden sm:inline">Delete</span></button>
  </div>
  </td>
  </tr>
  </template>
- <tr x-show="searchResults.length === 0 && !searching">
+  <tr x-show="searchResults.length === 0 && !searching">
  <td colspan="8"><div class="empty-state"><div class="empty-state__icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-3.5-3.5"/></svg></div><div class="empty-state__title" x-text="searchQuery ? 'No match' : 'No residents yet'">No residents yet</div><div class="empty-state__desc" x-text="searchQuery ? 'Try a different name, ID, or purok.' : 'No residents to show yet.'"></div></div></td>
  </tr>
  </tbody>
@@ -484,9 +472,9 @@
  <div class="w-full bg-gray-200 h-2 rounded mt-1.5 overflow-hidden"><div class="bg-blue-600 h-2 rounded transition-all" :style="'width:'+bulkProgress.percent+'%'"></div></div>
  <ul class="mt-1.5 space-y-0.5 max-h-24 overflow-y-auto text-xs font-mono text-slate-500">
  <template x-for="item in bulkProgress.recent.slice().reverse()" :key="item.file + item.status">
- <li class="flex items-center gap-1.5" :class="item.status === 'failed' ? 'text-red-600' : 'text-slate-500'"><template x-if="item.status === 'failed'"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></template><template x-if="item.status !== 'failed'"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg></template><span x-text="item.file"></span></li>
+ <li class="flex items-center gap-1.5" :class="item.status === 'failed' ? 'text-red-600' : 'text-slate-500'"><svg x-show="item.status === 'failed'" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg><svg x-show="item.status !== 'failed'" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><span x-text="item.file"></span></li>
  </template>
- </ul>
+  </ul>
  </div>
  <p class="text-xs text-slate-500 mt-3">Excel files: "Export All" saves as BACKUP-YYYY-MM-DD.xlsx. Use "Import from Excel" to update records (matches by ID No.).</p>
  </div>
@@ -499,6 +487,7 @@
  <div class="p-5 sm:p-6">
  <div class="flex flex-wrap gap-3">
  <button @click="printAllCards" class="action-btn action-btn--secondary action-chip"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="7"/></svg><span class="text-xs font-bold text-slate-700">Print All ID Cards</span></button>
+<template x-if="bulkProgress.inProgress"><button @click="cancelBulkPrint" class="action-btn action-btn--delete action-chip"><span class="text-xs font-bold">Cancel Print</span></button></template>
  </div>
  <p class="text-xs text-slate-500 mt-3">Prints one card per active resident. Opens your browser's print dialog — choose "Save as PDF" to create a digital copy.</p>
  </div>
@@ -643,9 +632,9 @@
  'toast--info': toast.type === 'info'
  }">
  <span class="toast__icon" aria-hidden="true">
- <template x-if="toast.type === 'success'"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg></template>
- <template x-if="toast.type === 'error'"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg></template>
- <template x-if="toast.type === 'info'"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></template>
+ <svg x-show="toast.type === 'success'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+ <svg x-show="toast.type === 'error'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+ <svg x-show="toast.type === 'info'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
  </span>
  <span class="text-sm font-semibold" x-text="toast.message"></span>
  </div>

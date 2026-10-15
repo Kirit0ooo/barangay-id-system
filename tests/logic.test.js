@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 // helpers.js is a classic browser <script> (no exports) — evaluate it in a
 // Function scope so tests run against the real source, not a copy.
 const src = readFileSync(new URL('../src/js/helpers.js', import.meta.url), 'utf8');
-const H = new Function(`${src}; return { formatDateDDMMYYYY, normalizeBirthDateForSubmit, truncateCard, formatContactPH, maskContactPH, todayISO, computeAge, PUROK_OPTIONS, joinPath, backupBaseName, PHOTO_MAX_FILE_BYTES };`)();
+const H = new Function(`${src}; return { formatDateDDMMYYYY, normalizeBirthDateForSubmit, truncateCard, formatContactPH, maskContactPH, todayISO, computeAge, parseValidUntil, PUROK_OPTIONS, joinPath, backupBaseName, PHOTO_MAX_FILE_BYTES };`)();
 
 describe('formatDateDDMMYYYY', () => {
   it('converts ISO to DD-MM-YYYY', () => {
@@ -127,6 +127,44 @@ describe('todayISO', () => {
     const d = new Date();
     const expected = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     assert.equal(H.todayISO(), expected);
+  });
+});
+
+describe('parseValidUntil', () => {
+  it('passes ISO YYYY-MM-DD through unchanged', () => {
+    assert.equal(H.parseValidUntil('2027-01-15'), '2027-01-15');
+  });
+  it('converts legacy DD-MM-YYYY to ISO', () => {
+    assert.equal(H.parseValidUntil('15-01-2027'), '2027-01-15');
+  });
+  it('converts DD/MM/YYYY slash form to ISO', () => {
+    assert.equal(H.parseValidUntil('15/01/2027'), '2027-01-15');
+  });
+  it('rejects empty, null, and unparseable input', () => {
+    assert.equal(H.parseValidUntil(''), null);
+    assert.equal(H.parseValidUntil('   '), null);
+    assert.equal(H.parseValidUntil(null), null);
+    assert.equal(H.parseValidUntil(undefined), null);
+    assert.equal(H.parseValidUntil('15-01'), null);
+    assert.equal(H.parseValidUntil('not-a-date'), null);
+  });
+  it('rejects partial-parseInt traps (no fabricated year from garbage)', () => {
+    // parseInt('20XX') === 20 — the owner must not accept non-numeric parts.
+    assert.equal(H.parseValidUntil('15-01-20XX'), null);
+    assert.equal(H.parseValidUntil('XX-01-2027'), null);
+    assert.equal(H.parseValidUntil('15-XX-2027'), null);
+  });
+  it('rejects zero day/month/year', () => {
+    assert.equal(H.parseValidUntil('00-01-2027'), null);
+    assert.equal(H.parseValidUntil('15-00-2027'), null);
+    assert.equal(H.parseValidUntil('15-01-0000'), null);
+  });
+  it('agrees with the pill + countdown: expired vs not (isExpired/validDaysLeft share it)', () => {
+    // Sanity that both consumers read the same parse: an ISO past date is expired
+    // with a negative countdown; a future date is not.
+    const past = { valid_until: '2020-01-01' };
+    const iso = H.parseValidUntil(past.valid_until);
+    assert.ok(iso < H.todayISO()); // isExpired reads this comparison
   });
 });
 

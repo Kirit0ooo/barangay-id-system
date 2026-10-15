@@ -23,6 +23,11 @@ const scheduledRs = readFileSync(join(root, 'src-tauri/src/scheduled.rs'), 'utf8
 const loggerRs = readFileSync(join(root, 'src-tauri/src/logger.rs'), 'utf8');
 const pkgJson = readFileSync(join(root, 'package.json'), 'utf8');
 const cardTpl = readFileSync(join(root, 'src/card-template.html'), 'utf8');
+const buildPs1 = readFileSync(join(root, 'build.ps1'), 'utf8');
+const runPs1 = readFileSync(join(root, 'run.ps1'), 'utf8');
+const runBat = readFileSync(join(root, 'run.bat'), 'utf8');
+const buildBat = readFileSync(join(root, 'build.bat'), 'utf8');
+const viewLogsBat = readFileSync(join(root, 'view-logs.bat'), 'utf8');
 // Whitespace-collapsed copy: cargo fmt may wrap chained calls across lines.
 const idCardFlat = idCardRs.replace(/\s+/g, ' ');
 // Comment-stripped copy: historical notes may name deleted PDF items (allowed).
@@ -57,6 +62,7 @@ check('COUNT(*) no longer used for ID generation', !residentsRs.includes("SELECT
 check('validate_resident_input exists', residentsRs.includes('fn validate_resident_input'), 'validation not added');
 check('orphan photo cleanup on insert failure', residentsRs.includes('Clean up orphan photo'), 'missing orphan cleanup');
 check('photo size guard present', residentsRs.includes('Photo too large'), 'missing size guard');
+check('explicit resident_id collision errors instead of silent reassign (C2)', residentsRs.includes('explicit_id'), 'explicit ID still silently cleared on collision');
 
 // 5. Backup — must use wal_checkpoint + isolated validation, no string-interpolated VACUUM INTO
 check('backup no longer uses string-interpolated VACUUM INTO', !backupRs.includes("VACUUM INTO '"), 'still has VACUUM INTO string interpolation (injection risk)');
@@ -77,7 +83,7 @@ check('smoke test checks src-tauri/tauri.conf.json', smoke.includes("src-tauri/t
 
 // 8. Audit P0 — gender stats case-insensitive, search hides soft-deleted, QR command
 check('dashboard stats use UPPER(gender)', residentsRs.includes("UPPER(gender) = 'MALE'") && residentsRs.includes("UPPER(gender) = 'FEMALE'"), 'stats still query Male/Female literals');
-check('search filters soft-deleted by default', /\?\d+ = 1 OR is_active = 1/.test(residentsRs), 'search still leaks is_active=0');
+check('search filters soft-deleted by default', /\? = 1 OR is_active = 1/.test(residentsRs), 'search still leaks is_active=0');
 check('search matches digit-stripped contacts (P1-2)', residentsRs.includes("REPLACE(contact_number, '-', '')") && residentsRs.includes('digits_search'), 'formatted-number search missing');
 check('get_qr_data_url command exists', idCardRs.includes('pub async fn get_qr_data_url'), 'QR still regex-scraped only');
 check('main registers get_qr_data_url', readFileSync(join(root, 'src-tauri/src/main.rs'), 'utf8').includes('id_card::get_qr_data_url'), 'command not registered');
@@ -206,7 +212,7 @@ check('frontend shortBarangay extracts parens first', appJs.includes('match(/\\(
 check('frontend shortBarangay keeps last-token fallback after parens', (appJs.match(/return 'BALUD'/g) || []).length >= 2, 'fallback BARANGAY guard missing');
 check('backend short_barangay extracts parens first', configRs.includes("find('(')") && configRs.includes("find(')')") && configRs.includes('take(40)'), 'paren-first extract missing in config.rs');
 check('backend short_barangay keeps full-string fallback', configRs.includes("b.to_uppercase()") && configRs.includes('chars().take(40)'), 'fallback missing in config.rs');
-check('card template carries barangay.ico favicon', cardTpl.includes('<link rel="icon" href="barangay.ico" type="image/x-icon">'), 'favicon link missing in card-template.html');
+check('card template has no dead favicon link (fetched-as-text, srcdoc-rendered)', !cardTpl.includes('<link rel="icon"'), 'dead favicon link still present in card-template.html');
 
 // 27. repair — null guards on async-loaded template state (photoScanResult)
 check('photoScanResult panel uses template x-if outer guard', indexHtml.includes('<template x-if="photoScanResult">'), 'outer should be template x-if, not x-show');
@@ -218,9 +224,9 @@ check('detail opens as exclusive routed view', indexHtml.includes(`x-show="curre
 check('detail Edit goes to register (no closeDetail bounce)', !indexHtml.includes(`editResident(detailResident.id); closeDetail()`), 'Edit must not call closeDetail after editResident');
 check('detail dismisses with Esc', indexHtml.includes(`@keydown.escape.window`), 'Esc-to-close missing on app root');
 
-// 29. amber-neon backdrop — titles stay readable, surfaces stay light
+// 29. paper backdrop — titles stay readable, surfaces stay light (C1: red backdrop retired)
 const styleCss = readFileSync(join(root, 'src/css/style.css'), 'utf8');
-check('amber-neon backdrop token exists', styleCss.includes('--amber-neon:') && styleCss.includes('background:var(--amber-neon)'), 'backdrop token missing');
+check('paper backdrop token in use', styleCss.includes('background:var(--paper);') && !/body\s*\{\s*background:var\(--amber-neon\)/.test(styleCss), 'backdrop must be paper, not amber-neon red');
 check('all five view titles use view-title', (indexHtml.match(/view-title"/g) || []).length >= 5, 'every view h2 needs view-title');
 check('content surfaces stay light', styleCss.includes('.stat-card{\n  background:var(--color-surface);') && styleCss.includes('.form-section{\n  background:var(--color-surface);'), 'cards/stats/forms must stay white surfaces');
 
@@ -233,10 +239,10 @@ check('save enforces 11-digit mobiles', appJs.includes('mustBeMobile'), 'submit 
 
 // 31. dashboard status cards + gender pie (male/female ratio cards retired)
 check('status cards present (active/renew/lost/damage)', ['Active cards', 'Renew cards', 'Lost cards', 'Damage cards'].every(s => indexHtml.includes(s)), 'status card missing');
-check('gender pie present (offline SVG, no chart lib)', indexHtml.includes('svg class="pie"') && indexHtml.includes('pie-legend'), 'pie missing');
+check('balance gauge present (offline SVG, no chart lib)', indexHtml.includes('svg class="gauge"') && indexHtml.includes('gauge-legend'), 'gauge missing');
 check('old ratio cards retired', !indexHtml.includes('stat-card--male') && !indexHtml.includes('stat-card--female'), 'old male/female cards still present');
 check('backend serves status counts', residentsRs.includes('pub active: i64') && residentsRs.includes("UPPER(remarks) = 'RENEW'") && residentsRs.includes("UPPER(remarks) = 'LOST'") && residentsRs.includes("UPPER(remarks) = 'DAMAGE'"), 'status queries missing');
-check('pie segments use gapped helper + definition ring', appJs.includes('pieSeg(') && appJs.includes('pieOff()') && indexHtml.includes('r="56.5"'), 'pie segment math missing');
+check('gauge arcs use pathLength helper + gap rule', appJs.includes('gaugeArcs()') && appJs.includes('gaugeGap()') && indexHtml.includes('pathLength="100"'), 'gauge math missing');
 check('primary stat dominant (34px)', styleCss.includes('.stat-card--primary .stat-card__value{ color:var(--color-text); font-size:34px; }'), 'primary dominance missing');
 check('year stacked under total, pie middle (no right side)', indexHtml.includes('stat-hero__side--left') && !indexHtml.includes('stat-hero__side--right') && !indexHtml.includes('stat-card--primary" role') && !indexHtml.includes('stat-card--secondary" role'), 'stacked hero missing');
 check('hero stat icons tinted (total navy, year blue)', styleCss.includes('.stat-hero__stat--total .stat-card__icon') && styleCss.includes('.stat-hero__stat--year .stat-card__icon'), 'hero icons untinted');
@@ -247,11 +253,15 @@ check('uniform 40px buttons, label-fit widths', styleCss.includes('min-height:40
 check('edit mode hides Clear Form, shows Back (new keeps Clear)', indexHtml.includes('x-show="!editingResident" @click="clearForm"') && indexHtml.includes('x-show="editingResident" @click="goBackFromEdit()"'), 'edit/new buttons not gated');
 check('edit mode has Back only (Cancel is new-only)', indexHtml.includes('x-show="!editingResident" @click="clearForm"') && !appJs.includes('async revertEdit()') && appJs.includes('async goBackFromEdit()'), 'edit-mode buttons wrong');
 check('detail hero shows ID expiry below pills', indexHtml.includes('detail-view-validity') && indexHtml.includes('expiryCountdown(detailResident)') && appJs.includes('expiryCountdown('), 'expiry line missing');
-check('pie extrude graded by depth', indexHtml.includes(':opacity="0.35 + i * 0.06"'), 'flat extrude opacity');
-check('pie legend has proportion bars', indexHtml.includes('pie-legend__fill--male') && indexHtml.includes('pie-legend__fill--female'), 'legend bars missing');
-check('pie ring seated both edges + soft shadow', indexHtml.includes('r="33.5"') && indexHtml.includes('feGaussianBlur') && indexHtml.includes('filter="url(#pieSoft)"'), 'pie seating incomplete');
-check('pie reference traits (round caps, seams, radial fill)', indexHtml.includes('stroke-linecap="round"') && indexHtml.includes('pieBoth()') && indexHtml.includes('radialGradient') && !indexHtml.includes('pie-diff'), 'reference adaptation incomplete');
-check('pie top arcs lit by vertical gradients', indexHtml.includes('pieGradMale') && indexHtml.includes('pieGradFemale') && indexHtml.includes('stroke="url(#pieGradMale)"'), 'arc gradients missing');
+check('gauge chips have proportion bars', indexHtml.includes('gauge-fill--male') && indexHtml.includes('gauge-fill--female'), 'gauge bars missing');
+
+// 36. balance-gauge replaces the donut (new visual language)
+check('balance gauge present (track + two arcs)', indexHtml.includes('svg class="gauge"') && indexHtml.includes('gauge-arc--male') && indexHtml.includes('gauge-arc--female'), 'gauge missing');
+check('gauge helper returns both arc lengths', appJs.includes('gaugeArcs()'), 'gaugeArcs missing');
+check('gauge gap only when both sides non-trivial', appJs.includes('gaugeGap()'), 'gap rule missing');
+check('gauge center shows label below total (no M·F sub)', indexHtml.includes('gauge-center__label') && !indexHtml.includes('gauge-center__sub'), 'M·F sub still present');
+check('donut layers retired', !indexHtml.includes('pieGradMale') && !indexHtml.includes('url(#pieSoft)') && !indexHtml.includes('opacity="0.65"'), 'donut remnants still present');
+check('donut helpers retired', !appJs.includes('pieSpan()') && !appJs.includes('pieOff()') && !appJs.includes('pieBoth()'), 'donut helpers still present');
 
 // 32. per-user MSI (writable one-folder install + automatic desktop shortcut)
 const wixTmpl = readFileSync(join(root, 'src-tauri/wix/main.wxs'), 'utf8');
@@ -260,6 +270,72 @@ check('MSI data dir is per-user LocalAppData (not Program Files)', wixTmpl.inclu
 check('MSI creates desktop shortcut automatically', wixTmpl.includes('<Directory Id="DesktopFolder"') && wixTmpl.includes('Id="ApplicationShortcutDesktop"') && wixTmpl.includes('<ComponentRef Id="ApplicationShortcutDesktop"'), 'desktop shortcut missing');
 check('tauri.conf wires custom WiX template', tauriConf.tauri.bundle.windows.wix.template === './wix/main.wxs', 'wix.template not wired');
 check('WebView2 embedded offline (no runtime download)', tauriConf.tauri.bundle.windows.webviewInstallMode.type === 'offlineInstaller', 'still bootstrapper/download mode');
+
+// 33. P0 fixes: single backupDB, truthful search-cap toast, shippable MSI, verify removed
+const searchCap = Number((residentsRs.match(/pub const SEARCH_RESULT_LIMIT:\s*i64\s*=\s*(\d+)/) || [])[1] || 0);
+check('backupDB defined once (scheduled-aware wins)', (appJs.match(/async backupDB\(\)/g) || []).length === 1, 'duplicate backupDB still present');
+check('search cap centralized and matches backend', (() => { const m = appJs.match(/const SEARCH_RESULT_CAP\s*=\s*(\d+)/); const feCap = m ? Number(m[1]) : 0; return searchCap > 0 && feCap === searchCap && (appJs.match(/SEARCH_RESULT_CAP/g) || []).length >= 3; })(), 'frontend cap missing, duplicated, or != SEARCH_RESULT_LIMIT');
+check('frontend contact gate mirrors backend (PH-strict + legacy-charset +63)', appJs.includes('+63') && appJs.includes('7') && appJs.includes('mirrors backend'), 'frontend still blanket-rejects legacy numbers the backend accepts');
+check('bundle ships MSI (WiX per-user hardening is real)', tauriConf.tauri.bundle.targets.includes('msi'), 'targets still nsis-only');
+check('verify module removed', !mainRs.includes('mod verify;'), 'mod verify still present');
+check('verify commands unregistered', !mainRs.includes('verify::get_verify_qr_data_url') && !mainRs.includes('verify::get_verify_cards_batch') && !mainRs.includes('verify::export_verify_registry') && !mainRs.includes('publish_verify_trust'), 'verify commands still in invoke_handler');
+check('verify key infra removed from config', !configRs.includes('VerifyTrust') && !configRs.includes('ensure_verify_keypair') && !configRs.includes('verify_base_url'), 'verify remnants in config.rs');
+check('verify crypto deps pruned', !cargoToml.includes('ed25519-dalek') && !cargoToml.includes('sha2'), 'unused crypto deps remain');
+
+// 34. Build dependency gate: every release-build tool probed fail-fast (future deps = one $Prereqs row)
+check('build gate probes MSVC linker', buildPs1.includes('link.exe') && buildPs1.includes('vswhere'), 'cargo would fail at link after a long compile');
+check('build gate probes NSIS', buildPs1.includes('makensis'), 'nsis leg unchecked');
+check('build gate is table-driven for future deps', buildPs1.includes('$Prereqs') && buildPs1.includes("FUTURE deps are a one-row addition"), 'gate not extensible');
+check('all launchers ASCII-only (PS 5.1 codepage-safe)', [runPs1, buildPs1, runBat, buildBat, viewLogsBat].every(s => !/[^\x00-\x7F]/.test(s)), 'non-ASCII broke PS 5.1 parsing once');
+
+// 35. run.ps1 dev gate mirrors build gate (dev compiles Rust too; no bundling tools needed)
+check('run.ps1 gate probes MSVC linker', runPs1.includes('link.exe'), 'tauri dev would fail at link after compiling');
+check('Node floor aligned at 20+ in both launchers', runPs1.includes('LTS 20+') && buildPs1.includes('20'), 'run says 18+, build requires 20+');
+check('bat wrappers forward flags to ps1', runBat.includes('%*') && buildBat.includes('%*'), 'flags silently dropped by wrapper');
+
+// 37. gauge polish: balance marker, quartile ticks, arc depth, chip lift
+check('gauge midtick marker removed (decluttered top center)', !indexHtml.includes('gauge-midtick'), 'midtick still present');
+check('gauge has quartile tick dots', (indexHtml.match(/gauge-tick/g) || []).length >= 3, 'track has no proportion ticks');
+check('gauge arcs carry soft depth shadow', styleCss.includes('.gauge-arc') && styleCss.includes('drop-shadow'), 'arcs flat against track');
+check('gauge chips lift on hover (reduced-motion safe)', styleCss.includes('.gauge-chip:hover'), 'chips feel static');
+
+// 38. Release hygiene: stale bundle outputs removed pre-build, patch version auto-increments
+check('build.ps1 cleans stale bundle dir before build', buildPs1.includes('Remove-Item') && buildPs1.includes('release\\bundle') && buildPs1.includes('NoClean'), 'no bundle clean step');
+check('build.ps1 auto-increments patch version across manifests', buildPs1.includes('NoBump') && buildPs1.includes('Auto-version') && buildPs1.includes('Cargo.lock') && buildPs1.includes('tauri.conf.json'), 'no auto-version step');
+check('build.bat documents auto-version + clean (flags forwarded)', buildBat.includes('%*') && (buildBat.includes('NoBump') || buildBat.includes('auto-increment')), 'build.bat not updated');
+
+// 39. Verify trust publish removed with the portal (no unreachable UI)
+check('api.js has no publishVerifyTrust wrapper', !apiJs.includes('publishVerifyTrust'), 'dead IPC wrapper remains');
+check('settings has no publish-verify-trust action', !appJs.includes('async publishTrust()') && !indexHtml.includes('@click="publishTrust"'), 'dead publish UI remains');
+check('settings has no verify-URL field', !appJs.includes('verifyBaseUrl') && !indexHtml.includes('verifyBaseUrl'), 'dead verify URL field remains');
+// Legacy QR restored: id_card.rs mints the plain 7-key JSON again
+const goldenQr = readFileSync(join(root, 'tests/golden-card.test.js'), 'utf8');
+const qrReadme = readFileSync(join(root, 'Documents/QR_PII_README.md'), 'utf8');
+check('legacy qr_data() restored in id_card', idCardRs.includes('fn qr_data('), 'signed-URL minter still in place');
+check('QR doc prescribes qr_data() again', qrReadme.includes('qr_data()') && !qrReadme.includes('mint_verify_url'), 'doc still points at removed minter');
+
+// 40. Task3: update txn + prod print gate + batched active-only cards
+check('validate_resident_complete available in prod (no cfg(test) gate)', !residentsRs.includes('#[cfg(test)]\npub fn validate_resident_complete'), 'print gate still dead in prod (cfg(test))');
+check('QR single path enforces completeness gate', idCardRs.includes('validate_resident_complete'), 'get_qr_data_url skips completeness check');
+check('card batch filters inactive residents', /is_active\s*=\s*1/.test(idCardRs) , 'inactive cards still printable');
+check('card batch uses single WHERE IN query (no N+1 loop)', /WHERE\s+.*IN\s*\(/i.test(idCardRs), 'batch still N+1 sequential SELECTs');
+
+// 41. Task4: civic.json offline truth (no stale verify URL, unsigned QR documented)
+const civicJson = readFileSync(join(root, 'config/civic.json'), 'utf8');
+const civic = JSON.parse(civicJson);
+check('civic.json carries no verify_base_url (offline-only)', !('verify_base_url' in civic), 'stale netlify verify URL still present');
+check('QR unsigned-by-design documented', qrReadme.includes('unsigned'), 'QR doc does not state unsigned status');
+
+// 42. Task6: M-suite hardening (no unwrap panics, log injection, case orphans, img scheme, revoke timing)
+const loggerJs = readFileSync(join(root, 'src/js/logger.js'), 'utf8');
+check('backup tmp-name handles dir-root dest (no file_name().unwrap())', !backupRs.includes('file_name().unwrap()'), 'unwrap panics when dest is a dir root');
+check('frontend log strips newline injection', loggerRs.includes("\\n") && (loggerRs.includes("replace") || loggerRs.includes("' '")), 'log forging via embedded newlines');
+check('frontend log caps single-message size', /8000|truncate|chars\(\)\.take/.test(loggerRs), 'one unbounded message blows past 5MB rotation check');
+check('photo_gc compares basenames case-insensitively', scheduledRs.includes('to_lowercase'), 'ABC.JPG vs abc.jpg false-orphan on Windows');
+check('card template allows only safe img schemes', cardTpl.includes('data:image') && (cardTpl.includes('asset:') || cardTpl.includes('allowlist') || cardTpl.includes('SAFE_IMG')), 'javascript: src would execute in print window');
+check('frontend log download revokes URL on delay (no slow-disk abort)', !loggerJs.includes('a.click(); URL.revokeObjectURL(url)'), 'immediate revoke may abort download');
+const residentIdTag = /<input[^>]*id="resident-id"[^>]*>/.exec(indexHtml)?.[0] || '';
+check('resident-id input has single aria-describedby', (residentIdTag.match(/aria-describedby/g) || []).length <= 1, 'duplicate aria-describedby on #resident-id');
 
 if (failed) { console.error(`\n${failed} regression check(s) failed`); process.exit(1); }
 else console.log(`\nAll regression checks passed — HIGH findings repaired`);

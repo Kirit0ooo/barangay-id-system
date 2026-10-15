@@ -74,7 +74,7 @@ D:\Barangay\
       │    ├── card-template.html          # single render path: CR100 98.6×66.8 print template
       ├── src-tauri\                     # Rust backend
       │    ├── Cargo.toml / Cargo.lock
-      │    ├── tauri.conf.json           # scope [$APP/**,$RESOURCE/**] only
+      │    ├── tauri.conf.json           # scope $APP/photos|documents|config|backups + $RESOURCE only
       │    ├── build.rs                  # tauri_build
       │    ├── icons/                    # 32,128, icns, ico
       │    ├── assets/fallback/
@@ -100,8 +100,8 @@ D:\Barangay\
       ├── .npm-cache\                    # npm cache via .npmrc cache=./.npm-cache
       ├── node_modules\                  # isolated deps
       ├── tests\
-      │    ├── smoke.test.js             # 10 isolation checks
-      │    └── regression.test.js        # 28 HIGH-fix checks
+      │    ├── smoke.test.js             # isolation checks (manifest, data/, tmp/, .npmrc)
+      │    └── regression.test.js        # HIGH-fix + P0 regression checks (growing; see §33 for P0 pins)
       ├── run.ps1                        # CANONICAL dev launcher (PowerShell 5.1+, -Logs/-Fix/-NoInstall/-Help/-Audit; transcript to logs/run-*.log)
       ├── run.bat                        # thin wrapper -> run.ps1 %* (pins same env; minimal :NOPS hint+pause only if PowerShell absent)
       ├── build.ps1 / build.bat          # release build -> src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/ + logs/build-*.log
@@ -110,7 +110,7 @@ D:\Barangay\
       └── README.md
 ```
 
-**How isolation works:** `src-tauri/src/db.rs:get_project_root()` walks `D:\ → exe parent → cwd` looking for marker `barangay.ico` or `src-tauri/`; `get_app_data_dir()` only returns inside that root; `logger::get_logs_dir()` returns `Result` (OS-temp fallback + error log, never `panic!`) (no `ProjectDirs` AppData fallback). Every write path (`backup`, `export`, `id_card`) calls `validate_isolated_write_path()` which asserts `parent.starts_with(root)`. `main.rs` pins `TMP/TEMP/TMPDIR/WEBVIEW2_USER_DATA_FOLDER` to `tmp/` at startup. `.npmrc` `cache=./.npm-cache` + Tauri `fs.scope` tight to `[$APP/**,$RESOURCE/**]` prevents escape.
+**How isolation works:** `src-tauri/src/db.rs:get_project_root()` walks `D:\ → exe parent → cwd` looking for marker `barangay.ico` or `src-tauri/`; `get_app_data_dir()` only returns inside that root; `logger::get_logs_dir()` returns `Result` (OS-temp fallback + error log, never `panic!`) (no `ProjectDirs` AppData fallback). Every write path (`backup`, `export`, `id_card`) calls `validate_isolated_write_path()` which asserts `parent.starts_with(root)`. `main.rs` pins `TMP/TEMP/TMPDIR/WEBVIEW2_USER_DATA_FOLDER` to `tmp/` at startup. `.npmrc` `cache=./.npm-cache` + Tauri `fs.scope` tight to `$APP/photos|documents|config|backups` + `$RESOURCE` prevents escape.
 
 ---
 
@@ -168,7 +168,7 @@ npx tauri build
 
 Output (isolated, never in `%TEMP%`):
 ```
-src-tauri/target/release/bundle/msi/Barangay ID Registration System_1.0.0_x64_en-US.msi
+src-tauri/target/release/bundle/msi/Barangay ID Registration System_1.0.1_x64_en-US.msi
 src-tauri/target/release/bundle/nsis/...
 ```
 Install on Win10/11 (per-user MSI — no admin rights needed). The installer creates a **desktop shortcut automatically** (stock Tauri WiX behavior) and installs beside your data:
@@ -302,7 +302,7 @@ No PDFs are generated. The single render path is `src/card-template.html` filled
 
 ## Configuration
 
-* `src-tauri/tauri.conf.json` — `build.devPath: "../src"`, `distDir: "../src"`, `withGlobalTauri: true`, `allowlist.fs.scope: ["$APP/**","$RESOURCE/**"]` (tight), `csp: default-src 'self'; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost` (no `unsafe-eval`; prebuilt CSS needs only `unsafe-inline` for `<style>` blocks).
+* `src-tauri/tauri.conf.json` — `build.devPath: "../src"`, `distDir: "../src"`, `withGlobalTauri: true`, `allowlist.fs.scope: ["$APP/photos/**","$APP/documents/**","$APP/config/**","$APP/backups/**","$RESOURCE/**"]` (tight), `csp: default-src 'self'; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost` (no `unsafe-eval`; prebuilt CSS needs only `unsafe-inline` for `<style>` blocks).
 * `.npmrc` — `cache=./.npm-cache` (isolated).
 * Settings (Barangay/City/Province) — `localStorage barangaySettings` (frontend only, not DB).
 * `.gitignore` — ignores `data/residents.db*`, `data/photos/*`, `data/backups/*`, `tmp/`, `logs/*.log`, `src-tauri/target/`, `node_modules/`, `.npm-cache/`; keeps `.gitkeep` files. PDF-era `data/id_cards/` + `Documents/PDF/` entries removed (P2-11 — dirs the app never creates). `tmp/.gitignore` ignores `*` (keeps `.gitkeep`) — never `node_modules/target` (those live elsewhere).
@@ -339,8 +339,8 @@ View: `logs/app.log.2026-09-09`, `logs/frontend.log`. Verbose: `set RUST_LOG=deb
 Isolated to `tests\` — must stay inside project.
 
 ```bat
-node tests/smoke.test.js       :: 10 checks: manifest, data/, tmp/, .npmrc
-node tests/regression.test.js  :: 28 checks: modal x-if, purok, scope tight, ID MAX, validation, orphan cleanup, wal_checkpoint, QR fallback
+node tests/smoke.test.js       :: isolation checks: manifest, data/, tmp/, .npmrc
+node tests/regression.test.js  :: regression checks: modal x-if, purok, scope tight, ID MAX, validation, orphan cleanup, wal_checkpoint, QR fallback (+ §33 P0 pins)
 node tests/golden-card.test.js :: field-map parity for the single HTML render path + QR/date helpers (fixtures: normal, long-name edge, legacy DD-MM-YYYY valid_until)
 npm test                        :: runs all three via node --test
 ```
@@ -376,7 +376,7 @@ with a legacy cmd fallback. `run.ps1` is canonical — `.bat` wrappers only forw
 ## Security & Isolation Hardening
 
 * `validate_isolated_write_path()` on every `backup/export/id_card` write — canonicalizes parent and asserts `starts_with(root)`.
-* `fs.scope` tight to `[$APP/**,$RESOURCE/**]` (no `$DOWNLOAD/$DOCUMENT/$DESKTOP/$TEMP` leak).
+* `fs.scope` tight to `$APP/photos|documents|config|backups` + `$RESOURCE` (no `$DOWNLOAD/$DOCUMENT/$DESKTOP/$TEMP` leak).
 * `resident.validate_resident_input()` — required `last/first/birth/gender`, gender `Male|Female`, lengths 100/20/254/32, email `contains('@')`, resident_id required. R3 normalizes DOB to `YYYY-MM-DD` (`normalize_birth_date`) accepting `DD-MM-YYYY`, `DD/MM/YYYY`, `YYYY-MM-DD`, validates real date & not future.
 * Photo size guard 8 MB base64 / 6 MB decoded + JPEG re-encode 600×800.
 * All `sqlx` queries use `bind()` (no injection); backup no longer interpolates SQL.
@@ -408,7 +408,7 @@ Current CSP carries no `unsafe-eval` (see `src-tauri/tauri.conf.json` `security.
 ## Deployment
 
 * Copy entire `D:\Barangay\barangay-id-system` to USB — data travels with it (portable).
-* MSI installs to Program Files but data check still prefers `D:\Barangay\barangay-id-system\data` if mounted (via `get_project_root()`), else install-adjacent `data\`.
+* MSI installs per-user to LocalAppData (no admin; see wix/main.wxs) but data check still prefers `D:\Barangay\barangay-id-system\data` if mounted (via `get_project_root()`), else install-adjacent `data\`.
 * For air-gapped: vendored `src/vendor/alpine.min.js` + prebuilt `src/css/tailwind.css` — no CDN needed.
 
 ---
@@ -417,7 +417,7 @@ Current CSP carries no `unsafe-eval` (see `src-tauri/tauri.conf.json` `security.
 
 * `README` previously claimed `genpdf` + `xlsxwriter 0.6` — actual `rust_xlsxwriter 0.78` (pure Rust, no libclang). Now corrected.
 * `.npmrc` previously documented `tmp=./tmp` — actual only `cache=./.npm-cache`; `tmp` pin is via `main.rs` env, now documented.
-* `tauri.conf.json` scope now `[$APP/**,$RESOURCE/**]` — tests updated accordingly (old `$DOWNLOAD` expectation removed, `VACUUM INTO '` replaced by safe copy + validation).
+* `tauri.conf.json` scope is the granular `$APP/photos|documents|config|backups` + `$RESOURCE` list — tests assert tightness (old `$DOWNLOAD` expectation removed, `VACUUM INTO '` replaced by safe copy + validation).
 
 ---
 
