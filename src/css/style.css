@@ -313,8 +313,16 @@ tbody tr:hover{ background:rgba(248,250,252,.92); }
 .stat-card--damage .stat-card__value{ color:#9a3412; }
 .stat-card--active, .stat-card--renew, .stat-card--lost, .stat-card--damage{ transition:border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease; }
 .stat-card--active:hover, .stat-card--renew:hover, .stat-card--lost:hover, .stat-card--damage:hover{ transform:translateY(-1px); box-shadow:0 4px 14px rgba(15,23,42,.08); }
+.stat-card--active:hover .stat-card__icon{ filter:brightness(1.15); }
+.stat-card--renew:hover .stat-card__icon{ filter:brightness(1.15); }
+.stat-card--lost:hover .stat-card__icon{ filter:brightness(1.15); }
+.stat-card--damage:hover .stat-card__icon{ filter:brightness(1.15); }
 .stat-card--active .stat-card__value, .stat-card--renew .stat-card__value, .stat-card--lost .stat-card__value, .stat-card--damage .stat-card__value{ font-variant-numeric:tabular-nums; letter-spacing:-.03em; }
 .stat-card--active .stat-card__meta, .stat-card--renew .stat-card__meta, .stat-card--lost .stat-card__meta, .stat-card--damage .stat-card__meta{ font-size:12px; line-height:1.4; }
+
+/* Stat card group — section label above the four status cards */
+.stat-card-group{ margin-top:8px; }
+.stat-card-group__label{ display:block; font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--color-text-muted); margin:0 0 10px 0; padding-left:2px; }
 /* Dashboard hero — civic overview: totals left, gauge center (premium restrained) */
 .stat-hero{ grid-column:1/-1; position:relative; overflow:hidden; padding:0; }
 .stat-hero__accent{ height:4px; background:linear-gradient(90deg,var(--color-primary),var(--color-primary) 72%,var(--color-accent) 72%,var(--color-accent)); }
@@ -351,15 +359,15 @@ tbody tr:hover{ background:rgba(248,250,252,.92); }
 @media(prefers-reduced-motion:reduce){ .gauge-chip{ transition:none !important; } .gauge-chip:hover{ transform:none; } }
 .gauge-chip__label{ font-weight:600; }
 .gauge-dot{ width:9px; height:9px; border-radius:50%; flex-shrink:0; display:inline-block; margin-right:6px; vertical-align:baseline; }
-.gauge-dot--male{ background:#2563eb; box-shadow:0 0 0 4px rgba(37,99,235,.10); }
-.gauge-dot--female{ background:#ec4899; box-shadow:0 0 0 4px rgba(236,72,153,.10); }
+.gauge-dot--male{ background:var(--color-primary); box-shadow:0 0 0 4px rgba(15,43,94,.10); }
+.gauge-dot--female{ background:var(--color-accent); box-shadow:0 0 0 4px rgba(199,156,20,.10); }
 .gauge-chip__count{ margin-left:6px; font-weight:800; font-size:15px; font-variant-numeric:tabular-nums; }
 .gauge-chip__pct{ float:right; font-size:12px; font-weight:700; color:var(--color-text-muted); font-variant-numeric:tabular-nums; }
-.gauge-chip--male .gauge-chip__pct{ color:#1e40af; }
-.gauge-chip--female .gauge-chip__pct{ color:#be185d; }
+.gauge-chip--male .gauge-chip__pct{ color:var(--color-primary); }
+.gauge-chip--female .gauge-chip__pct{ color:var(--color-accent); }
 .gauge-chip__bar{ margin-top:7px; height:5px; background:#f1f5f9; border-radius:999px; overflow:hidden; }
-.gauge-fill--male{ height:100%; background:#2563eb; border-radius:999px; transition:width 720ms cubic-bezier(.22,.8,.32,1); }
-.gauge-fill--female{ height:100%; background:#ec4899; border-radius:999px; transition:width 720ms cubic-bezier(.22,.8,.32,1); }
+.gauge-fill--male{ height:100%; background:var(--color-primary); border-radius:999px; transition:width 720ms cubic-bezier(.22,.8,.32,1); }
+.gauge-fill--female{ height:100%; background:var(--color-accent); border-radius:999px; transition:width 720ms cubic-bezier(.22,.8,.32,1); }
 
 /* Form section wrapper */
 .form-section{
@@ -752,6 +760,9 @@ nav[aria-label="Primary"] [role="tab"]{ min-height:40px; padding-top:8px; paddin
 .register-photo__cta{
   font-size:13px; font-weight:700; color:var(--color-primary); margin-top:8px;
 }
+.register-photo__preview{ max-width:100%; max-height:100%; object-fit:cover; border-radius:12px; }
+.register-photo__hint{ font-size:10px; color:var(--color-text-muted); margin-top:6px; }
+.register-remove{ font-size:12px; font-weight:600; color:var(--color-error); }
 
 /* Section numbering: navy disc + gold ring reads premium, stays civic */
 .register-number{ box-shadow:0 0 0 2px var(--color-surface), 0 0 0 4px var(--color-accent); }
@@ -760,6 +771,11 @@ nav[aria-label="Primary"] [role="tab"]{ min-height:40px; padding-top:8px; paddin
   color:var(--color-text-muted);
 }
 .register-section .form-section__body{ padding:20px 24px; }
+
+/* Section icon: small civic glyph beside the section number, same navy as primary */
+.register-section__icon{
+  width:16px; height:16px; color:var(--color-primary); flex-shrink:0; margin-left:8px;
+}
 
 /* Birth-date helper: integrated navy badge, not loose grey text */
 .register-age{
@@ -983,3 +999,190 @@ input[type="date"].form-field__input{ min-width:0; }
 .form-grid--3{ grid-template-columns:minmax(0,1fr); }
 @media (min-width:640px){ .form-grid--3{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (min-width:1024px){ .form-grid--3{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
+
+/* ==========================================================================
+   OPT-IN THEME — red gradient backdrop
+   Triggered ONLY by html[data-theme="red-gradient"] (absent by default so
+   default paper theme is untouched and C1 regression pins stay green).
+   Literal rgba stops — never CSS opacity (which would fade all content),
+   never --amber-neon (retired C1 backdrop). Gradient is screen-only;
+   @media print forces html,body{background:white!important} above.
+   ========================================================================== */
+html[data-theme="red-gradient"] body{
+  background:#FC7D7E;
+  background:linear-gradient(to bottom, rgba(255,102,102,0.5), rgba(178,0,0,0.5));
+  background-attachment:fixed;
+}
+
+/* Gradient theme typography: ink ~#0F172A stays ~7:1 against both stops at
+   alpha 0.5; .help/.form-field__help bumped 11→12px. Surfaces stay opaque white
+   (regression-pinned .stat-card/.form-section) so muted text is fine there.
+   The gradient shows only in gutters and gaps between opaque surfaces — a
+   subtle red tint, not a full-red page. */
+html[data-theme="red-gradient"] .form-field__help,
+html[data-theme="red-gradient"] .help {
+  font-size: 12px;
+}
+
+/* ==========================================================================
+   HUB DASHBOARD — big service tiles for non-tech-savvy officers
+   ========================================================================== */
+.hub-grid{
+  display:grid;
+  gap:16px;
+  grid-template-columns:1fr;
+  margin:16px 0 0 0;
+}
+@media (min-width:640px){ .hub-grid{ grid-template-columns:repeat(3,1fr); } }
+.hub-tile{
+  background:linear-gradient(180deg,#FFFFFF, #F7F9FC);
+  border:1px solid var(--border);
+  border-radius:var(--radius-card);
+  padding:20px;
+  text-align:left;
+  min-height:170px;
+  box-shadow:var(--shadow-card);
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  align-items:flex-start;
+  cursor:pointer;
+  transition:transform 0.1s,border-color 0.2s,box-shadow 0.2s;
+  position:relative;
+}
+.hub-tile::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:inherit;
+  border:1px solid transparent;
+  border-top:1px solid rgba(255,255,255,.7);
+  border-left:1px solid rgba(255,255,255,.7);
+  pointer-events:none;
+  box-sizing:border-box;
+}
+.hub-tile:hover{
+  border-color:var(--border-strong);
+  transform:translateY(-1px);
+  box-shadow:0 4px 14px rgba(15,23,42,.08);
+}
+.hub-tile:active{
+  transform:translateY(1px);
+  border-color:var(--border-strong);
+  box-shadow:0 1px 3px rgba(15,23,42,.06);
+}
+.hub-tile__icon{
+  width:40px;
+  height:40px;
+  border-radius:10px;
+  background:var(--navy);
+  color:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+}
+.hub-tile__title{
+  font-size:16px;
+  font-weight:800;
+  letter-spacing:-0.02em;
+  color:var(--navy);
+}
+.hub-tile__desc{
+  font-size:13px;
+  color:var(--muted);
+  line-height:1.5;
+  margin-top:2px;
+}
+.hub-tile__steps{
+  display:flex;
+  gap:6px;
+  flex-wrap:wrap;
+  margin-top:auto;
+}
+.hub-tile__steps span{
+  width:22px;
+  height:22px;
+  border-radius:50%;
+  background:var(--navy);
+  color:#fff;
+  font-size:11px;
+  font-weight:700;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+.hub-tile__chips{
+  font-size:11px;
+  color:var(--muted);
+  margin-top:auto;
+}
+.hub-back{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 14px;
+  border-radius:999px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  font-size:13px;
+  font-weight:600;
+  color:var(--navy);
+  cursor:pointer;
+  transition:border-color 0.2s;
+}
+.hub-back:hover{ border-color:var(--border-strong); }
+
+/* Welcome header pill — small civic chip beside the page title */
+.hub-pill{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:4px 10px;
+  border-radius:999px;
+  background:var(--paper);
+  border:1px solid var(--border);
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+  color:var(--muted);
+}
+
+/* Welcome subtitle — matches register-sub styling for uniformity */
+.hub-motto{
+  margin:4px 0 0; font-size:13px; color:var(--color-text-muted);
+}
+
+/* Per-tile icon accent colors — restrained civic palette */
+.hub-tile__icon--register{ background:var(--navy); }
+.hub-tile__icon--search{ background:#1E3A5F; }   /* 10% darker navy variant */
+.hub-tile__icon--settings{ background:var(--gold); }
+
+/* Hub tile arrow — appears on right side of tile body */
+.hub-tile__arrow{
+  font-size:14px;
+  font-weight:700;
+  color:var(--muted);
+  opacity:0;
+  transform:translateX(-2px);
+  transition:opacity 0.15s,transform 0.15s;
+}
+.hub-tile:hover .hub-tile__arrow{ opacity:1; transform:translateX(0); }
+
+/* Fix: steps and chips both used margin-top:auto which conflicted.
+   Steps sit at bottom of register tile; chips at bottom of search/settings tiles. */
+.hub-tile__steps{ margin-top:auto; }
+.hub-tile__chips{ margin-top:auto; }
+
+/* Hub tile heading area: title + desc spacing already set; ensure icon+title group */
+.hub-tile > *:first-child{ flex-shrink:0; }
+
+.hub-motto{
+  margin-top:10px;
+  font-size:14px;
+  font-style:italic;
+  color:var(--muted);
+  text-align:center;
+}
+.hub-back:hover{ border-color:var(--border-strong); }

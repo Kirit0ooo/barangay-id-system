@@ -12,59 +12,47 @@
     Build includes recent runtime commands: get_cards_batch (bulk print) + optimize_database
     (DB optimize, 7-day cadence) - plus E1 duplicate-person check and E4 10s photo budget.
 #>
-[CmdletBinding()]
-param([switch]$Help, [switch]$Audit, [switch]$NoBump, [switch]$NoClean)
+[CmdletBinding(SupportsShouldProcess)]
+param([switch]$Help, [switch]$Audit, [switch]$NoBump, [switch]$NoClean, [switch]$EnableVerboseLogging)
 
+# ---- StrictMode + error policy (catch typos, fail fast) ----
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+# ---- Dot-source shared launcher primitives (Invoke-SafeNative + env pins) ----
+$CommonModule = Join-Path $PSScriptRoot 'tools\launcher-common.ps1'
+if (-not (Test-Path $CommonModule)) {
+    Write-Host "[WARN] launcher-common.ps1 not found at $CommonModule - inline fallbacks only" -ForegroundColor Yellow
+    # Inline fallbacks so unconditional calls below never hard-crash under StrictMode.
+    function Set-PortableEnvPins { param([string]$Root) Write-Host '[fallback] Set-PortableEnvPins stub (launcher-common.ps1 missing)' -ForegroundColor Yellow }
+    function Restore-EnvPins { Write-Host '[fallback] Restore-EnvPins stub (launcher-common.ps1 missing)' -ForegroundColor Yellow }
+    function Invoke-SafeNative { param([string]$Exe, [Parameter(ValueFromRemainingArguments=$true)][string[]]$Arguments) & $Exe @Arguments }
+} else {
+    . $CommonModule
+}
+
 $Root = $PSScriptRoot
 if (-not $Root) { $Root = Split-Path -Parent $MyInvocation.MyCommand.Path }
 Set-Location $Root
 
-# ---- Native call safety helper (DRY: keep byte-identical logic in run.ps1/build.ps1) ----
-function Invoke-SafeNative {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)][string]$Exe,
-        [Parameter(ValueFromRemainingArguments=$true)][string[]]$Args
-    )
-    $prevEap = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    try {
-        $actual = $Exe
-        # On Windows use npx.cmd/npm.cmd to avoid the PowerShell .ps1 shim that re-throws stderr as TerminatingError under EAP Stop.
-        # On non-Windows (Linux/macOS) the .cmd shim is not executable (Exec format error) - use plain npx/npm.
-        $isWin = $false
-        try { if ($IsWindows) { $isWin = $true } } catch {}
-        if (-not $isWin -and $env:OS -like '*Windows*') { $isWin = $true }
-        if (-not $isWin -and $PSVersionTable.PSEdition -eq 'Desktop') { $isWin = $true } # Windows PowerShell 5.1 has no $IsWindows
-        if ($isWin) {
-            if ($Exe -eq 'npx' -and (Get-Command 'npx.cmd' -ErrorAction SilentlyContinue)) { $actual = 'npx.cmd' }
-            elseif ($Exe -eq 'npm' -and (Get-Command 'npm.cmd' -ErrorAction SilentlyContinue)) { $actual = 'npm.cmd' }
-        }
-        # Inject --yes for npx tauri to suppress npm notice fetching; --silent for npm ci/install
-        $effectiveArgs = $Args
-        if ($Exe -eq 'npx' -and $Args -contains 'tauri' -and $Args -notcontains '--yes') {
-            $effectiveArgs = @('--yes') + $Args
-        }
-        if ($Exe -eq 'npm' -and ($Args -contains 'ci' -or $Args -contains 'install') -and $Args -notcontains '--silent' -and $Args -notcontains '--loglevel') {
-            $effectiveArgs = $Args + @('--silent')
-        }
-        try {
-            & $actual @effectiveArgs 2>&1 | ForEach-Object {
-                $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { [string]$_ }
-                if ($line -match 'npm notice') { return } # filter - do not pollute transcript as ERROR
-                $_
-            }
-        } catch [System.Management.Automation.PipelineStoppedException] {
-            # Ctrl+C / watcher exit tears down Out-Host pipeline - expected stop, not an error.
-        } catch {
-            if ($_.FullyQualifiedErrorId -match 'PipelineStopped' -or "$($_.Exception.Message)" -match 'pipeline.*stopped') { return }
-            throw
-        }
-    } finally {
-        $ErrorActionPreference = $prevEap
-    }
+# ---- Capture original env for restore-on-exit (never leak pins to parent shell) ----
+trap {
+    Restore-EnvPins
+    Write-Host "ERROR: terminating error in build.ps1 - $_" -ForegroundColor Red
+    exit 1
 }
+
+# ---- Portable env pins (MUST precede any npm/cargo call) ----
+Set-PortableEnvPins $Root
+if ($EnableVerboseLogging) {
+    Write-Verbose '[Barangay ID] Verbose build mode enabled'
+    $env:RUST_LOG = 'debug'
+    Write-Host '[Barangay ID] Verbose: RUST_LOG=debug' -ForegroundColor Magenta
+}
+Write-Verbose '[Barangay ID] Portable env pins applied (isolated caches, no %TEMP% writes)'
+
+# Ensure data dir exists for SQLite (first-run tauri dev/build may need it).
+Ensure-DataDir $Root
 
 if ($Help) {
     Write-Host @"
@@ -88,27 +76,12 @@ Build includes get_cards_batch (bulk print) + optimize_database (E2) - no extra 
 For comment-based help: Get-Help .\build.ps1 -Detailed
 "@
     try { Get-Help $MyInvocation.MyCommand.Path -Detailed -ErrorAction SilentlyContinue | Out-String | Write-Host } catch {}
+    Restore-EnvPins
     exit 0
 }
 
-# ---- Portable env pins (MUST precede any npm/cargo call) ----
-$env:NPM_CONFIG_CACHE          = Join-Path $Root '.npm-cache'
-$env:CARGO_TARGET_DIR          = Join-Path $Root 'src-tauri\target'
-$env:TMP                       = Join-Path $Root 'tmp'
-$env:TEMP                      = Join-Path $Root 'tmp'
-$env:TMPDIR                    = Join-Path $Root 'tmp'
-$env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $Root 'tmp\webview2'
-if (-not $env:RUST_LOG) { $env:RUST_LOG = 'info' }
-
-foreach ($d in @('logs', 'tmp', 'tmp\webview2', '.npm-cache')) {
-    $p = Join-Path $Root $d
-    if (-not (Test-Path $p)) {
-        New-Item -ItemType Directory -Path $p | Out-Null
-    }
-}
-
+# ---- -Audit: dependency audit, warn-only (parity with run.ps1 -Audit) ----
 if ($Audit) {
-    # P2: dependency audit - isolated caches, warn-only (never fails).
     Write-Host '[Barangay ID] Dependency audit (isolated caches)...' -ForegroundColor Cyan
     $prevEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     try {
@@ -120,6 +93,7 @@ if ($Audit) {
         if ($LASTEXITCODE -ne 0) { Write-Host '[audit] npm audit reported issues at/above moderate (see above) - warn-only, build not failed' -ForegroundColor Yellow }
     } finally { $ErrorActionPreference = $prevEap }
     Write-Host '[Barangay ID] Audit done (warn-only).' -ForegroundColor Green
+    Restore-EnvPins
     exit 0
 }
 
@@ -144,11 +118,19 @@ try {
            Fix = 'Visual Studio Build Tools 2022 + "Desktop development with C++": https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022';
            Test = { if (Get-Command 'link.exe' -ErrorAction SilentlyContinue) { return $true }
                     $vsWhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-                    if (Test-Path $vsWhere) { return $true }
+                    if (Test-Path $vsWhere) {
+                        $vsPath = (& $vsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null | Out-String).Trim()
+                        if ($vsPath -and (Test-Path (Join-Path $vsPath 'VC\Tools\MSVC'))) { return $true }
+                    }
                     return (Test-Path (Join-Path ${env:ProgramFiles} 'Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC')) } },
         @{ Name = 'WiX Toolset v3.11 (MSI leg; Tauri v1 rejects v4+)'; Level = 'required'; Fix = 'https://wixtoolset.org/releases/ (v3.11)';
-           Test = { if (Get-Command 'candle.exe' -ErrorAction SilentlyContinue) { return $true }
-                    return (Test-Path (Join-Path ${env:ProgramFiles(x86)} 'WiX Toolset v3.11\bin\candle.exe')) } },
+           Test = { if (Test-Path (Join-Path ${env:ProgramFiles(x86)} 'WiX Toolset v3.11\bin\candle.exe')) { return $true }
+                    if (Get-Command 'candle.exe' -ErrorAction SilentlyContinue) {
+                        $ver = (& candle.exe -version 2>$null | Out-String).Trim()
+                        if ($ver -match 'v3\.11') { return $true }
+                        Write-Host "[wix] candle.exe on PATH is v4+ (Tauri v1 needs v3.11): $ver" -ForegroundColor Yellow
+                    }
+                    return $false } },
         @{ Name = 'NSIS makensis (nsis leg)'; Level = 'required'; Fix = 'https://nsis.sourceforge.io/Download';
            Test = { if (Get-Command 'makensis.exe' -ErrorAction SilentlyContinue) { return $true }
                     return (Test-Path 'C:\Program Files (x86)\NSIS\makensis.exe') } },
@@ -188,14 +170,16 @@ try {
     # .msi/.nsis can never be mistaken for the fresh build. -NoClean skips.
     # Only bundle/ is removed (never release/ - that would force a full recompile).
     if (-not $NoClean) {
-        $bundleDir = Join-Path $Root 'src-tauri\target\x86_64-pc-windows-msvc\release\bundle'
-        if (Test-Path $bundleDir) {
-            $stale = @(Get-ChildItem $bundleDir -Recurse -File -ErrorAction SilentlyContinue)
-            if ($stale.Count -gt 0) {
-                Write-Host "[Barangay ID] Removing $($stale.Count) stale bundle file(s)..." -ForegroundColor Yellow
-                Remove-Item (Join-Path $bundleDir '*') -Recurse -Force -ErrorAction Stop
-            } else {
-                Write-Host '[Barangay ID] Bundle dir already clean' -ForegroundColor Green
+        if ($PSCmdlet.ShouldProcess('bundle/', 'Remove stale bundle outputs before build')) {
+            $bundleDir = Join-Path $Root 'src-tauri\target\x86_64-pc-windows-msvc\release\bundle'
+            if (Test-Path $bundleDir) {
+                $stale = @(Get-ChildItem $bundleDir -Recurse -File -ErrorAction SilentlyContinue)
+                if ($stale.Count -gt 0) {
+                    Write-Host "[Barangay ID] Removing $($stale.Count) stale bundle file(s)..." -ForegroundColor Yellow
+                    Remove-Item (Join-Path $bundleDir '*') -Recurse -Force -ErrorAction Stop
+                } else {
+                    Write-Host '[Barangay ID] Bundle dir already clean' -ForegroundColor Green
+                }
             }
         }
     }
@@ -204,29 +188,31 @@ try {
     # tauri build, so the compiled binary and installers carry the new version.
     # -NoBump skips (use for rebuilds of the same version).
     if (-not $NoBump) {
-        $pkgJsonPath = Join-Path $Root 'package.json'
-        $oldVer = (Get-Content $pkgJsonPath -Raw | ConvertFrom-Json).version
-        if ($oldVer -notmatch '^\d+\.\d+\.\d+$') { throw "Auto-version: package.json version '$oldVer' is not x.y.z - fix it manually" }
-        $vp = $oldVer -split '\.'
-        $newVer = "$($vp[0]).$($vp[1]).$([int]$vp[2] + 1)"
-        Write-Host "[Barangay ID] Auto-version: $oldVer -> $newVer" -ForegroundColor Cyan
-        $oldRx = [regex]::Escape($oldVer)
-        $noBom = New-Object System.Text.UTF8Encoding $false
-        $bumpStages = @(
-            @{ File = 'package.json'; Pattern = '"version": "' + $oldRx + '"'; Replacement = '"version": "' + $newVer + '"' },
-            @{ File = 'package-lock.json'; Pattern = '(?m)^  "version": "' + $oldRx + '"$'; Replacement = '  "version": "' + $newVer + '"' },
-            @{ File = 'package-lock.json'; Pattern = '"name": "barangay-id-system",(\r?\n)      "version": "' + $oldRx + '"'; Replacement = '"name": "barangay-id-system",$1      "version": "' + $newVer + '"' },
-            @{ File = 'src-tauri\tauri.conf.json'; Pattern = '"version": "' + $oldRx + '"'; Replacement = '"version": "' + $newVer + '"' },
-            @{ File = 'src-tauri\Cargo.toml'; Pattern = 'version = "' + $oldRx + '"'; Replacement = 'version = "' + $newVer + '"' },
-            @{ File = 'src-tauri\Cargo.lock'; Pattern = 'name = "barangay-id-system"(\r?\n)version = "' + $oldRx + '"'; Replacement = 'name = "barangay-id-system"$1version = "' + $newVer + '"' }
-        )
-        foreach ($stage in $bumpStages) {
-            $fp = Join-Path $Root $stage.File
-            $txt = [IO.File]::ReadAllText($fp, [System.Text.Encoding]::UTF8)
-            $txt = [regex]::Replace($txt, $stage.Pattern, $stage.Replacement)
-            [IO.File]::WriteAllText($fp, $txt, $noBom)
-            $check = [IO.File]::ReadAllText($fp, [System.Text.Encoding]::UTF8)
-            if ($check -notmatch [regex]::Escape($newVer)) { throw "Auto-version: $($stage.File) still pins $oldVer (pattern drift) - update build.ps1 bump stages" }
+        if ($PSCmdlet.ShouldProcess('manifests', 'Auto-bump patch version x.y.z -> x.y.z+1 across all manifests')) {
+            $pkgJsonPath = Join-Path $Root 'package.json'
+            $oldVer = (Get-Content $pkgJsonPath -Raw | ConvertFrom-Json).version
+            if ($oldVer -notmatch '^\d+\.\d+\.\d+$') { throw "Auto-version: package.json version '$oldVer' is not x.y.z - fix it manually" }
+            $vp = $oldVer -split '\.'
+            $newVer = "$($vp[0]).$($vp[1]).$([int]$vp[2] + 1)"
+            Write-Host "[Barangay ID] Auto-version: $oldVer -> $newVer" -ForegroundColor Cyan
+            $oldRx = [regex]::Escape($oldVer)
+            $noBom = New-Object System.Text.UTF8Encoding $false
+            $bumpStages = @(
+                @{ File = 'package.json'; Pattern = '"version": "' + $oldRx + '"'; Replacement = '"version": "' + $newVer + '"' },
+                @{ File = 'package-lock.json'; Pattern = '(?m)^  "version": "' + $oldRx + '"$'; Replacement = '  "version": "' + $newVer + '"' },
+                @{ File = 'package-lock.json'; Pattern = '"name": "barangay-id-system",(\r?\n)      "version": "' + $oldRx + '"'; Replacement = '"name": "barangay-id-system",$1      "version": "' + $newVer + '"' },
+                @{ File = 'src-tauri\tauri.conf.json'; Pattern = '"version": "' + $oldRx + '"'; Replacement = '"version": "' + $newVer + '"' },
+                @{ File = 'src-tauri\Cargo.toml'; Pattern = 'version = "' + $oldRx + '"'; Replacement = 'version = "' + $newVer + '"' },
+                @{ File = 'src-tauri\Cargo.lock'; Pattern = 'name = "barangay-id-system"(\r?\n)version = "' + $oldRx + '"'; Replacement = 'name = "barangay-id-system"$1version = "' + $newVer + '"' }
+            )
+            foreach ($stage in $bumpStages) {
+                $fp = Join-Path $Root $stage.File
+                $txt = [IO.File]::ReadAllText($fp, [System.Text.Encoding]::UTF8)
+                $txt = [regex]::Replace($txt, $stage.Pattern, $stage.Replacement)
+                [IO.File]::WriteAllText($fp, $txt, $noBom)
+                $check = [IO.File]::ReadAllText($fp, [System.Text.Encoding]::UTF8)
+                if ($check -notmatch [regex]::Escape($newVer)) { throw "Auto-version: $($stage.File) still pins $oldVer (pattern drift) - update build.ps1 bump stages" }
+            }
         }
     }
 
@@ -255,10 +241,12 @@ try {
         Invoke-SafeNative npx tauri build --target x86_64-pc-windows-msvc | Out-Host
     } catch [System.Management.Automation.PipelineStoppedException] {
         Write-Host 'Build stopped by user (Ctrl+C) - normal exit.' -ForegroundColor Yellow
+        Restore-EnvPins
         exit 0
     } catch {
         if ($_.FullyQualifiedErrorId -match 'PipelineStopped' -or "$($_.Exception.Message)" -match 'pipeline.*stopped') {
             Write-Host 'Build stopped by user (Ctrl+C) - normal exit.' -ForegroundColor Yellow
+            Restore-EnvPins
             exit 0
         }
         throw
@@ -274,15 +262,19 @@ try {
         Select-Object FullName, Length, LastWriteTime | Format-Table -AutoSize
 } catch [System.Management.Automation.PipelineStoppedException] {
     Write-Host 'Stopped by user (Ctrl+C) - normal exit.' -ForegroundColor Yellow
+    Restore-EnvPins
     exit 0
 } catch {
     if ($_.FullyQualifiedErrorId -match 'PipelineStopped' -or "$($_.Exception.Message)" -match 'pipeline.*stopped') {
         Write-Host 'Stopped by user (Ctrl+C) - normal exit.' -ForegroundColor Yellow
+        Restore-EnvPins
         exit 0
     }
     Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
+    Restore-EnvPins
     exit 1
 } finally {
     try { Stop-Transcript | Out-Null } catch {}
+    Restore-EnvPins
     Write-Host "Build log saved to $logFile" -ForegroundColor Green
 }

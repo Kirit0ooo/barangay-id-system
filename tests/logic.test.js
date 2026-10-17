@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 // helpers.js is a classic browser <script> (no exports) — evaluate it in a
 // Function scope so tests run against the real source, not a copy.
 const src = readFileSync(new URL('../src/js/helpers.js', import.meta.url), 'utf8');
-const H = new Function(`${src}; return { formatDateDDMMYYYY, normalizeBirthDateForSubmit, truncateCard, formatContactPH, maskContactPH, todayISO, computeAge, parseValidUntil, PUROK_OPTIONS, joinPath, backupBaseName, PHOTO_MAX_FILE_BYTES };`)();
+const H = new Function(`${src}; return { formatDateDDMMYYYY, normalizeBirthDateForSubmit, truncateCard, formatContactPH, maskContactPH, todayISO, computeAge, parseValidUntil, PUROK_OPTIONS, joinPath, backupBaseName, PHOTO_MAX_FILE_BYTES, residentStatus };`)();
 
 describe('formatDateDDMMYYYY', () => {
   it('converts ISO to DD-MM-YYYY', () => {
@@ -182,5 +182,29 @@ describe('joinPath / backupBaseName / constants', () => {
   });
   it('photo cap is 6MB', () => {
     assert.equal(H.PHOTO_MAX_FILE_BYTES, 6 * 1024 * 1024);
+  });
+});
+
+describe('residentStatus (D6: remarks outrank expiry)', () => {
+  it('expired LOST card shows LOST, not Expired', () => {
+    assert.equal(H.residentStatus({ remarks: 'LOST', is_active: 1 }, true), 'LOST');
+  });
+  it('expired RENEW and DAMAGE keep their labels', () => {
+    assert.equal(H.residentStatus({ remarks: 'RENEW', is_active: 1 }, true), 'RENEW');
+    assert.equal(H.residentStatus({ remarks: 'DAMAGE', is_active: 1 }, true), 'DAMAGE');
+  });
+  it('expired ACTIVE card still shows Expired', () => {
+    assert.equal(H.residentStatus({ remarks: 'ACTIVE', is_active: 1 }, true), 'Expired');
+    assert.equal(H.residentStatus({ is_active: 1 }, true), 'Expired'); // no remarks
+  });
+  it('non-expired ACTIVE stays ACTIVE (uppercase, unchanged)', () => {
+    assert.equal(H.residentStatus({ remarks: 'ACTIVE', is_active: 1 }, false), 'ACTIVE');
+    assert.equal(H.residentStatus({ is_active: 1 }, false), 'ACTIVE');
+  });
+  it('inactive beats everything', () => {
+    assert.equal(H.residentStatus({ is_active: 0, remarks: 'LOST' }, true), 'Inactive');
+  });
+  it('null record defaults to Active', () => {
+    assert.equal(H.residentStatus(null, false), 'Active');
   });
 });

@@ -137,11 +137,24 @@ function backupBaseName(ext) {
 // F17: photo limits aligned with backend (6MB binary ~= 8MB base64); both enforced.
 const PHOTO_MAX_FILE_BYTES = 6 * 1024 * 1024;
 
+// D6: card status shown on the pill. Operator-set remarks (LOST/RENEW/DAMAGE)
+// outrank generic expiry so a lost card never reads as merely "Expired"; the
+// detail view still surfaces expiry on its own via expiryCountdown. `isExpired`
+// is injected so this stays a pure, testable function.
+function residentStatus(r, isExpired) {
+    if (!r) return 'Active';
+    if (r.is_active === 0) return 'Inactive';
+    const raw = (((r.remarks || 'ACTIVE') + '').toUpperCase());
+    if (raw === 'LOST' || raw === 'RENEW' || raw === 'DAMAGE') return raw;
+    if (isExpired) return 'Expired';
+    return raw;
+}
+
 // Node test harness only — undefined in the browser, so this is a no-op there.
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         formatDateDDMMYYYY, normalizeBirthDateForSubmit, truncateCard,
         formatContactPH, maskContactPH, todayISO, computeAge, PUROK_OPTIONS,
-        joinPath, backupBaseName, PHOTO_MAX_FILE_BYTES,
+        joinPath, backupBaseName, PHOTO_MAX_FILE_BYTES, residentStatus,
     };
 }

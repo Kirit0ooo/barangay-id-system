@@ -194,7 +194,7 @@ One folder, exe + data together. Details: `src-tauri/wix/main.wxs` is the offici
 * **Register/Edit** — fields: name (last/first/middle/suffix), `birth_date*` (DD-MM-YYYY, stored as entered), `gender*` (Male/Female), civil_status, citizenship (default Filipino), occupation, religion, blood_type, height/weight, contact_number, email, address (house/street/**purok**/barangay/city/province), Gov IDs (PhilHealth/SSS/TIN/voter's), emergency contact (name/relation/number), remarks toggle `ACTIVE/RENEW/LOST/DAMAGE`, `valid_until` auto +1 year (no UI), photo (base64 8MB limit → decoded 6MB → resized 600×800 JPEG `{uuid}.jpg`).
 * **Photo slot** — `data/photos/{uuid}.jpg` only; no runtime fallback (P2-11: `src/assets/Boy.jpg`/`Girl.jpg` are unreferenced by code — kept as canonical placeholder art per regression-test L3 pin, not rendered). Without an upload the slot stays empty and the template hides it.
 * **ID generation** — `BRGY-YYYY-00001` via `MAX(CAST(substr(resident_id,-5) AS INTEGER))` per year (avoids COUNT reuse after soft-delete), orphan photo cleanup on duplicate.
-* **Search** — `last_name LIKE ? OR first_name LIKE ? OR resident_id LIKE ? OR contact_number LIKE ?` + digit-stripped contact match (so `09171234567` finds stored `0917-123-4567`) + optional `address_purok = ?` + `is_active` toggle, `LIMIT 500`, ordered `last_name,first_name`.
+* **Search** — `last_name LIKE ? OR first_name LIKE ? OR resident_id LIKE ? OR contact_number LIKE ?` + digit-stripped contact match (so `09171234567` finds stored `0917-123-4567`) + optional `address_purok = ?` + `is_active` toggle, `LIMIT 2000`, ordered `last_name,first_name`.
 * **Soft delete** — `UPDATE is_active=0`, no hard delete; search can include inactive.
 * **ID Card** — Preview → Print on CR100 via `card-template.html` (single render path) — see next section.
 * **Excel** — `rust_xlsxwriter` 31 columns, header navy `#003366`, frozen pane row 1, widths per column, `is_active=1` only.
@@ -424,7 +424,7 @@ Current CSP carries no `unsafe-eval` (see `src-tauri/tauri.conf.json` `security.
 ## Known Limitations
 
 * No auth/roles (single local operator); no hard-delete UI (soft `is_active=0` only).
-* Enhancement backlog (P2-13, documented not implemented): no duplicate-person guard (same name + DOB can register twice — operator must catch at search), no scheduled `VACUUM` (freed pages reused automatically; file never shrinks — run `VACUUM` manually via sqlite3 if size matters).
+* Enhancement backlog (P2-13, documented not implemented): duplicate-person guard wired (same name + DOB raises 'Possible duplicate' on create/update/import — `duplicate_person_gate`), no scheduled `VACUUM` (freed pages reused automatically; file never shrinks — run `VACUUM` manually via sqlite3 if size matters).
 * `BEGIN IMMEDIATE` + retry loop now guards `MAX→INSERT` (R2) — cross-process duplicate is retried once with fresh MAX; orphan cleanup on each failure.
 * Restore copies while pool alive — now reopens pool in-process (no restart needed for DB file) but UI should reload.
 * CSP keeps `unsafe-inline` for `<style>`/Alpine attributes; `unsafe-eval` removed (R6 completed in M1 pass, pinned by tests).

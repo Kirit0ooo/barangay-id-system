@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Barangay ID System — Design Tokens</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;background:#f8fafc;color:#0f172a;padding:24px;}
+  h1{font-size:22px;font-weight:800;letter-spacing:-.02em;margin-bottom:10px;}
+  p.sub{font-size:13px;color:#64748b;margin-bottom:28px;}
+  .group{margin-bottom:32px;}
+  .group h2{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#64748b;margin-bottom:14px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#64748b;padding-bottom:10px;border-bottom:1px solid #e2e8f0;}
+  td{padding:10px 0;border-bottom:1px solid #f1f5f9;}
+  .swatch{width:20px;height:20px;border-radius:6px;display:inline-block;margin-right:10px;vertical-align:middle;border:1px solid rgba(0,0,0,.08);}
+  .code{font-family:ui-monospace,monospace;font-size:12px;color:#0f172a;background:#f1f5f9;padding:2px 6px;border-radius:4px;}
+  .ctx-note{border-left:3px solid #c79c14;padding-left:12px;color:#64748b;font-size:13px;line-height:1.6;margin-top:10px;}
+</style>
+</head>
+<body>
+<h1>Barangay ID System — Design Tokens</h1>
+<p class="sub">Civic/government ID registration system — restrained, legible, offline-first.</p>
+
+<div class="ctx-note"><b>Contextual anchor:</b> A barangay (village) office — institutional, trustworthy, warm but never playful. Color drawn from navy (authority) + gold (Filipino civic identity) against neutral paper surfaces.</div>
+
+<div class="group">
+  <h2>Color — 70/20/10 system</h2>
+  <table>
+    <tr><th>Token</th><th>Value</th><th>Swatch</th><th>Usage</th></tr>
+    <tr><td class="code">--color-bg / --paper</td><td class="code">#F8FAFC</td><td><span class="swatch" style="background:#F8FAFC"></span>#F8FAFC</td><td>Page background (70%)</td></tr>
+    <tr><td class="code">--color-surface</td><td class="code">#FFFFFF</td><td><span class="swatch" style="background:#FFFFFF"></span>#FFFFFF</td><td>Card / form surfaces (20%)</td></tr>
+    <tr><td class="code">--color-primary</td><td class="code">#0F2B5E</td><td><span class="swatch" style="background:#0F2B5E"></span>#0F2B5E</td><td>Primary actions, nav, focus rings (10%)</td></tr>
+    <tr><td class="code">--color-accent</td><td class="code">#C79C14</td><td><span class="swatch" style="background:#C79C14"></span>#C79C14</td><td>3px rule, badges, secondary accent</td></tr>
+    <tr><td class="code">--color-border</td><td class="code">#E2E8F0</td><td><span class="swatch" style="background:#E2E8F0"></span>#E2E8F0</td><td>Input borders, dividers</td></tr>
+    <tr><td class="code">--color-border-strong</td><td class="code">#CBD5E1</td><td><span class="swatch" style="background:#CBD5E1"></span>#CBD5E1</td><td>Hover states, active borders</td></tr>
+    <tr><td class="code">--color-text</td><td class="code">#0F172A</td><td><span class="swatch" style="background:#0F172A"></span>#0F172A</td><td>Body text</td></tr>
+    <tr><td class="code">--color-text-muted</td><td class="code">#64748B</td><td><span class="swatch" style="background:#64748B"></span>#64748B</td><td>Secondary/labels</td></tr>
+    <tr><td class="code">--color-success</td><td class="code">#059669</td><td><span class="swatch" style="background:#059669"></span>#059669</td><td>Active status</td></tr>
+    <tr><td class="code">--color-warning</td><td class="code">#D97706</td><td><span class="swatch" style="background:#D97706"></span>#D97706</td><td>Renew status</td></tr>
+    <tr><td class="code">--color-error</td><td class="code">#DC2626</td><td><span class="swatch" style="background:#DC2626"></span>#DC2626</td><td>Lost status, errors</td></tr>
+    <tr><td class="code">--color-info</td><td class="code">#2563EB</td><td><span class="swatch" style="background:#2563EB"></span>#2563EB</td><td>Female status, secondary info</td></tr>
+  </table>
+</div>
+
+<div class="group">
+  <h2>Typography</h2>
+  <table>
+    <tr><th>Token</th><th>Value</th><th>Usage</th></tr>
+    <tr><td class="code">--font-sans</td><td class="code">Inter, Segoe UI, system-ui</td><td>Body + UI (single typeface at multiple weights)</td></tr>
+    <tr><td class="code">--font-mono</td><td class="code">ui-monospace, JetBrains Mono</td><td>Resident ID numbers, technical data</td></tr>
+    <tr><td class="code">--text-xs</td><td class="code">11px</td><td>Captions, labels</td></tr>
+    <tr><td class="code">--text-sm</td><td class="code">13px</td><td>Helper text, chips</td></tr>
+    <tr><td class="code">--text-base</td><td class="code">15px</td><td>Body text</td></tr>
+    <tr><td class="code">--text-lg</td><td class="code">18px</td><td>Section headings</td></tr>
+    <tr><td class="code">--text-xl</td><td class="code">22px</td><td>View titles</td></tr>
+    <tr><td class="code">--text-2xl</td><td class="code">28px</td><td>Welcome heading</td></tr>
+    <tr><td class="code">--leading-tight</td><td class="code">1.1</td><td>Headings</td></tr>
+    <tr><td class="code">--leading-normal</td><td class="code">1.5</td><td>Body</td></tr>
+    <tr><td class="code">--leading-relaxed</td><td class="code">1.625</td><td>Long text</td></tr>
+  </table>
+</div>
+
+<div class="group">
+  <h2>Radius &amp; Shadow</h2>
+  <table>
+    <tr><th>Token</th><th>Value</th><th>Usage</th></tr>
+    <tr><td class="code">--radius-card</td><td class="code">16px</td><td>Cards, tiles</td></tr>
+    <tr><td class="code">--radius-input</td><td class="code">12px</td><td>Form inputs</td></tr>
+    <tr><td class="code">--radius-pill</td><td class="code">999px</td><td>Badges, chips, back buttons</td></tr>
+    <tr><td class="code">--shadow-card</td><td class="code">0 1px 2px rgba(16,24,40,.05), 0 4px 12px rgba(16,24,40,.06)</td><td>Elevated surfaces</td></tr>
+  </table>
+</div>
+
+<div class="group">
+  <h2>Semantic aliases (used in src/css/style.css)</h2>
+  <table>
+    <tr><th>Alias</th><th>Maps to</th></tr>
+    <tr><td class="code">--color-surface-hover</td><td>rgba(248,250,252,.92)</td></tr>
+    <tr><td class="code">--color-primary-hover</td><td>#0a1f45</td></tr>
+    <tr><td class="code">--color-accent-ring</td><td>#F59E0B (focus)</td></tr>
+    <tr><td class="code">--color-text-inverse</td><td>#fff</td></tr>
+  </table>
+</div>
+
+<p class="sub" style="margin-top:40px;">No banned AI patterns: no Playfair/Syne/Unbounded/Fraunces/Space Grotesk; no teal/cyan primary; no fade-up scroll reveals; no full-page grain; no purple gradients; no numbered cards; abstract token names only.</p>
+</body>
+</html>

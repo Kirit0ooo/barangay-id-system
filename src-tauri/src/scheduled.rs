@@ -96,7 +96,9 @@ pub async fn scheduled_backup(
                 let mut p = dst.clone();
                 let name = format!(
                     "{}.tmp",
-                    dst.file_name().ok_or("Invalid backup path")?.to_string_lossy()
+                    dst.file_name()
+                        .ok_or("Invalid backup path")?
+                        .to_string_lossy()
                 );
                 p.set_file_name(name);
                 p
@@ -170,9 +172,11 @@ pub async fn scheduled_backup(
             })?;
         let tmp_rename = tmp_path.clone();
         let dst_rename = dest.clone();
-        tokio::task::spawn_blocking(move || std::fs::rename(&tmp_rename, &dst_rename).map_err(|e| e.to_string()))
-            .await
-            .map_err(|e| format!("Scheduled backup rename failed: {}", e))??;
+        tokio::task::spawn_blocking(move || {
+            std::fs::rename(&tmp_rename, &dst_rename).map_err(|e| e.to_string())
+        })
+        .await
+        .map_err(|e| format!("Scheduled backup rename failed: {}", e))??;
         tracing::info!(
             "scheduled_backup used VACUUM INTO fallback after copy retries: {}",
             dest.display()
@@ -188,6 +192,12 @@ pub async fn scheduled_backup(
         crate::db::prune_oldest_files(parent, &["residents_backup_", "scheduled_"], 30);
         crate::db::prune_oldest_files(parent, &["config_backup_"], 30);
     }
+    // P2-7: photo GC — delete orphan photos after each scheduled backup so the
+    // photo dir never accumulates unreferenced files between manual GC runs.
+    // Respect civic config toggle: dry_run=true scans+logs only (no deletes).
+    let dry_run = crate::config::load_civic_config().photo_gc_dry_run;
+    let _ = photo_gc(state.clone(), Some(!dry_run)).await;
+
     Ok(ScheduledBackupResult {
         path: dest.to_string_lossy().to_string(),
         wal_checkpoint: ck_msg,

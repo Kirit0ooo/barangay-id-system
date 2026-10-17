@@ -119,10 +119,10 @@ pub async fn get_qr_data_url(
         "SELECT {} FROM residents WHERE id = ?",
         crate::residents::RESIDENT_COLUMNS
     ))
-        .bind(resident_id)
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| format!("Resident not found: {}", e))?;
+    .bind(resident_id)
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| format!("Resident not found: {}", e))?;
     // C4: never mint a QR from a partial record; inactive rows are not printable.
     if resident.is_active.unwrap_or(1) != 1 {
         return Err("Resident is inactive".into());

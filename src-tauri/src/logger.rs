@@ -193,7 +193,11 @@ pub fn append_frontend_log(level: &str, message: &str) {
     // M5: single-line log discipline — strip CR/LF so one invoke call can
     // never forge extra log lines; cap at 8000 chars so a single message
     // cannot blow past the 5MB rotation check between writes.
-    let clean_level: String = level.chars().filter(|c| c.is_alphanumeric()).take(16).collect();
+    let clean_level: String = level
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .take(16)
+        .collect();
     let mut clean_msg = message.replace('\r', " ").replace('\n', " ");
     if clean_msg.len() > 8000 {
         clean_msg.truncate(8000);

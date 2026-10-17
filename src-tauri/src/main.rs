@@ -8,7 +8,9 @@
 
 mod backup;
 mod config;
+mod crypto;
 mod db;
+mod encryption;
 mod export;
 mod id_card;
 mod logger;
@@ -64,9 +66,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _guard = logger::init();
     tracing::info!("Barangay ID System starting...");
 
-    // Initialize database
-    let pool = db::init_db().await?;
+    // Initialize database — decrypt encrypted DB first if present.
     let app_data_dir = db::get_app_data_dir();
+    let db_path = app_data_dir.join("residents.db");
+    let db_enc_path = app_data_dir.join("residents.db.enc");
+    if db_enc_path.exists() && !db_path.exists() {
+        tracing::info!("Encrypted database found at startup — decrypting before init_db");
+        crypto::decrypt_database_files(&db_path)
+            .map_err(|e| format!("Failed to decrypt database at startup: {e}"))?;
+    }
+    let pool = db::init_db().await?;
     // Ensure Documents/Excel exists (isolated). Documents/PDF is legacy:
     // never created; print is HTML-only, "Save as PDF" via browser dialog.
     let docs_excel = db::get_documents_excel_dir();
@@ -111,6 +120,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             scheduled::scheduled_backup,
             scheduled::photo_gc,
             db::optimize_database_cmd,
+            // Encryption at rest
+            encryption::encryption_generate_key,
+            encryption::encryption_status,
+            encryption::encryption_encrypt_database,
+            encryption::encryption_decrypt_database,
+            encryption::encryption_encrypt_photos,
+            encryption::encryption_decrypt_photos,
             // Logging
             log_frontend,
             get_logs_dir,

@@ -40,6 +40,9 @@ Thumbs.db
 src-tauri/target/release/bundle/
 data/.last_optimize
 
+# Encryption key (AES-256, must never be committed — sits beside data by design)
+.crypto-key/
+
 # Pi agent state (task output / session artifacts — not project source)
 .pi/
 .superpowers/

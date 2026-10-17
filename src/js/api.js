@@ -46,9 +46,6 @@ const API = {
         // F11: aggregate counts without fetching full rows.
         return await window.__TAURI__.invoke('get_dashboard_stats');
     },
-    async getRecentResidents(limit) {
-        return await window.__TAURI__.invoke('get_recent_residents', { limit: limit ?? 10 });
-    },
     async getCivicConfig() {
         // F15: centralized civic/officer strings.
         return await window.__TAURI__.invoke('get_civic_config');
@@ -128,5 +125,25 @@ const API = {
     
     async confirmDialog(message, title) {
         return await window.__TAURI__.dialog.ask(message, { title, type: 'warning' });
+    },
+    
+    // Encryption at rest
+    async encryptionGenerateKey() {
+        return await window.__TAURI__.invoke('encryption_generate_key');
+    },
+    async encryptionStatus() {
+        return await window.__TAURI__.invoke('encryption_status');
+    },
+    async encryptionEncryptDatabase() {
+        return await window.__TAURI__.invoke('encryption_encrypt_database');
+    },
+    async encryptionDecryptDatabase() {
+        return await window.__TAURI__.invoke('encryption_decrypt_database');
+    },
+    async encryptionEncryptPhotos() {
+        return await window.__TAURI__.invoke('encryption_encrypt_photos');
+    },
+    async encryptionDecryptPhotos() {
+        return await window.__TAURI__.invoke('encryption_decrypt_photos');
     },
 };

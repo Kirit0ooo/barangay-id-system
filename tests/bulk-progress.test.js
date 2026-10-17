@@ -15,7 +15,10 @@ function check(name, cond, hint = '') {
 const idCardRs = readFileSync(join(root, 'src-tauri/src/id_card.rs'), 'utf8');
 const mainRs = readFileSync(join(root, 'src-tauri/src/main.rs'), 'utf8');
 const apiJs = readFileSync(join(root, 'src/js/api.js'), 'utf8');
-const appJs = readFileSync(join(root, 'src/js/app.js'), 'utf8');
+// App modules are split across app.core/app.register/app.search/app.settings/app.detail/app.dashboard/app.js.
+// Concatenate them so path-based string checks still cover all view logic.
+const appModuleFiles = ['app.core','app.register','app.search','app.settings','app.detail','app.dashboard','app'];
+const appJs = appModuleFiles.map(f => readFileSync(join(root, 'src/js/' + f + '.js'), 'utf8')).join('\n');
 const indexHtml = readFileSync(join(root, 'src/index.html'), 'utf8');
 const cardTpl = readFileSync(join(root, 'src/card-template.html'), 'utf8');
 // Comment-stripped copy: historical notes may name deleted PDF items (allowed).
@@ -44,10 +47,10 @@ check('bulk confirms large jobs (>50)', /async printAllCards[\s\S]{0,3000}?confi
 check('bulk supports cancel flag', appJs.includes('bulkPrintCancel') || appJs.includes('cancelBulk'));
 check('toast uses sequence token (no stale hide)', /showToast[\s\S]{0,600}?(toastSeq|toastToken|seq \+ 1|seq \+= 1)/.test(appJs));
 check('validDaysLeft uses UTC midnight (DST-safe)', /validDaysLeft[\s\S]{0,1200}?Date\.UTC/.test(appJs));
-const viewFn = /async viewResident[\s\S]*?^        \},/m.exec(appJs)?.[0] || '';
-const editFn = /async editResident[\s\S]*?^        \},/m.exec(appJs)?.[0] || '';
+const viewFn = /async viewResident[\s\S]*?^    \},/m.exec(appJs)?.[0] || '';
+const editFn = /async editResident[\s\S]*?^    \},/m.exec(appJs)?.[0] || '';
 check('view/edit loads resident+photo in parallel', viewFn.includes('Promise.all') && editFn.includes('Promise.all'));
-const printFn = /printFilledCard\(html\)[\s\S]*?^        \},/m.exec(appJs)?.[0] || '';
+const printFn = /printFilledCard\(html\)[\s\S]*?^    \},/m.exec(appJs)?.[0] || '';
 check('printFilledCard avoids shared onload race', printFn.includes('onload = null') || printFn.includes('onload=null') || (printFn.includes('new iframe') && printFn.includes('new Promise')));
 check('no backend bulk invoke', !appJs.includes('generateAllIdCardsPdf') && !appJs.includes('generateIdCardPdf'));
 check('index.html Print All button', indexHtml.includes('printAllCards') && !indexHtml.includes('downloadAllIDPDF'));

@@ -21,6 +21,11 @@ pub struct CivicConfig {
     pub punong_name: String,
     pub punong_title: String,
     pub emergency_defaults: EmergencyDefaults,
+    /// When true, scheduled backup runs photo_gc in dry-run mode (scan + log
+    /// only, no deletions). Operators who prefer manual-only GC can set this
+    /// in config/civic.json; default false keeps scheduled auto-delete.
+    #[serde(default)]
+    pub photo_gc_dry_run: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,6 +51,7 @@ impl Default for CivicConfig {
                 relation: "SISTER".to_string(),
                 contact: "09987654321".to_string(),
             },
+            photo_gc_dry_run: false,
         }
     }
 }
@@ -53,7 +59,6 @@ impl Default for CivicConfig {
 fn config_file_path() -> Option<PathBuf> {
     crate::db::get_project_root().map(|r| r.join("config").join("civic.json"))
 }
-
 
 /// P17 content validation for operator-editable civic text: max 2000 chars,
 /// no HTML markup (`<`/`>` rejected so stored strings can never inject tags
@@ -74,7 +79,6 @@ fn validate_civic_text(field: &str, v: &str) -> Result<(), String> {
     }
     Ok(())
 }
-
 
 /// Load operator overrides from `<root>/config/civic.json` (partial JSON merged
 /// over defaults). Never panics; missing/invalid file => defaults.
@@ -118,6 +122,10 @@ pub fn load_civic_config() -> CivicConfig {
                             take("card_title", &mut cfg.card_title);
                             take("punong_name", &mut cfg.punong_name);
                             take("punong_title", &mut cfg.punong_title);
+                            // photo_gc_dry_run is a bool; missing => false (delete on).
+                            if let Some(v) = o.get("photo_gc_dry_run").and_then(|v| v.as_bool()) {
+                                cfg.photo_gc_dry_run = v;
+                            }
                             // Dead-PDF surface removed (Phase-1):
                             // template-override keys are no longer read —
                             // no render path ever consumed them.
@@ -163,7 +171,6 @@ pub fn load_civic_config() -> CivicConfig {
     }
     cfg
 }
-
 
 /// Short barangay token for one-line addresses.
 /// Prefers explicit config short name; falls back to last-token heuristic
@@ -256,6 +263,11 @@ pub async fn set_civic_config(partial: serde_json::Value) -> Result<CivicConfig,
         take("card_title", &mut cfg.card_title)?;
         take("punong_name", &mut cfg.punong_name)?;
         take("punong_title", &mut cfg.punong_title)?;
+        // photo_gc_dry_run: bool toggle — operators can enable dry-run mode
+        // via Settings/UI so scheduled backup only scans orphans without deleting.
+        if let Some(v) = o.get("photo_gc_dry_run").and_then(|v| v.as_bool()) {
+            cfg.photo_gc_dry_run = v;
+        }
     }
 
     // Validate size
@@ -282,7 +294,6 @@ pub async fn set_civic_config(partial: serde_json::Value) -> Result<CivicConfig,
     tracing::info!("civic.json updated at {}", path.display());
     Ok(cfg)
 }
-
 
 #[tauri::command]
 pub async fn open_path(path: String) -> Result<bool, String> {
@@ -358,4 +369,39 @@ mod short_barangay_tests {
         assert!(validate_civic_text("city_line", &"x".repeat(2000)).is_ok());
     }
 
+    // P2-7: photo_gc_dry_run defaults false, parses from JSON, round-trips.
+    #[test]
+    fn photo_gc_dry_run_default_and_json() {
+        // Default: false (scheduled backup deletes orphans).
+        assert!(!CivicConfig::default().photo_gc_dry_run);
+
+        // Missing field in JSON => false.
+        let json = r#"{"republic":"Test"}"#;
+        let v: serde_json::Value = serde_json::from_str(json).unwrap();
+        let mut cfg = CivicConfig::default();
+        if let Some(o) = v.as_object() {
+            if let Some(val) = o.get("photo_gc_dry_run").and_then(|v| v.as_bool()) {
+                cfg.photo_gc_dry_run = val;
+            }
+        }
+        assert!(!cfg.photo_gc_dry_run);
+
+        // Explicit true => true.
+        let json = r#"{"photo_gc_dry_run": true}"#;
+        let v: serde_json::Value = serde_json::from_str(json).unwrap();
+        let mut cfg = CivicConfig::default();
+        if let Some(o) = v.as_object() {
+            if let Some(val) = o.get("photo_gc_dry_run").and_then(|v| v.as_bool()) {
+                cfg.photo_gc_dry_run = val;
+            }
+        }
+        assert!(cfg.photo_gc_dry_run);
+
+        // Round-trip serialization preserves the bool.
+        let mut cfg = CivicConfig::default();
+        cfg.photo_gc_dry_run = true;
+        let s = serde_json::to_string(&cfg).unwrap();
+        let back: CivicConfig = serde_json::from_str(&s).unwrap();
+        assert!(back.photo_gc_dry_run);
+    }
 }
