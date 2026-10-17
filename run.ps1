@@ -6,11 +6,12 @@
     Double-click or run:
       powershell -ExecutionPolicy Bypass -File .\run.ps1
     Flags:
-      .\run.ps1 -Logs        # tail isolated logs (app.log.* + frontend.log + latest run/build) and exit - replaces view-logs.bat
+      .\run.ps1 -Logs        # tail isolated logs (app.log.* + frontend.log + latest run/build) and exit - supersedes view-logs.bat logic; wrapper remains
       .\run.ps1 -Fix         # deep clean: remove node_modules + .npm-cache contents, npm ci->install, verify tauri.cmd (historical fix-tauri.bat folded in)
       .\run.ps1 -NoInstall   # skip auto npm install, fail fast if tauri.cmd missing
       .\run.ps1 -Help        # usage
       .\run.ps1 -Audit       # warn-only cargo audit + npm audit (parity with build.ps1 -Audit)
+      .\run.ps1 -EnableVerboseLogging  # verbose console: RUST_LOG=debug + frontend debug
     Thin wrappers (same env pins, forward %*): run.bat (dev), build.bat (build.ps1), view-logs.bat (run.ps1 -Logs + explorer).
     Portable contract: every artifact (npm cache, cargo target, tmp,
     WebView2 data, logs, SQLite) stays inside this project folder.
@@ -43,60 +44,41 @@ param(
     [switch]$Help
 )
 
+# ---- StrictMode + error policy (catch typos, fail fast) ----
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+# ---- Dot-source shared launcher primitives (Invoke-SafeNative + env pins) ----
+$CommonModule = Join-Path $PSScriptRoot 'tools\launcher-common.ps1'
+if (-not (Test-Path $CommonModule)) {
+    Write-Host "[WARN] launcher-common.ps1 not found at $CommonModule - inline fallbacks only" -ForegroundColor Yellow
+    # Inline fallbacks so unconditional calls below never hard-crash under StrictMode.
+    function Set-PortableEnvPins { param([string]$Root) Write-Host '[fallback] Set-PortableEnvPins stub (launcher-common.ps1 missing)' -ForegroundColor Yellow }
+    function Restore-EnvPins { Write-Host '[fallback] Restore-EnvPins stub (launcher-common.ps1 missing)' -ForegroundColor Yellow }
+    function Invoke-SafeNative { param([string]$Exe, [Parameter(ValueFromRemainingArguments=$true)][string[]]$Arguments) & $Exe @Arguments }
+} else {
+    . $CommonModule
+}
+
 $Root = $PSScriptRoot
 if (-not $Root) { $Root = Split-Path -Parent $MyInvocation.MyCommand.Path }
 Set-Location $Root
 
-# ---- Native call safety helper (DRY: keep byte-identical logic in run.ps1/build.ps1; EAP Stop + npm notice on stderr = TerminatingError) ----
-# Every native invocation that may emit 'npm notice' (npx, npm, node, cargo, rustc, rustup)
-# MUST run with EAP Continue and filter npm notice so transcript does not log it as ERROR.
-# On Windows npx/npm are shimmed as npx.cmd/npm.cmd; using .cmd explicitly avoids the
-# PowerShell .ps1 shim which re-emits stderr as ErrorRecord under EAP Stop.
-function Invoke-SafeNative {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)][string]$Exe,
-        [Parameter(ValueFromRemainingArguments=$true)][string[]]$Args
-    )
-    $prevEap = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    try {
-        $actual = $Exe
-        # On Windows use npx.cmd/npm.cmd to avoid the PowerShell .ps1 shim that re-throws stderr as TerminatingError under EAP Stop.
-        # On non-Windows (Linux/macOS) the .cmd shim is not executable (Exec format error) - use plain npx/npm.
-        $isWin = $false
-        try { if ($IsWindows) { $isWin = $true } } catch {}
-        if (-not $isWin -and $env:OS -like '*Windows*') { $isWin = $true }
-        if (-not $isWin -and $PSVersionTable.PSEdition -eq 'Desktop') { $isWin = $true } # Windows PowerShell 5.1 has no $IsWindows
-        if ($isWin) {
-            if ($Exe -eq 'npx' -and (Get-Command 'npx.cmd' -ErrorAction SilentlyContinue)) { $actual = 'npx.cmd' }
-            elseif ($Exe -eq 'npm' -and (Get-Command 'npm.cmd' -ErrorAction SilentlyContinue)) { $actual = 'npm.cmd' }
-        }
-        # Inject --yes for npx tauri to suppress npm notice fetching; --silent for npm ci/install
-        $effectiveArgs = $Args
-        if ($Exe -eq 'npx' -and $Args -contains 'tauri' -and $Args -notcontains '--yes') {
-            $effectiveArgs = @('--yes') + $Args
-        }
-        if ($Exe -eq 'npm' -and ($Args -contains 'ci' -or $Args -contains 'install') -and $Args -notcontains '--silent' -and $Args -notcontains '--loglevel') {
-            $effectiveArgs = $Args + @('--silent')
-        }
-        try {
-            & $actual @effectiveArgs 2>&1 | ForEach-Object {
-                $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { [string]$_ }
-                if ($line -match 'npm notice') { return } # filter - do not pollute transcript as ERROR
-                $_
-            }
-        } catch [System.Management.Automation.PipelineStoppedException] {
-            # Ctrl+C / watcher exit tears down Out-Host pipeline - expected stop, not an error.
-        } catch {
-            if ($_.FullyQualifiedErrorId -match 'PipelineStopped' -or "$($_.Exception.Message)" -match 'pipeline.*stopped') { return }
-            throw
-        }
-    } finally {
-        $ErrorActionPreference = $prevEap
-    }
+# ---- Capture original env for restore-on-exit (never leak pins to parent shell) ----
+# Restore-EnvPins is called in every catch + finally block below.
+
+# ---- Portable env pins (MUST precede any npm/cargo/node call) ----
+Set-PortableEnvPins $Root
+if ($EnableVerboseLogging) {
+    $env:RUST_LOG = 'debug'
+    $env:BARANGAY_VERBOSE = '1'
+    Write-Verbose '[Barangay ID] Verbose: RUST_LOG=debug + BARANGAY_VERBOSE=1'
+    Write-Host '[Barangay ID] Verbose: RUST_LOG=debug + BARANGAY_VERBOSE=1 (console + app.log + frontend console)' -ForegroundColor Magenta
 }
+Write-Verbose '[Barangay ID] Portable env pins applied (isolated caches, no %TEMP% writes)'
+
+# Ensure data dir exists for SQLite (first-run tauri dev may need it).
+Ensure-DataDir $Root
 
 if ($Help) {
     Write-Host @"
@@ -109,7 +91,7 @@ Usage:
   .\run.ps1 -EnableVerboseLogging     # verbose console: RUST_LOG=debug + frontend debug (same as `$env:RUST_LOG='debug'; .\run.ps1`)
   .\run.ps1 -Audit       # warn-only cargo audit + npm audit (parity with build.ps1 -Audit)
   .\run.ps1 -Help        # this help
-  run.bat [flags]        # thin wrapper -> run.ps1 %* (same env pins); build.bat -> build.ps1; view-logs.bat -> run.ps1 -Logs + explorer
+  run.bat [flags]        # thin wrapper -> run.ps1 %* (same env pins); build.bat -> build.ps1; view-logs.bat -> run.ps1 -Logs
 
 Portable contract: all artifacts stay inside this folder (no writes to %APPDATA%/%TEMP%).
 Env pins BEFORE any npm/cargo: NPM_CONFIG_CACHE=./.npm-cache CARGO_TARGET_DIR=./src-tauri/target TMP/TEMP/TMPDIR=./tmp WEBVIEW2_USER_DATA_FOLDER=./tmp/webview2
@@ -122,25 +104,8 @@ Verbose: .\run.ps1 -EnableVerboseLogging  (or `$env:RUST_LOG='debug'; .\run.ps1)
 For comment-based help: Get-Help .\run.ps1 -Detailed
 "@
     try { Get-Help $MyInvocation.MyCommand.Path -Detailed -ErrorAction SilentlyContinue | Out-String | Write-Host } catch {}
+    Restore-EnvPins
     exit 0
-}
-
-# ---- Portable env pins (MUST precede any npm/cargo/node call) ----
-$env:NPM_CONFIG_CACHE          = Join-Path $Root '.npm-cache'
-$env:CARGO_TARGET_DIR          = Join-Path $Root 'src-tauri\target'
-$env:TMP                       = Join-Path $Root 'tmp'
-$env:TEMP                      = Join-Path $Root 'tmp'
-$env:TMPDIR                    = Join-Path $Root 'tmp'
-$env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $Root 'tmp\webview2'
-if ($EnableVerboseLogging) { $env:RUST_LOG = 'debug'; $env:BARANGAY_VERBOSE = '1'; Write-Host '[Barangay ID] Verbose: RUST_LOG=debug + BARANGAY_VERBOSE=1 (console + app.log + frontend console)' -ForegroundColor Magenta }
-if (-not $env:RUST_LOG) { $env:RUST_LOG = 'info' }
-if ($env:BARANGAY_VERBOSE -eq '1') { Write-Host '[Barangay ID] Frontend verbose: BARANGAY_VERBOSE=1 - JS console will show [debug] lines' -ForegroundColor Magenta }
-
-foreach ($d in @('logs', 'tmp', 'tmp\webview2', '.npm-cache', 'data')) {
-    $p = Join-Path $Root $d
-    if (-not (Test-Path $p)) {
-        New-Item -ItemType Directory -Path $p | Out-Null
-    }
 }
 
 # ---- -Logs flag: tail isolated logs and exit (merges view-logs.bat) ----
@@ -198,6 +163,7 @@ if ($Logs) {
 
     Write-Host "`nFull logs folder: $Root\logs" -ForegroundColor Cyan
     Write-Host "Tip: view-logs.bat (if present) also opens Explorer; or: explorer logs" -ForegroundColor DarkGray
+    Restore-EnvPins
     exit 0
 }
 
@@ -214,6 +180,7 @@ if ($Audit) {
         if ($LASTEXITCODE -ne 0) { Write-Host '[audit] npm audit reported issues at/above moderate (see above) - warn-only' -ForegroundColor Yellow }
     } finally { $ErrorActionPreference = $prevEap }
     Write-Host '[Barangay ID] Audit done (warn-only).' -ForegroundColor Green
+    Restore-EnvPins
     exit 0
 }
 
@@ -381,10 +348,12 @@ try {
     } catch [System.Management.Automation.PipelineStoppedException] {
         # Ctrl+C / watcher teardown: expected user stop, not a failure. Transcript still closes in finally.
         Write-Host 'Tauri dev stopped by user (Ctrl+C) - normal exit.' -ForegroundColor Yellow
+        Restore-EnvPins
         exit 0
     } catch {
         if ($_.FullyQualifiedErrorId -match 'PipelineStopped' -or "$($_.Exception.Message)" -match 'pipeline.*stopped') {
             Write-Host 'Tauri dev stopped by user (Ctrl+C) - normal exit.' -ForegroundColor Yellow
+            Restore-EnvPins
             exit 0
         }
         throw
@@ -393,21 +362,26 @@ try {
         Write-Host "Tauri dev exited with $LASTEXITCODE. Logs: logs/app.log.*, logs/frontend.log, $logFile" -ForegroundColor Red
         Write-Host 'Try: npx tauri info  or  .\run.ps1 -Fix  (clean reinstall)' -ForegroundColor Yellow
         Write-Host "Tail isolated logs: .\run.ps1 -Logs" -ForegroundColor Yellow
+        Restore-EnvPins
         exit $LASTEXITCODE
     }
     Write-Host "Tauri dev exited normally. Tail hint: .\run.ps1 -Logs  (or view-logs.bat if present)" -ForegroundColor Green
 } catch [System.Management.Automation.PipelineStoppedException] {
     # Ctrl+C during any pipeline (tauri dev watch, Out-Host): expected stop, exit 0 so transcript shows clean end.
     Write-Host 'Stopped by user (Ctrl+C) - normal exit.' -ForegroundColor Yellow
+    Restore-EnvPins
     exit 0
 } catch {
     if ($_.FullyQualifiedErrorId -match 'PipelineStopped' -or "$($_.Exception.Message)" -match 'pipeline.*stopped') {
         Write-Host 'Stopped by user (Ctrl+C) - normal exit.' -ForegroundColor Yellow
+        Restore-EnvPins
         exit 0
     }
     Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
+    Restore-EnvPins
     exit 1
 } finally {
     try { Stop-Transcript | Out-Null } catch {}
+    Restore-EnvPins
     Write-Host "Run log saved to $logFile" -ForegroundColor Green
 }

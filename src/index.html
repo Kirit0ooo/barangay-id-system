@@ -8,6 +8,7 @@
  <script defer src="vendor/alpine.min.js"></script>
  
  <link rel="stylesheet" href="css/style.css">
+ <link rel="icon" type="image/x-icon" href="../barangay.ico">
  <script src="js/verbose.js"></script>
 </head>
 <body class="min-h-screen text-slate-900 antialiased selection:bg-amber-200 selection:text-slate-900">
@@ -24,7 +25,7 @@
  <p class="text-[11px] tracking-wide text-slate-300 truncate">Barangay Nouvelas Occidental (Balud), Basey Samar</p>
  </div>
  </div>
- <div class="flex items-center gap-1 sm:gap-1.5 p-1 rounded-full bg-white/10 border border-white/10 overflow-x-auto scrollbar-none nav-scroll shrink-0 max-w-[58%] sm:max-w-none" role="tablist" aria-label="Main sections">
+ <div hidden>
  <button role="tab" :aria-selected="currentView === 'dashboard'" @click="currentView = 'dashboard'" :class="currentView === 'dashboard' ? 'bg-white text-[#0F2B5E] shadow-sm ring-2 ring-[#C79C14]' : 'bg-white/10 text-white hover:bg-white/20'" class="px-3.5 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 whitespace-nowrap">Dashboard</button>
  <button role="tab" :aria-selected="currentView === 'register'" @click="clearForm(); currentView = 'register'" :class="currentView === 'register' ? 'bg-white text-[#0F2B5E] shadow-sm ring-2 ring-[#C79C14]' : 'bg-white/10 text-white hover:bg-white/20'" class="px-3.5 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 whitespace-nowrap">Register</button>
  <button role="tab" :aria-selected="currentView === 'search'" @click="await searchResidents(); currentView='search'" :class="currentView === 'search' ? 'bg-white text-[#0F2B5E] shadow-sm ring-2 ring-[#C79C14]' : 'bg-white/10 text-white hover:bg-white/20'" class="px-3.5 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 whitespace-nowrap">Search</button>
@@ -37,23 +38,42 @@
  <!-- Main -->
  <main id="main-content" tabindex="-1" class="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 focus:outline-none">
  
- <!-- DASHBOARD — premium -->
+ <!-- WELCOME HUB — big service tiles for non-tech-savvy officers -->
  <div x-show="currentView === 'dashboard'" x-cloak class="space-y-6" x-transition.opacity>
- <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+ <div class="flex items-baseline justify-between gap-3">
  <div>
- <div class="flex items-baseline gap-3 mt-1">
- <h2 class="text-2xl sm:text-[28px] font-extrabold tracking-tight text-slate-900 view-title">Dashboard</h2>
+ <h2 class="text-2xl font-extrabold tracking-tight text-slate-900 view-title">Welcome</h2>
+ <p class="hub-motto">"Serving our community, one resident at a time."</p>
  </div>
+ <span class="hub-pill" aria-hidden="true">Dashboard</span>
  </div>
- <div class="flex gap-2">
- <button @click="clearForm(); currentView = 'register'" class="inline-flex items-center gap-2 bg-slate-900 hover:bg-black text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-sm transition focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2">
- <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
- New Resident
+
+ <div class="hub-grid">
+ <button @click="clearForm(); currentView='register'" class="hub-tile hub-tile--register" aria-label="New Resident Registration — add a resident and create their ID card">
+ <span class="hub-tile__icon hub-tile__icon--register"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span>
+ <span class="hub-tile__title">New Resident Registration</span>
+ <span class="hub-tile__desc">Add a resident and create their ID card</span>
+ <span class="hub-tile__arrow" aria-hidden="true">→</span>
+ <span class="hub-tile__steps"><span>1</span>Fill form <span>2</span>Add photo <span>3</span>Save</span>
  </button>
- <button @click="searchResidents(); currentView='search'" class="inline-flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-2.5 rounded-xl text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">Search</button>
+
+ <button @click="searchResidents(); currentView='search'" class="hub-tile hub-tile--search" aria-label="Resident List &amp; Search — find, filter, edit &amp; print cards">
+ <span class="hub-tile__icon hub-tile__icon--search"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-3.5-3.5"/></svg></span>
+ <span class="hub-tile__title">Resident List &amp; Search</span>
+ <span class="hub-tile__desc">Find, filter, edit &amp; print cards</span>
+ <span class="hub-tile__arrow" aria-hidden="true">→</span>
+ <span class="hub-tile__chips">All · Active · Renew · Lost · Damage · Search</span>
+ </button>
+
+ <button @click="await loadCivicConfig(); currentView='settings'" class="hub-tile hub-tile--settings" aria-label="Settings — barangay info, backup, database health">
+ <span class="hub-tile__icon hub-tile__icon--settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></span>
+ <span class="hub-tile__title">Settings</span>
+ <span class="hub-tile__desc">Barangay info, backup, database health</span>
+ <span class="hub-tile__arrow" aria-hidden="true">→</span>
+ <span class="hub-tile__chips">Backup · Restore · Excel · Logs</span>
+ </button>
  </div>
- </div>
- 
+
  <!-- Population hero — civic overview: totals left, gauge center -->
  <div class="stat-card stat-hero" role="region" aria-label="Population overview">
  <div class="stat-hero__accent" aria-hidden="true"></div>
@@ -80,10 +100,10 @@
  <div class="stat-hero__chart">
  <div class="gauge-wrap">
  <svg class="gauge" viewBox="0 0 200 122" role="img" :aria-label="'Male ' + stats.male + ', Female ' + stats.female">
- <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#eef2f7" stroke-width="14" stroke-linecap="round" class="gauge-track" aria-hidden="true"/>
- <g class="gauge-ticks" aria-hidden="true" fill="#cbd5e1"><circle class="gauge-tick" cx="43.4" cy="43.4" r="2.5"/><circle class="gauge-tick" cx="100" cy="20" r="2.5"/><circle class="gauge-tick" cx="156.6" cy="43.4" r="2.5"/></g>
- <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#2563eb" stroke-width="14" stroke-linecap="round" pathLength="100" class="gauge-arc gauge-arc--male" :stroke-dasharray="gaugeArcs().mLen + ' 100'"/>
- <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#ec4899" stroke-width="14" stroke-linecap="round" pathLength="100" class="gauge-arc gauge-arc--female" :stroke-dasharray="gaugeArcs().fLen + ' 100'" :stroke-dashoffset="gaugeArcs().fOff"/>
+ <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="var(--border)" stroke-width="14" stroke-linecap="round" class="gauge-track" aria-hidden="true"/>
+ <g class="gauge-ticks" aria-hidden="true" fill="var(--border-strong)"><circle class="gauge-tick" cx="43.4" cy="43.4" r="2.5"/><circle class="gauge-tick" cx="100" cy="20" r="2.5"/><circle class="gauge-tick" cx="156.6" cy="43.4" r="2.5"/></g>
+ <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="var(--color-primary)" stroke-width="14" stroke-linecap="round" pathLength="100" class="gauge-arc gauge-arc--male" :stroke-dasharray="gaugeArcs().mLen + ' 100'"/>
+ <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="var(--color-accent)" stroke-width="14" stroke-linecap="round" pathLength="100" class="gauge-arc gauge-arc--female" :stroke-dasharray="gaugeArcs().fLen + ' 100'" :stroke-dashoffset="gaugeArcs().fOff"/>
  </svg>
  <div class="gauge-center" aria-hidden="true">
  <span class="gauge-center__value" x-text="stats.total">0</span>
@@ -99,7 +119,10 @@
  </div>
  </div>
 
- <!-- Card Status counts -- Active / Renew / Lost / Damage -->
+
+ <!-- Card Status counts — Active / Renew / Lost / Damage -->
+ <div class="stat-card-group">
+ <p class="stat-card-group__label">Card Status</p>
  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
  <div class="stat-card stat-card--active" role="region" aria-label="Active cards">
  <div class="stat-card__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 6L9 17l-5-5"/></svg></div>
@@ -126,68 +149,22 @@
  <div class="stat-card__meta">Reported damaged</div>
  </div>
  </div>
-
- <div class="card recent-card">
- <div class="section-head">
- <div class="section-head__icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
- <div class="section-head__title">Recent Registrations</div>
- <span class="recent-count" x-text="recentResidents.length + ' shown'" aria-live="polite">0 shown</span>
- </div>
- <div class="overflow-x-auto scrollbar-thin">
- <table class="data-table" role="grid">
- <caption class="sr-only">Recent registrations — 10 most recent residents</caption>
- <thead>
- <tr>
- <th scope="col">ID No.</th>
- <th scope="col">Name</th>
- <th scope="col">Purok</th>
- <th scope="col">Gender</th>
- <th scope="col">Registered</th>
- <th scope="col">Actions</th>
- </tr>
- </thead>
- <tbody>
- <template x-for="resident in recentResidents" :key="resident.id">
- <tr>
- <td class="font-mono text-[13px] font-bold text-blue-700" x-text="resident.resident_id"></td>
- <td>
- <div class="font-semibold text-slate-900 leading-none" x-text="resident.last_name + ', ' + resident.first_name"></div>
- <div class="text-xs text-slate-500 mt-0.5" x-text="resident.middle_name || 'N/A'"></div>
- </td>
- <td><span class="purok-pill" x-text="resident.address_purok || 'N/A'"></span></td>
- <td class="text-slate-700" x-text="resident.gender"></td>
- <td class="text-slate-500 text-xs" x-text="resident.date_registered?.substring(0, 10)"></td>
- <td>
- <div class="flex justify-end">
- <button @click="viewResident(resident.id)" :aria-label="`View ${resident.last_name}`" class="action-btn action-btn--view" title="View details"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg><span class="hidden sm:inline">View</span></button>
- </div>
- </td>
- </tr>
- </template>
- <tr x-show="recentResidents.length === 0">
- <td colspan="6">
- <div class="empty-state">
- <div class="empty-state__icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M5 20c0-4 3-7 7-7s7 3 7 7"/></svg></div>
- <div class="empty-state__title">No residents yet</div>
- <div class="empty-state__desc">Click <span class="font-semibold text-slate-700">New Resident</span> to register the first one.</div>
- <button @click="clearForm(); currentView='register'" class="action-btn action-btn--primary"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> Register New Resident</button>
- </div>
- </td>
- </tr>
- </tbody>
- </table>
- </div>
- </div>
+</div>
  </div>
 
  <!-- REGISTER — premium form system -->
  <div x-show="currentView === 'register'" x-cloak class="register-view space-y-5" x-transition.opacity>
- <div class="flex items-center justify-between gap-4">
- <div>
+ <div class="register-head">
+ <button @click="currentView='dashboard'" class="hub-back">← Back to Home</button>
+ <div class="flex-1 min-w-0">
+ <p class="register-eyebrow">Resident Registration</p>
  <h2 class="text-2xl font-extrabold tracking-tight text-slate-900 view-title" x-text="editingResident ? 'Edit Resident' : 'Register New Resident'">Register New Resident</h2>
+ <p class="register-sub" x-text="editingResident ? 'Update an existing resident record.' : 'Add a new resident to the barangay ID system.'">Add a new resident to the barangay ID system.</p>
  </div>
- <button x-show="!editingResident" @click="clearForm" class="action-btn action-btn--secondary">Clear Form</button>
+ <div class="flex items-center gap-2">
+ <button x-show="!editingResident" @click="clearForm" class="action-btn action-btn--secondary register-clear">Clear Form</button>
  <button x-show="editingResident" @click="goBackFromEdit()" class="action-btn action-btn--secondary" aria-label="Back to resident details"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back</button>
+ </div>
  </div>
 
  <form @submit.prevent="saveResident" class="space-y-5">
@@ -200,23 +177,23 @@
  <div class="flex-shrink-0 mx-auto lg:mx-0 text-center lg:text-left">
  <label for="photo-upload" class="form-field__label">Photo · 1×1 White Background</label>
  <div class="w-[160px] aspect-square bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl flex items-center justify-center overflow-hidden relative group hover:border-slate-400 hover:bg-slate-100 transition upload-focus mx-auto lg:mx-0 register-photo">
- <img x-show="form.photoData || editPhotoUrl" x-cloak :src="form.photoData || editPhotoUrl" alt="Resident photo preview" class="max-w-full max-h-full object-contain">
+ <img x-show="form.photoData || editPhotoUrl" x-cloak :src="form.photoData || editPhotoUrl" alt="Resident photo preview" class="max-w-full max-h-full object-contain register-photo__preview">
  <div x-show="!form.photoData && !editPhotoUrl" x-cloak class="text-center px-3">
  <div class="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center mx-auto text-slate-400" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 19a7 7 0 1 0 0-14 7 7 0 0 0 0 14z"/><path d="M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M12 16.5v3"/></svg></div>
- <div class="text-xs font-semibold text-slate-600 mt-2">Click to upload</div>
- <div class="text-[11px] text-slate-500">JPG/PNG · 6MB max</div>
+ <div class="text-xs font-semibold text-slate-600 mt-2 register-photo__cta">Click to upload</div>
+ <div class="text-[11px] text-slate-500 register-photo__hint">JPG/PNG · 6MB max</div>
  </div>
  <input id="photo-upload" type="file" accept="image/*" @change="handlePhotoUpload" aria-label="Upload photo, JPG or PNG, 6 megabytes max" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer focus:outline-none">
  </div>
- <button type="button" x-show="form.photoData || editPhotoUrl" x-cloak @click="form.photoData = ''; form.photo_filename = ''; editPhotoUrl = ''" class="mt-2 text-xs font-semibold text-red-600 hover:text-red-700">Remove Photo</button>
+ <button type="button" x-show="form.photoData || editPhotoUrl" x-cloak @click="form.photoData = ''; form.photo_filename = ''; editPhotoUrl = ''" class="mt-2 text-xs font-semibold text-red-600 hover:text-red-700 register-remove">Remove Photo</button>
  </div>
  <div class="flex-1 space-y-4">
  <div class="grid sm:grid-cols-2 gap-4">
  <div class="sm:col-span-2">
  <label for="resident-id" class="form-field__label">Resident ID No. <span class="form-field__req" aria-hidden="true">*</span></label>
- <div class="flex gap-2">
+ <div class="register-idrow">
  <input id="resident-id" type="text" x-model="form.resident_id" @input="onInputUpper($event, 'resident_id')" required placeholder="BRGY-2026-00001" autocomplete="off" spellcheck="false" aria-describedby="resident-id-help" class="form-field__input font-mono text-sm bg-slate-50">
- <button type="button" @click="generateID" aria-label="Generate next resident ID" class="shrink-0 action-btn action-btn--primary">Generate</button>
+ <button type="button" @click="generateID" aria-label="Generate next resident ID" class="shrink-0 action-btn action-btn--primary register-generate">Generate</button>
  </div>
  <p id="resident-id-help" class="form-field__help">Auto MAX suffix per year · orphan photo cleaned on duplicate.</p>
  </div>
@@ -227,11 +204,12 @@
  </div>
 
  <!-- Personal Information -->
- <div class="form-section">
+ <div class="form-section register-section">
  <div class="form-section__head">
  <span class="form-section__number register-number">1</span>
+ <div class="register-section__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
  <h3 class="form-section__title">Personal Information</h3>
- <span class="ml-auto text-xs text-slate-500 hidden sm:block">* required</span>
+ <span class="ml-auto hidden sm:block text-xs font-semibold text-slate-500 whitespace-nowrap">* required</span>
  </div>
  <div class="form-section__body">
  <div class="form-grid form-grid--4">
@@ -252,9 +230,10 @@
  </div>
 
  <!-- Address -->
- <div class="form-section">
+ <div class="form-section register-section">
  <div class="form-section__head">
  <span class="form-section__number register-number">2</span>
+ <div class="register-section__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
  <h3 class="form-section__title">Address</h3>
  </div>
  <div class="form-section__body">
@@ -268,9 +247,10 @@
  </div>
 
  <!-- Emergency -->
- <div class="form-section">
+ <div class="form-section register-section">
  <div class="form-section__head">
  <span class="form-section__number register-number">3</span>
+ <div class="register-section__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.8 12.8 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.8 12.8 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div>
  <h3 class="form-section__title">Emergency Contact</h3>
  </div>
  <div class="form-section__body">
@@ -301,19 +281,25 @@
 
  <!-- Actions -->
  <div class="register-actions">
- <button type="button" x-show="!editingResident" @click="clearForm" :disabled="saving" :class="['action-btn', 'action-btn--secondary', { 'opacity-55 cursor-not-allowed': saving }]" title="Clear the form">Cancel</button>
+ <p class="register-actions__note" x-show="!editingResident">All fields are saved locally. Photos are stored as JPEG in the data folder.</p>
+ <div class="register-actions__btns">
+ <button type="button" x-show="!editingResident" @click="clearForm(); currentView='dashboard'" :disabled="saving" :class="['action-btn', 'action-btn--secondary', { 'opacity-55 cursor-not-allowed': saving }]" title="Clear the form">Cancel</button>
  <button type="submit" :disabled="saving" :class="['action-btn', 'action-btn--primary', 'register-submit', { 'opacity-55 cursor-not-allowed': saving }]">
  <svg x-show="saving" class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/><path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75"/></svg>
  <span x-text="saving ? 'Saving...' : (editingResident ? 'Update Resident' : 'Register Resident')">Register Resident</span>
  </button>
+ </div>
  </div>
  </form>
  </div>
 
  <!-- Search View — premium filter + table -->
  <div x-show="currentView === 'search'" x-cloak x-init="searchResidents()" class="space-y-5">
+ <div class="flex items-center justify-between gap-4">
+ <button @click="currentView='dashboard'" class="hub-back">← Back to Home</button>
  <div>
  <h2 class="text-2xl font-extrabold tracking-tight text-slate-900 view-title">Search Residents</h2>
+ </div>
  </div>
  
  <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
@@ -408,8 +394,11 @@
 
  <!-- Settings View — semantic card sections -->
  <div x-show="currentView === 'settings'" x-cloak class="space-y-5">
+ <div class="flex items-center justify-between gap-4">
+ <button @click="currentView='dashboard'" class="hub-back">← Back to Home</button>
  <div>
  <h2 class="text-2xl font-extrabold tracking-tight text-slate-900 view-title">Settings</h2>
+ </div>
  </div>
  
  <div class="card">
@@ -424,9 +413,13 @@
  <div class="form-field sm:col-span-2"><label for="set-prov" class="form-field__label">Province Line (e.g., "Province of Samar • Municipality of Basey")</label><input id="set-prov" type="text" x-model="settings.provinceName" @input="onSettingsUpper($event, 'provinceName')" autocomplete="off" class="form-field__input uppercase field-upper"></div>
  <div class="form-field sm:col-span-2"><label for="set-punong" class="form-field__label">Barangay Captain (printed on ID cards)</label><input id="set-punong" type="text" x-model="settings.punongName" @input="onSettingsUpper($event, 'punongName')" autocomplete="off" class="form-field__input uppercase field-upper"></div>
  </div>
- <div class="flex gap-2">
+ <div class="flex gap-2 items-center">
  <button @click="saveSettings" class="action-btn action-btn--primary">Save Changes</button>
  <button @click="loadCivicConfig" class="action-btn action-btn--secondary">Reset to Saved</button>
+ <label class="action-btn action-btn--secondary action-chip" title="Apply a red-tinted backdrop theme (opt-in, defaults off). Saved in localStorage.">
+  <input type="checkbox" :checked="theme === 'red-gradient'" @change="setTheme($event.target.checked)" class="w-4 h-4 rounded border-slate-300" aria-label="Red gradient theme">
+  <span class="text-xs font-bold text-slate-700">Red gradient theme</span>
+ </label>
  </div>
  </div>
  </div>
@@ -527,10 +520,10 @@
  <!-- DETAIL VIEW — resident details (replaces modal) — x-cloak prevents FOUC leak onto other tabs -->
  <div x-show="currentView === 'detail'" x-cloak class="detail-view space-y-5">
  <div class="detail-view-head">
+ <button @click="closeDetail(); currentView='dashboard'" class="hub-back detail-view-back">← Back to Home</button>
  <div>
  <h2 class="text-2xl font-extrabold tracking-tight text-slate-900 view-title">Resident Details</h2>
  </div>
- <button @click="closeDetail()" class="action-btn action-btn--secondary detail-view-back" aria-label="Back to previous view"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back</button>
  </div>
 
  <template x-if="detailResident">
@@ -643,6 +636,13 @@
  <script src="js/logger.js"></script>
  <script src="js/api.js"></script>
  <script src="js/helpers.js"></script>
+ <!-- Modular app (replaces monolithic app.js) — load order matters: core first, then views -->
+ <script src="js/app.core.js"></script>
+ <script src="js/app.register.js"></script>
+ <script src="js/app.search.js"></script>
+ <script src="js/app.settings.js"></script>
+ <script src="js/app.detail.js"></script>
+ <script src="js/app.dashboard.js"></script>
  <script src="js/app.js"></script>
 </body>
 </html>

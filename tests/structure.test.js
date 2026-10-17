@@ -119,3 +119,62 @@ describe('view-root nesting', () => {
     assert.doesNotMatch(last, /--amber-neon/, 'final body background must not use --amber-neon red');
   });
 });
+
+
+describe('theme toggle invariants', () => {
+  it('theme has exactly one writer (applyTheme)', () => {
+    // App modules are split across app.core/app.register/app.search/app.settings/app.detail/app.dashboard/app.js.
+    // Concatenate them so path-based string checks still cover all view logic.
+    const appModuleFiles = ['app.core','app.register','app.search','app.settings','app.detail','app.dashboard','app'];
+    const appJs = appModuleFiles.map(f => readFileSync(join(root, 'src/js/' + f + '.js'), 'utf8')).join('\n');
+    const writes = appJs.split('this.theme =').length - appJs.split('this.theme ===').length;
+    assert.equal(writes, 1, 'this.theme must have exactly one writer (applyTheme)');
+  });
+
+  it('applyTheme() runs before the backend await in init()', () => {
+    // App modules are split across app.core/app.register/app.search/app.settings/app.detail/app.dashboard/app.js.
+    const appModuleFiles = ['app.core','app.register','app.search','app.settings','app.detail','app.dashboard','app'];
+    const appJs = appModuleFiles.map(f => readFileSync(join(root, 'src/js/' + f + '.js'), 'utf8')).join('\n');
+    const iTheme = appJs.indexOf('this.applyTheme();');
+    const iCivic = appJs.indexOf('await this.loadCivicConfig();');
+    assert.ok(iTheme !== -1 && iCivic !== -1 && iTheme < iCivic,
+      'applyTheme() must run before the first backend await in init()');
+  });
+
+  it('toggle checkbox uses :checked comparison not x-model', () => {
+    const lbl = html.indexOf('aria-label="Red gradient theme"');
+    const tagStart = html.lastIndexOf('<input', lbl);
+    const tag = html.slice(tagStart, html.indexOf('>', lbl));
+    assert.ok(tag.includes(`:checked="theme === 'red-gradient'"`),
+      'toggle checkbox must read theme via :checked comparison');
+
+    assert.ok(!tag.includes('x-model'),
+      'toggle checkbox must not bind theme via x-model (boolean coercion)');
+  });
+
+  it('applyTheme clears data-theme so paper stays reachable', () => {
+    // App modules are split across app.core/app.register/app.search/app.settings/app.detail/app.dashboard/app.js.
+    const appModuleFiles = ['app.core','app.register','app.search','app.settings','app.detail','app.dashboard','app'];
+    const appJs = appModuleFiles.map(f => readFileSync(join(root, 'src/js/' + f + '.js'), 'utf8')).join('\n');
+    assert.ok(appJs.includes('delete document.documentElement.dataset.theme'),
+      'applyTheme must clear data-theme, otherwise the theme toggle is one-way');
+  });
+
+  it('toggle row uses items-center not items-end', () => {
+    assert.ok(html.includes('<div class="flex gap-2 items-center">'),
+      'toggle row must use backed items-center class');
+    const rowStart = html.indexOf('<div class="flex gap-2 items-center">');
+    const rowEnd = html.indexOf('aria-label="Red gradient theme"');
+    const row = html.slice(rowStart, rowEnd);
+    assert.ok(!row.includes('items-end'), 'toggle row must not use items-end');
+  });
+
+  it('style.css ships opt-in red-gradient body rule with font bump', () => {
+    assert.ok(styleCss.includes('html[data-theme="red-gradient"]'),
+      'style.css must declare the red-gradient theme selector');
+    assert.ok(styleCss.includes('background-attachment:fixed'),
+      'red-gradient rule must pin background-attachment:fixed');
+    assert.ok(styleCss.includes('font-size: 12px'),
+      'help text must be bumped 11->12px for legibility');
+  });
+});

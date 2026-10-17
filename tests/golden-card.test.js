@@ -207,7 +207,10 @@ check('truncate mirror: widths 12/9/62/48/30/20 hold', [12, 9, 62, 48, 30, 20].e
 // Backend is QR + date helpers only (PDF render deleted); the template +
 // frontend payload is the single render path for preview/print/bulk.
 const idCardRs = readFileSync(join(root, 'src-tauri/src/id_card.rs'), 'utf8');
-const appJs = readFileSync(join(root, 'src/js/app.js'), 'utf8');
+// App modules are split across app.core/app.register/app.search/app.settings/app.detail/app.dashboard/app.js.
+// Concatenate them so path-based string checks still cover all view logic.
+const appModuleFiles = ['app.core','app.register','app.search','app.settings','app.detail','app.dashboard','app'];
+const appJs = appModuleFiles.map(f => readFileSync(join(root, 'src/js/' + f + '.js'), 'utf8')).join('\n');
 const helpersJs = readFileSync(join(root, 'src/js/helpers.js'), 'utf8');
 const configRs = readFileSync(join(root, 'src-tauri/src/config.rs'), 'utf8');
 const cargoToml = readFileSync(join(root, 'src-tauri/Cargo.toml'), 'utf8');

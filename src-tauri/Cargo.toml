@@ -14,7 +14,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite", "macros", "chrono"] }
 tokio = { version = "1", features = ["full"] }
-thiserror = "1"
 anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
@@ -27,6 +26,10 @@ uuid = { version = "1", features = ["v4", "serde"] }
 calamine = "0.24" # Excel import (export.rs); kept, PDF-independent
 base64 = "0.21"
 qrcode = { version = "0.13", features = ["image"] } # preview QR data-URL (get_qr_data_url); kept, PDF-independent
+# Encryption at rest for SQLite database file (AES-256-GCM).
+aes-gcm = "0.10"
+rand = "0.8"
+zeroize = "1.6"
 
 [features]
 default = ["custom-protocol"]

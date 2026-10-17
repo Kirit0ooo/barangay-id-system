@@ -89,7 +89,10 @@ check('get_qr_data_url command exists', idCardRs.includes('pub async fn get_qr_d
 check('main registers get_qr_data_url', readFileSync(join(root, 'src-tauri/src/main.rs'), 'utf8').includes('id_card::get_qr_data_url'), 'command not registered');
 const apiJs = readFileSync(join(root, 'src/js/api.js'), 'utf8');
 check('api.js wraps getQrDataUrl', apiJs.includes('getQrDataUrl'), 'frontend still scrapes QR');
-const appJs = readFileSync(join(root, 'src/js/app.js'), 'utf8');
+// App modules are split across app.core/app.register/app.search/app.settings/app.detail/app.dashboard/app.js.
+// Concatenate them so path-based string checks still cover all view logic.
+const appModuleFiles = ['app.core','app.register','app.search','app.settings','app.detail','app.dashboard','app'];
+const appJs = appModuleFiles.map(f => readFileSync(join(root, 'src/js/' + f + '.js'), 'utf8')).join('\n');
 check('buildCardPayload calls getQrDataUrl', appJs.includes('API.getQrDataUrl(residentId)'), 'buildCardPayload still regex-first');
 check('shortBarangay BALUD-substring hack gone', !appJs.includes("if (s.includes('BALUD')) return 'BALUD'"), 'hack still present');
 check('update deletes old photo only after commit', residentsRs.includes('commit won'), 'photo-loss reorder missing');
@@ -310,7 +313,7 @@ check('settings has no publish-verify-trust action', !appJs.includes('async publ
 check('settings has no verify-URL field', !appJs.includes('verifyBaseUrl') && !indexHtml.includes('verifyBaseUrl'), 'dead verify URL field remains');
 // Legacy QR restored: id_card.rs mints the plain 7-key JSON again
 const goldenQr = readFileSync(join(root, 'tests/golden-card.test.js'), 'utf8');
-const qrReadme = readFileSync(join(root, 'Documents/QR_PII_README.md'), 'utf8');
+const qrReadme = readFileSync(join(root, 'gathered-md/QR_PII_README.md'), 'utf8');
 check('legacy qr_data() restored in id_card', idCardRs.includes('fn qr_data('), 'signed-URL minter still in place');
 check('QR doc prescribes qr_data() again', qrReadme.includes('qr_data()') && !qrReadme.includes('mint_verify_url'), 'doc still points at removed minter');
 

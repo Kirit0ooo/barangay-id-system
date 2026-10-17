@@ -1,13 +1,15 @@
 @echo off
-REM Barangay ID System - portable release build. Thin wrapper around canonical build.ps1.
-REM All artifacts stay inside this folder: src-tauri\target\x86_64-pc-windows-msvc\release\bundle\ + logs\build-*.log
-REM Build includes get_cards_batch (bulk print) + optimize_database (E2). See build.ps1 .DESCRIPTION.
-REM Pre-build flow (in build.ps1): stale bundle/ outputs removed, patch version
-REM auto-incremented x.y.z -> x.y.z+1 across package.json / package-lock.json /
-REM tauri.conf.json / Cargo.toml / Cargo.lock so the binary carries the new version.
-REM Opt out per run: build.bat -NoBump  (keep current version)
-REM                build.bat -NoClean (keep previous bundle outputs)
-setlocal
+REM =============================================================================
+REM Barangay ID System - portable release build launcher (thin wrapper around build.ps1).
+REM Source of truth: build.ps1 (canonical). This batch only sets env pins + forwards.
+REM Flags forwarded: -Help | -Audit | -NoBump | -NoClean | -EnableVerboseLogging
+REM =============================================================================
+REM Portable contract: all artifacts stay inside this folder (no %APPDATA%/%TEMP% writes).
+REM   NPM_CONFIG_CACHE=.npm-cache   CARGO_TARGET_DIR=src-tauri\target
+REM   TMP/TEMP/TMPDIR=tmp           WEBVIEW2_USER_DATA_FOLDER=tmp\webview2
+REM =============================================================================
+chcp 65001 >nul
+setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
 REM ---- Portable env pins (mirrors build.ps1) ----
@@ -21,16 +23,29 @@ if not exist "logs" mkdir "logs" 2>nul
 if not exist "tmp\webview2" mkdir "tmp\webview2" 2>nul
 if not exist ".npm-cache" mkdir ".npm-cache" 2>nul
 
-where powershell >nul 2>nul
-if errorlevel 1 goto :NOPS
+REM ---- Detect PowerShell 7+ (pwsh) before legacy powershell ----
+where pwsh >nul 2>&1
+if not errorlevel 1 (
+    set "PS=pwsh"
+) else (
+    where powershell >nul 2>&1
+    if errorlevel 1 goto :NOPS
+    set "PS=powershell"
+)
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0build.ps1" %*
+REM Early -Help passthrough
+if "%~1"=="-Help" (
+    "%PS%" -NoProfile -ExecutionPolicy Bypass -File "%~dp0build.ps1" -Help
+    exit /b %errorlevel%
+)
+
+"%PS%" -NoProfile -ExecutionPolicy Bypass -File "%~dp0build.ps1" %*
 exit /b %errorlevel%
 
 :NOPS
 REM Minimal fallback: ps1 is source of truth - do not duplicate build logic here.
 echo [Barangay ID] PowerShell not found - install PowerShell 5.1+ https://aka.ms/wmf5download
-echo [Barangay ID] Then re-run build.bat. Flags (-Help/-Audit) need build.ps1.
+echo [Barangay ID] Then re-run build.bat. Flags (-Help/-Audit/-NoBump/-NoClean/-EnableVerboseLogging) need build.ps1.
 pause
 endlocal
 exit /b 1

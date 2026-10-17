@@ -13,5 +13,6 @@
     "contact": "09987654321"
   },
   "qr_minimal_mode": false,
-  "qr_hmac_secret": null
+  "qr_hmac_secret": null,
+  "photo_gc_dry_run": false
 }

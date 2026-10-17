@@ -202,6 +202,24 @@ fn escape_like(s: &str) -> String {
         .replace('_', "\\_")
 }
 
+/// Digit-normalized LIKE pattern for the two contact branches (P1-2/D5).
+/// Strips the query to digits (folding a +63/63 PH prefix to 09 form) so a
+/// formatted `0917-123-4567` matches the stored `09XX-XXX-XXXX` invariant.
+/// Returns `None` for a digit-free (name-only) query — binding "%%" would make
+/// the OR branches true for every non-NULL contact and leak the whole table;
+/// `None` binds as SQL NULL, which is falsy, so the branches drop out cleanly.
+fn digit_search_pattern(query: &str) -> Option<String> {
+    let mut q_digits: String = query.chars().filter(|c| c.is_ascii_digit()).collect();
+    if (q_digits.len() == 12 || q_digits.len() == 13) && q_digits.starts_with("63") {
+        q_digits = format!("0{}", &q_digits[2..]);
+    }
+    if q_digits.is_empty() {
+        None
+    } else {
+        Some(format!("%{}%", q_digits))
+    }
+}
+
 /// Parse DD-MM-YYYY, DD/MM/YYYY, or YYYY-MM-DD into canonical YYYY-MM-DD (no future check — shared by DOB + validity).
 fn parse_any_date_to_iso(raw: &str, label: &str) -> Result<String, String> {
     let s = raw.trim();
@@ -237,6 +255,12 @@ pub fn normalize_birth_date(raw: &str) -> Result<String, String> {
     let parsed = chrono::NaiveDate::parse_from_str(&iso, "%Y-%m-%d").expect("helper emits ISO");
     if parsed > chrono::Local::now().date_naive() {
         return Err("Birth date cannot be in the future".into());
+    }
+    // P2-8: sanity cap — a living person cannot be more than 120 years old
+    // at time of registration.
+    let oldest_allowed = chrono::Local::now().date_naive() - chrono::Duration::days(365 * 120);
+    if parsed < oldest_allowed {
+        return Err("Birth date is too old — person would be over 120 years".into());
     }
     Ok(iso)
 }
@@ -1134,14 +1158,11 @@ pub async fn search_residents(
     let pool = { state.lock().await.pool.clone() };
     // F2: escape LIKE wildcards in user input; ESCAPE '\' keeps % _ \\ literal.
     let search = format!("%{}%", escape_like(&query));
-    // P1-2: storage carries formatted numbers (09XX-XXX-XXXX) — strip both
-    // sides to digits so 09171234567 matches too. Stored side via nested
-    // REPLACE; query side in Rust (also folds +63/63 PH prefix to 09 form).
-    let mut q_digits: String = query.chars().filter(|c| c.is_ascii_digit()).collect();
-    if (q_digits.len() == 12 || q_digits.len() == 13) && q_digits.starts_with("63") {
-        q_digits = format!("0{}", &q_digits[2..]);
-    }
-    let digits_search = format!("%{}%", q_digits);
+    // P1-2/D5: digit-normalized contact branch. digit_search_pattern strips the
+    // query to digits (folding +63/63 → 09) and returns None for a name-only
+    // query — binding "%%" there would satisfy the OR branches for every non-
+    // NULL contact and leak the whole table, so None binds as falsy NULL.
+    let digits_search = digit_search_pattern(&query);
     // P0-3: soft-deleted rows are hidden by default; callers that need the
     // Inactive/All categories pass include_inactive=true explicitly.
     let show_all = include_inactive.unwrap_or(false) as i64;
@@ -1163,8 +1184,8 @@ pub async fn search_residents(
         .bind(&search)
         .bind(&search)
         .bind(&search)
-        .bind(&digits_search)
-        .bind(&digits_search)
+        .bind(digits_search.clone())
+        .bind(digits_search)
         .bind(&purok_filter)
         .bind(&purok_filter)
         .bind(show_all)
@@ -1873,5 +1894,49 @@ mod validity_tests {
         assert!(validate_resident_complete(&r).is_err());
         r.address_purok = Some("BUBUNAO".to_string());
         assert!(validate_resident_complete(&r).is_ok());
+    }
+
+    #[test]
+    fn normalize_birth_date_rejects_120_plus_and_future() {
+        let today = chrono::Local::now().date_naive();
+        let oldest_allowed = today - chrono::Duration::days(365 * 120);
+        // 120 years ago exactly — allowed (edge).
+        assert!(normalize_birth_date(&oldest_allowed.format("%Y-%m-%d").to_string()).is_ok());
+        // 120 years and 1 day ago — rejected.
+        let too_old = oldest_allowed - chrono::Duration::days(1);
+        let e = normalize_birth_date(&too_old.format("%Y-%m-%d").to_string()).unwrap_err();
+        assert!(e.contains("120 years"), "got: {}", e);
+        // Future date — rejected.
+        let future = today + chrono::Duration::days(1);
+        let e = normalize_birth_date(&future.format("%Y-%m-%d").to_string()).unwrap_err();
+        assert!(e.contains("future"), "got: {}", e);
+        // Normal valid date — accepted.
+        assert_eq!(normalize_birth_date("1990-05-20").unwrap(), "1990-05-20");
+        assert_eq!(normalize_birth_date("20-05-1990").unwrap(), "1990-05-20");
+        assert_eq!(normalize_birth_date("20/05/1990").unwrap(), "1990-05-20");
+        // Empty / invalid — rejected.
+        assert!(normalize_birth_date("").is_err());
+        assert!(normalize_birth_date("not-a-date").is_err());
+    }
+
+    #[test]
+    fn digit_search_pattern_drops_out_name_only_queries() {
+        // D5: a digit-free (name-only) query must bind NULL, not "%%" — "%%"
+        // would match every non-NULL contact and leak the whole table.
+        assert_eq!(digit_search_pattern("Maria"), None);
+        assert_eq!(digit_search_pattern(""), None);
+        // P1-2: formatted + 63-folded numbers still match the stored digits.
+        assert_eq!(
+            digit_search_pattern("0917-123-4567").as_deref(),
+            Some("%09171234567%")
+        );
+        assert_eq!(
+            digit_search_pattern("09171234567").as_deref(),
+            Some("%09171234567%")
+        );
+        assert_eq!(
+            digit_search_pattern("+639171234567").as_deref(),
+            Some("%09171234567%")
+        );
     }
 }
