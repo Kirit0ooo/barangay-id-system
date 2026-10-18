@@ -44,15 +44,6 @@ body{
 
 [x-cloak]{display:none !important;}
 
-/* App background: solid paper color — no decorative animation.
-   Uses the design-token --paper so it stays in sync with the token system.
-   Kept on body directly since the `app-bg` class is no longer set on the HTML element.
-*/
-body{
-  background:var(--paper);
-  color:var(--ink);
-}
-
 /* Scoped transitions only — no global * transition */
 @media (prefers-reduced-motion: no-preference){
   a,button,input,select,textarea{ transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease; }
@@ -108,12 +99,6 @@ tbody tr:hover{ background:rgba(248,250,252,.92); }
 .badge-active{ background:#ECFDF5; color:#065F46; border-color:#A7F3D0; }
 .badge-inactive{ background:#F1F5F9; color:#475569; border-color:#E2E8F0; }
 
-/* Stat accent — subtle left rule to break cloned-card impression */
-.stat-accent{ position:relative; overflow:hidden; }
-.stat-accent::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--navy); opacity:0; }
-.stat-accent.is-total::before{ opacity:1; }
-.stat-accent.is-year::before{ background:#0EA5E9; opacity:1; }
-
 /* Helpers */
 .field-error{ border-color:#DC2626 !important; box-shadow:0 0 0 4px rgba(220,38,38,.10) !important; }
 .help{ font-size:11px; color:var(--muted); }
@@ -162,6 +147,8 @@ tbody tr:hover{ background:rgba(248,250,252,.92); }
   --color-primary-hover: #0a1f45;
   --color-accent: var(--gold);
   --color-accent-ring: var(--gold-ring);
+  --color-accent-ink: #8A6A0F;   /* dark gold — gold text/fills on light surfaces (AA) */
+  --color-damage: #EA580C;       /* Damage status accent */
   --color-info: #2563EB;
   --color-success: #059669;
   --color-warning: #D97706;
@@ -172,9 +159,9 @@ tbody tr:hover{ background:rgba(248,250,252,.92); }
   
   --font-sans: "Inter","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
   --font-mono: ui-monospace,SFMono-Regular,"JetBrains Mono",Menlo,monospace;
---font-display:"Source Serif Pro",Georgia,"Times New Roman",serif;
-  
---text-xs: 11px;
+  --font-display:"Source Serif Pro",Georgia,"Times New Roman",serif;
+
+  --text-xs: 11px;
   --text-sm: 13px;
   --text-base: 15px;
   --text-lg: 18px;
@@ -348,114 +335,14 @@ tbody tr:hover{ background:rgba(248,250,252,.92); }
   letter-spacing:-0.025em;
   line-height:1.1;
   color:var(--color-text);
+  font-variant-numeric:tabular-nums;
 }
-.stat-card__meta{ font-size:13px; color:var(--color-text-muted); }
-.stat-card__ratio{ font-size:13px; font-weight:500; color:var(--color-text-muted); }
-.stat-card__bar{ height:6px; background:var(--color-border); border-radius:999px; overflow:hidden; }
-.stat-card__bar-fill{ height:100%; border-radius:999px; }
+.stat-card__meta{ font-size:12px; line-height:1.4; color:var(--color-text-muted); }
 
 /* Primary stat (Total Residents) — dominant value, navy accent */
 .stat-card--primary{ border-left:3px solid var(--color-primary); }
 .stat-card--primary .stat-card__icon{ background:rgba(15,43,94,.1); color:var(--color-primary); }
 .stat-card--primary .stat-card__value{ color:var(--color-text); font-size:34px; }
-
-/* Secondary stat (This Year) */
-.stat-card--secondary{ border-left:3px solid var(--color-info); }
-.stat-card--secondary .stat-card__icon{ background:rgba(37,99,235,.1); color:var(--color-info); }
-
-/* Ratio stats (Male/Female) */
-.stat-card--ratio{ border-left:3px solid transparent; }
-.stat-card--male .stat-card__icon{ background:rgba(37,99,235,.1); color:#2563eb; }
-.stat-card--male .stat-card__value{ color:#2563eb; }
-.stat-card--male .stat-card__bar-fill{ background:#2563eb; }
-.stat-card--female .stat-card__icon{ background:rgba(236,72,153,.1); color:#ec4899; }
-.stat-card--female .stat-card__value{ color:#ec4899; }
-.stat-card--female .stat-card__bar-fill{ background:#ec4899; }
-.stat-card--active{ border-left:3px solid #059669; }
-.stat-card--active .stat-card__icon{ background:rgba(5,150,105,.12); color:#059669; border:1px solid rgba(5,150,105,.18); }
-.stat-card--active .stat-card__value{ color:#059669; }
-.stat-card--renew{ border-left:3px solid #2563eb; }
-.stat-card--renew .stat-card__icon{ background:rgba(37,99,235,.10); color:#2563eb; border:1px solid rgba(37,99,235,.14); }
-.stat-card--renew .stat-card__value{ color:#1e40af; }
-.stat-card--lost{ border-left:3px solid #dc2626; }
-.stat-card--lost .stat-card__icon{ background:rgba(220,38,38,.10); color:#dc2626; border:1px solid rgba(220,38,38,.14); }
-.stat-card--lost .stat-card__value{ color:#7f1d1d; }
-.stat-card--damage{ border-left:3px solid #ea580c; }
-.stat-card--damage .stat-card__icon{ background:rgba(234,88,12,.10); color:#ea580c; border:1px solid rgba(234,88,12,.14); }
-.stat-card--damage .stat-card__value{ color:#9a3412; }
-.stat-card--active, .stat-card--renew, .stat-card--lost, .stat-card--damage{ transition:border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease; }
-.stat-card--active:hover, .stat-card--renew:hover, .stat-card--lost:hover, .stat-card--damage:hover{ transform:translateY(-1px); box-shadow:0 4px 14px rgba(15,23,42,.08); }
-.stat-card--active:hover .stat-card__icon{ filter:brightness(1.15); }
-.stat-card--renew:hover .stat-card__icon{ filter:brightness(1.15); }
-.stat-card--lost:hover .stat-card__icon{ filter:brightness(1.15); }
-.stat-card--damage:hover .stat-card__icon{ filter:brightness(1.15); }
-.stat-card--active .stat-card__value, .stat-card--renew .stat-card__value, .stat-card--lost .stat-card__value, .stat-card--damage .stat-card__value{ font-variant-numeric:tabular-nums; letter-spacing:-.03em; }
-.stat-card--active .stat-card__meta, .stat-card--renew .stat-card__meta, .stat-card--lost .stat-card__meta, .stat-card--damage .stat-card__meta{ font-size:12px; line-height:1.4; }
-
-/* Stat card group — section label above the four status cards */
-.stat-card-group{ margin-top:8px; }
-.stat-card-group__label{ display:block; font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--color-text-muted); margin:0 0 10px 0; padding-left:2px; }
-
-/* Dashboard header — title + settings gear */
-.dashboard-head{ display:flex; align-items:center; justify-content:space-between; gap:16px; }
-.dashboard-head__title-block{ display:flex; align-items:center; gap:8px; min-width:0; }
-.dashboard-head .view-title{ font-family:var(--font-display); letter-spacing:.02em; margin:0; }
-.dashboard-head__gear{ display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; border:1px solid var(--color-border); border-radius:10px; background:var(--color-surface); color:var(--color-text); cursor:pointer; transition:border-color 150ms ease, background-color 150ms ease; flex-shrink:0; }
-.dashboard-head__gear:hover{ border-color:var(--color-primary); background:var(--color-bg); }
-.dashboard-head__gear svg{ width:18px; height:18px; }
-
-/* Dashboard tiles — three big action cards */
-.dashboard-tiles{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; }
-.dashboard-tile{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:20px 24px; border:1px solid var(--color-border); border-radius:var(--radius-card); background:var(--color-surface); text-decoration:none; cursor:pointer; transition:border-color 150ms ease, box-shadow 150ms ease; }
-.dashboard-tile:hover{ border-color:var(--color-primary); box-shadow:var(--shadow-card); }
-.dashboard-tile__icon{ display:inline-flex; align-items:center; justify-content:center; width:56px; height:56px; border-radius:14px; border:1px solid var(--color-border); background:var(--color-bg); flex-shrink:0; }
-.dashboard-tile__icon svg{ width:24px; height:24px; stroke-width:2; }
-.dashboard-tile--register .dashboard-tile__icon{ border-color:var(--color-success); }
-.dashboard-tile--search .dashboard-tile__icon{ border-color:var(--color-info); }
-.dashboard-tile--settings .dashboard-tile__icon{ border-color:var(--color-text-muted); }
-.dashboard-tile__text{ min-width:0; }
-.dashboard-tile__title{ font-size:17px; font-weight:800; letter-spacing:-0.01em; color:var(--color-text); line-height:1.2; margin:0 0 2px 0; }
-.dashboard-tile__desc{ font-size:12px; color:var(--color-text-muted); margin:0; }
-.dashboard-tile__arrow{ width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center; border-radius:8px; background:var(--color-bg); color:var(--color-text-muted); font-size:14px; line-height:1; flex-shrink:0; }
-.dashboard-tile:hover .dashboard-tile__arrow{ background:var(--color-primary); color:var(--color-text-inverse); }
-
-/* Dashboard stat row — totals, gender bar, registrations this year */
-.dashboard-stats{ display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; }
-.stat-card--total{ border-left:3px solid var(--color-primary); }
-.stat-card--total .stat-card__icon{ background:rgba(15,43,94,.1); color:var(--color-primary); }
-.stat-card--total .stat-card__value{ color:var(--color-text); }
-.stat-card--gender{ border-left:3px solid var(--color-info); }
-.stat-card--gender .stat-card__icon{ background:rgba(37,99,235,.1); color:var(--color-info); }
-.stat-card--gender .stat-card__value{ color:var(--color-text); }
-.stat-card--year{ border-left:3px solid var(--color-success); }
-.stat-card--year .stat-card__icon{ background:rgba(5,150,105,.1); color:var(--color-success); }
-.stat-card--year .stat-card__value{ color:var(--color-text); }
-.stat-card__bar{ display:flex; height:8px; background:var(--color-border); border-radius:999px; overflow:hidden; margin:10px 0 8px 0; }
-.stat-card__bar-fill{ height:100%; border-radius:999px; transition:width 720ms cubic-bezier(.22,.8,.32,1); }
-.stat-card__bar-fill--male{ background:var(--color-primary); }
-.stat-card__bar-fill--female{ background:var(--color-accent); }
-.stat-card__ratio{ display:flex; gap:16px; font-size:13px; font-weight:700; font-variant-numeric:tabular-nums; }
-.stat-card__ratio--male{ color:var(--color-primary); }
-.stat-card__ratio--female{ color:var(--color-accent); }
-.dashboard-stats .stat-card__label{ display:flex; align-items:center; gap:8px; font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--color-text-muted); }
-.dashboard-stats .stat-card__meta{ font-size:12px; color:var(--color-text-muted); line-height:1.4; }
-.dashboard-stats .stat-card__value{ font-size:32px; font-weight:800; letter-spacing:-0.025em; line-height:1.1; }
-.breakdown{ border-top:1px solid var(--border); margin-top:32px; }
-.breakdown__summary{ cursor:pointer; font-size:13px; font-weight:600; color:var(--color-text-muted); padding:8px 14px; list-style:none; }
-.breakdown__summary::-webkit-details-marker{ display:none; }
-.stat-card__ratio__label--male,.stat-card__ratio__label--female{ font-size:12px; font-weight:700; }
-.stat-card__ratio__label--male{ color:var(--color-primary); }
-.stat-card__ratio__label--female{ color:var(--color-accent); }
-.stat-card__ratio--inline{ display:flex; align-items:center; gap:14px; }
-.stat-card__ratio__group{ display:flex; align-items:center; gap:6px; }
-.stat-card__ratio__label--male,
-.stat-card__ratio__label--female{ font-size:12px; font-weight:700; }
-.stat-card__ratio--male,
-.stat-card__ratio--female{ font-size:28px; font-weight:800; font-variant-numeric:tabular-nums; line-height:1; }
-.stat-card__ratio__pct--male{ color:var(--color-primary); font-size:13px; font-weight:700; }
-.stat-card__ratio__pct--female{ color:var(--color-accent); font-size:13px; font-weight:700; }
-.stat-card__ratio__divider{ color:var(--color-text-muted); font-size:14px; line-height:1; }
-
 
 /* Form section wrapper */
 .form-section{
@@ -528,7 +415,7 @@ tbody tr:hover{ background:rgba(248,250,252,.92); }
   background:var(--color-surface);
 }
 .form-field__input::placeholder{ color:var(--color-text-muted); opacity:.6; }
-.form-field__help{ font-size:11px; color:var(--color-text-muted); }
+.form-field__help{ font-size:12px; color:var(--color-text-muted); }
 
 /* Table — refined civic ledger */
 .data-table{ width:100%; border-collapse:collapse; font-size:13px; }
@@ -572,7 +459,7 @@ tbody tr:hover{ background:rgba(248,250,252,.92); }
    Icon-only buttons stay 40x40 touch targets via min-width. */
 nav[aria-label="Primary"] [role="tab"]{ min-height:40px; padding-top:8px; padding-bottom:8px; }
 /* Maintenance/printing tiles become uniform chips (were 100px icon tiles) */
-.action-chip{ flex:0 0 auto; }
+.action-chip{ flex:0 0 auto; display:inline-flex; align-items:center; gap:6px; padding:6px 12px; }
 .action-btn--view{ background:var(--color-surface); border:1px solid var(--color-border); color:var(--color-text-muted); }
 .action-btn--view:hover{ background:var(--color-bg); border-color:var(--color-border-strong); color:var(--color-text); }
 .action-btn--edit{ background:#FFFBEB; border:1px solid #FDE68A; color:#92400E; }
@@ -641,18 +528,18 @@ nav[aria-label="Primary"] [role="tab"]{ min-height:40px; padding-top:8px; paddin
 .detail-photo img{ width:100%; height:100%; object-fit:cover; }
 .detail-photo--empty{ color:var(--color-text-muted); font-size:11px; font-weight:600; text-align:center; }
 
-/* Empty state — civic placeholder */
+/* Empty state — civic placeholder (single definition; used by Search + Detail) */
 .empty-state{
   display:flex;
   flex-direction:column;
   align-items:center;
   justify-content:center;
-  padding:46px 24px 40px;
+  padding:2rem 1rem;
   text-align:center;
 }
-.empty-state__icon{ width:44px; height:44px; border-radius:12px; background:#f8fafc; border:1px solid #e2e8f0; display:flex; align-items:center; justify-content:center; color:#94a3b8; margin-bottom:14px; box-shadow:0 1px 2px rgba(15,23,42,.04); }
-.empty-state__title{ font-size:14px; font-weight:700; color:var(--color-text); margin-bottom:6px; letter-spacing:-.01em; }
-.empty-state__desc{ font-size:13px; color:var(--color-text-muted); margin-bottom:18px; line-height:1.5; max-width:36ch; }
+.empty-state__icon{ width:48px; height:48px; border-radius:12px; background:var(--color-bg); border:1px solid var(--color-border); display:flex; align-items:center; justify-content:center; color:var(--color-text-muted); margin-bottom:0.75rem; box-shadow:0 1px 2px rgba(15,23,42,.04); }
+.empty-state__title{ font-size:15px; font-weight:700; color:var(--color-text); margin:0 0 0.25rem 0; letter-spacing:-.01em; }
+.empty-state__desc{ font-size:13px; color:var(--color-text-muted); margin:0 0 1rem 0; line-height:1.5; max-width:36ch; }
 
 
 /* ==========================================================================
@@ -1098,98 +985,8 @@ html[data-theme="red-gradient"] .help {
 }
 
 /* ==========================================================================
-   HUB DASHBOARD — big service tiles for non-tech-savvy officers
+   HUB BACK — shared back pill on every spoke view (Register/Search/Settings/Detail)
    ========================================================================== */
-.hub-grid{
-  display:grid;
-  gap:16px;
-  grid-template-columns:1fr;
-  margin:16px 0 0 0;
-}
-@media (min-width:640px){ .hub-grid{ grid-template-columns:repeat(3,1fr); } }
-.hub-tile{
-  background:linear-gradient(180deg,#FFFFFF, #F7F9FC);
-  border:1px solid var(--border);
-  border-radius:var(--radius-card);
-  padding:20px;
-  text-align:left;
-  min-height:170px;
-  box-shadow:var(--shadow-card);
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-  align-items:flex-start;
-  cursor:pointer;
-  transition:transform 0.1s,border-color 0.2s,box-shadow 0.2s;
-  position:relative;
-}
-.hub-tile::before{
-  content:"";
-  position:absolute;
-  inset:0;
-  border-radius:inherit;
-  border:1px solid transparent;
-  border-top:1px solid rgba(255,255,255,.7);
-  border-left:1px solid rgba(255,255,255,.7);
-  pointer-events:none;
-  box-sizing:border-box;
-}
-.hub-tile:hover{
-  border-color:var(--border-strong);
-  transform:translateY(-1px);
-  box-shadow:0 4px 14px rgba(15,23,42,.08);
-}
-.hub-tile:active{
-  transform:translateY(1px);
-  border-color:var(--border-strong);
-  box-shadow:0 1px 3px rgba(15,23,42,.06);
-}
-.hub-tile__icon{
-  width:40px;
-  height:40px;
-  border-radius:10px;
-  background:var(--navy);
-  color:#fff;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  flex-shrink:0;
-}
-.hub-tile__title{
-  font-size:16px;
-  font-weight:800;
-  letter-spacing:-0.02em;
-  color:var(--navy);
-}
-.hub-tile__desc{
-  font-size:13px;
-  color:var(--muted);
-  line-height:1.5;
-  margin-top:2px;
-}
-.hub-tile__steps{
-  display:flex;
-  gap:6px;
-  flex-wrap:wrap;
-  margin-top:auto;
-}
-.hub-tile__steps span{
-  width:22px;
-  height:22px;
-  border-radius:50%;
-  background:var(--navy);
-  color:#fff;
-  font-size:11px;
-  font-weight:700;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-}
-.hub-tile__chips{
-  font-size:11px;
-  color:var(--muted);
-  margin-top:auto;
-}
 .hub-back{
   display:inline-flex;
   align-items:center;
@@ -1206,57 +1003,10 @@ html[data-theme="red-gradient"] .help {
 }
 .hub-back:hover{ border-color:var(--border-strong); }
 
-/* Welcome header pill — small civic chip beside the page title */
-.hub-pill{
-  display:inline-flex;
-  align-items:center;
-  gap:6px;
-  padding:4px 10px;
-  border-radius:999px;
-  background:var(--paper);
-  border:1px solid var(--border);
-  font-size:11px;
-  font-weight:700;
-  letter-spacing:.05em;
-  text-transform:uppercase;
-  color:var(--muted);
-}
-
-
-
-/* Per-tile icon accent colors — restrained civic palette */
-.hub-tile__icon--register{ background:var(--navy); }
-.hub-tile__icon--search{ background:#1E3A5F; }   /* 10% darker navy variant */
-.hub-tile__icon--settings{ background:var(--gold); }
-
-/* Hub tile arrow — appears on right side of tile body */
-.hub-tile__arrow{
-  font-size:14px;
-  font-weight:700;
-  color:var(--muted);
-  opacity:0;
-  transform:translateX(-2px);
-  transition:opacity 0.15s,transform 0.15s;
-}
-.hub-tile:hover .hub-tile__arrow{ opacity:1; transform:translateX(0); }
-
-/* Fix: steps and chips both used margin-top:auto which conflicted.
-   Steps sit at bottom of register tile; chips at bottom of search/settings tiles. */
-.hub-tile__steps{ margin-top:auto; }
-.hub-tile__chips{ margin-top:auto; }
-
-/* Hub tile heading area: title + desc spacing already set; ensure icon+title group */
-.hub-tile > *:first-child{ flex-shrink:0; }
-
-
-.hub-back:hover{ border-color:var(--border-strong); }
 /* Kiosk dashboard — touch-first, always-visible stats, no collapsible sections.
    Large touch targets, big numbers, high contrast. */
 .kiosk-head{ display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:2px; }
-.kiosk-head__title{ font-family:var(--font-display); letter-spacing:.02em; margin:0; font-size:clamp(24px,4vw,32px); font-weight:800; letter-spacing:.02em; }
-.kiosk-head__gear{ display:inline-flex; align-items:center; justify-content:center; width:56px; height:56px; border:1px solid var(--color-border); border-radius:14px; background:var(--color-surface); color:var(--color-text); cursor:pointer; transition:border-color 150ms ease, background-color 150ms ease; flex-shrink:0; }
-.kiosk-head__gear:hover{ border-color:var(--color-primary); background:var(--color-bg); }
-.kiosk-head__gear svg{ width:22px; height:22px; }
+.kiosk-head__title{ font-family:var(--font-display); margin:0; font-size:clamp(24px,4vw,32px); font-weight:800; letter-spacing:.02em; }
 
 /* Kiosk section wrapper — groups Registry overview and Card status
    into distinct, high-contrast panels with a bold section header. */
@@ -1267,8 +1017,10 @@ html[data-theme="red-gradient"] .help {
 /* Kiosk stat row — big numbers, always visible */
 .kiosk-stats{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:10px; }
 .kiosk-stat{ display:flex; flex-direction:column; gap:4px; padding:22px 20px; border:2px solid var(--color-border); border-radius:16px; background:var(--color-surface); min-width:0; }
-.kiosk-stat:hover{ border-color:var(--color-primary); transform:translateY(-2px); box-shadow:var(--shadow-card); }
+.kiosk-stat:hover{ border-color:var(--color-border-strong); transform:translateY(-2px); box-shadow:var(--shadow-card); }
 .kiosk-stat:hover .kiosk-stat__icon{ filter:brightness(1.15); }
+.kiosk-stat__value{ font-size:32px; font-weight:800; letter-spacing:-0.02em; line-height:1.1; font-variant-numeric:tabular-nums; color:var(--color-text); }
+.kiosk-stat__meta{ font-size:12px; color:var(--color-text-muted); line-height:1.4; }
 /* Kiosk icons — downloaded PNG files from flaticon.com */
 .kiosk-stat__icon img{ width:24px; height:24px; object-fit:contain; }
 .kiosk-tile__icon img{ width:32px; height:32px; object-fit:contain; }
@@ -1299,12 +1051,12 @@ html[data-theme="red-gradient"] .help {
 .kiosk-stat__head .kiosk-stat__label{ font-size:13px; font-weight:700; color:var(--color-text); }
 .kiosk-stat--active:hover{ border-color:var(--color-success); }
 .kiosk-stat--renew:hover{ border-color:var(--color-primary); }
-.kiosk-stat--lost:hover{ border-color:#dc2626; }
-.kiosk-stat--damage:hover{ border-color:#ea580c; }
+.kiosk-stat--lost:hover{ border-color:var(--color-error); }
+.kiosk-stat--damage:hover{ border-color:var(--color-damage); }
 .kiosk-stat--active:hover .kiosk-stat__icon{ border-color:var(--color-success); background:rgba(5,150,105,.12); }
 .kiosk-stat--renew:hover .kiosk-stat__icon{ border-color:var(--color-primary); background:rgba(37,99,235,.12); }
-.kiosk-stat--lost:hover .kiosk-stat__icon{ border-color:#dc2626; background:rgba(220,38,38,.12); }
-.kiosk-stat--damage:hover .kiosk-stat__icon{ border-color:#ea580c; background:rgba(234,88,12,.12); }
+.kiosk-stat--lost:hover .kiosk-stat__icon{ border-color:var(--color-error); background:rgba(220,38,38,.12); }
+.kiosk-stat--damage:hover .kiosk-stat__icon{ border-color:var(--color-damage); background:rgba(234,88,12,.12); }
 .kiosk-stat--total:hover{ border-color:var(--color-primary); }
 .kiosk-stat--total:hover .kiosk-stat__icon{ border-color:var(--color-primary); background:rgba(15,43,94,.12); }
 .kiosk-stat--year:hover{ border-color:var(--color-success); }
@@ -1334,10 +1086,6 @@ html[data-theme="red-gradient"] .help {
   .kiosk-tile{ min-height:110px; padding:22px 24px; }
   .kiosk-tile__icon{ width:64px; height:64px; }
 }
-/* Kiosk stat hover — subtle lift on touch surfaces */
-.kiosk-stat:hover{ border-color:var(--color-border-strong); box-shadow:0 1px 3px rgba(15,23,42,.06); }
-.kiosk-stat:hover .kiosk-stat__icon{ filter:brightness(1.15); }
-
 /* Kiosk stat icon fills — civic accent wash per stat */
 .kiosk-stat--total .kiosk-stat__icon{ background:rgba(15,43,94,.08); }
 .kiosk-stat--gender .kiosk-stat__icon{ background:rgba(37,99,235,.08); }
@@ -1362,57 +1110,8 @@ html[data-theme="red-gradient"] .help {
   margin-bottom:6px;
 }
 .view-head__title-block{ flex:1; min-width:0; }
-.view-sub{
-  font-size:13px;
-  color:var(--muted);
-  margin:2px 0 0 0;
-}
 
-
-
-.action-chip{
-  display:inline-flex;
-  align-items:center;
-  gap:6px;
-  padding:6px 12px;
-}
-
-/* Empty state — consistent across Detail/Search */
-.empty-state{
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  text-align:center;
-  padding:2rem 1rem;
-}
-.empty-state__icon{
-  width:48px;
-  height:48px;
-  color:var(--muted);
-  margin-bottom:0.75rem;
-}
-.empty-state__title{
-  font-size:15px;
-  font-weight:700;
-  color:var(--ink);
-  margin:0 0 0.25rem 0;
-}
-.empty-state__desc{
-  font-size:13px;
-  color:var(--muted);
-  margin:0 0 1rem 0;
-}
-
-/* Stat card refinements — keep pinned classes, tighten visuals */
-.stat-card__value{ font-variant-numeric:tabular-nums; }
-.stat-card__meta{ font-size:12px; color:var(--muted); }
-
-/* Form field refinements */
-.form-field__label{ font-size:13px; font-weight:600; color:var(--ink); }
-.form-field__help{ font-size:12px; color:var(--muted); }
-.form-field__req{ color:var(--gold); }
-
-/* Reduced motion safety */
+/* Reduced motion safety — kiosk tiles carry the only non-global transition pair */
 @media (prefers-reduced-motion: reduce){
-  .action-btn,.hub-tile{ transition:none !important; }
+  .action-btn,.kiosk-tile{ transition:none !important; }
 }

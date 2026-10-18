@@ -97,7 +97,7 @@ File-level AES-256-GCM encryption for `data/residents.db` and `data/photos/*`:
 | `src/js/helpers.js` | Pure helpers (dates, contacts, purok options, `residentStatus`, `parseValidUntil`, `todayISO`); dependency-free so tests can load it |
 | `src/js/api.js` | Tauri invoke wrappers for all commands |
 | `src/js/logger.js` / `verbose.js` | Frontend logging to localStorage buffer + backend `log_frontend` invoke |
-| `src/css/style.css` | Scoped components; kiosk dashboard styles (`.kiosk-head`, `.kiosk-stats`, `.kiosk-stat`, `.kiosk-tiles`, `.kiosk-tile`, `.kiosk-status-group`) + legacy hub/dashboard classes; opt-in `html[data-theme="red-gradient"]` body rule |
+| `src/css/style.css` | Scoped components; kiosk dashboard styles (`.kiosk-head`, `.kiosk-stats`, `.kiosk-stat`, `.kiosk-tiles`, `.kiosk-tile`, `.kiosk-status-group`); design tokens + semantic aliases in `:root` (see repo-root `DESIGN.md`) |
 | `src/css/tailwind.css` | Prebuilt static utilities; freshness-guarded by `tools/check-css.mjs` (fingerprint over index.html + all src/js/*.js except vendored libs, derived at runtime) |
 | `src/card-template.html` | CR100 print template; `textContent` for text + image allowlist (`SAFE_IMG` drops `javascript:`) |
 
@@ -154,6 +154,21 @@ Remodeled the Welcome dashboard into a kiosk layout (`src/index.html` + `src/css
 
 Validation: `npm test` 57/0/12, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
 
+## UI/UX consistency pass (2026-10-19)
+
+Visual-consistency polish across all five views — CSS only, zero logic changes. Design system persisted to repo-root `DESIGN.md` (tokens, states, do/don'ts); future UI work must follow it.
+
+| Change | File | Detail |
+|--------|------|--------|
+| Dead CSS removal | `src/css/style.css` | Removed ~300 lines of unreferenced rules: `.hub-tile*`/`.hub-grid`/`.hub-pill` (old hub), `.dashboard-head/tiles/tile*`, `.dashboard-stats`, `.stat-card--secondary/ratio/male/female/total/gender/year`, `.stat-card__bar*/ratio*`, `.stat-card-group*`, `.breakdown*`, `.stat-accent`, `.kiosk-head__gear`, `.view-sub`, `.recent-card` leftovers |
+| Duplicate merge | `src/css/style.css` | `.empty-state*` (two competing defs → one), `.action-chip` (two defs → one), `.form-field__label/help/req` (tail dupes removed; help 11→12px to match the winning dupe), duplicate `body{}` block, duplicate `.hub-back:hover`, duplicate `.kiosk-stat:hover` |
+| Kiosk value sizing | `src/css/style.css` | Added missing base `.kiosk-stat__value` (32px/800/tabular-nums) and `.kiosk-stat__meta` (12px muted) — desktop stat numbers previously inherited body size; mobile 40px rule unchanged |
+| Token aliases | `src/css/style.css` | Added `--color-accent-ink` (dark gold for AA text/fills on light) + `--color-damage`; kiosk lost/damage hover borders and female ratio label/value/bar now use tokens instead of raw hex — fixes gold-on-white contrast |
+| Required-asterisk contrast | `src/css/style.css` | `.form-field__req` keeps `--color-error` (the gold dupe that overrode it was removed); red required marks now AA on white |
+| `:root` tidy | `src/css/style.css` | Fixed `--font-display`/`--text-xs` indentation; `.kiosk-head__title` double `letter-spacing` deduped |
+
+Validation: `npm test` 57/0/12, `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
+
 ## Standard project coding workflows
 
 ### Run tests
@@ -208,6 +223,7 @@ npm run check:css
 | Gathered docs | `gathered-md/` |
 | Project docs (keep in place) | `README.md`, `Documents/README.md`, `Documents/Verify/README.md` |
 | Agent instructions | `AGENTS.md` (this file) |
+| Design system | `DESIGN.md` (tokens, states, do/don'ts — read before styling anything) |
 
 ## Keeping AGENTS.md current
 
