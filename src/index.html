@@ -99,7 +99,7 @@
    </div>
    <div class="kiosk-status-group">
      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-12">
-       <div class="kiosk-stat kiosk-stat--active" role="region" aria-label="Active cards">
+       <div class="kiosk-stat kiosk-stat--active" role="region" aria-label="Active cards — valid IDs currently in circulation">
          <div class="kiosk-stat__head">
            <div class="kiosk-stat__icon" aria-hidden="true"><img src="icons/check.png" alt="" aria-hidden="true"></div>
            <div class="kiosk-stat__label"><span>Active</span></div>
@@ -107,7 +107,7 @@
          <div class="kiosk-stat__value" x-text="stats.active">0</div>
          <div class="kiosk-stat__meta">Valid cards in circulation</div>
        </div>
-       <div class="kiosk-stat kiosk-stat--renew" role="region" aria-label="Renew cards">
+       <div class="kiosk-stat kiosk-stat--renew" role="region" aria-label="Renew cards — residents whose IDs are marked for renewal">
          <div class="kiosk-stat__head">
            <div class="kiosk-stat__icon" aria-hidden="true"><img src="icons/refresh.png" alt="" aria-hidden="true"></div>
            <div class="kiosk-stat__label"><span>Renew</span></div>
@@ -115,7 +115,7 @@
          <div class="kiosk-stat__value" x-text="stats.renew">0</div>
          <div class="kiosk-stat__meta">Marked for renewal</div>
        </div>
-       <div class="kiosk-stat kiosk-stat--lost" role="region" aria-label="Lost cards">
+       <div class="kiosk-stat kiosk-stat--lost" role="region" aria-label="Lost cards — IDs reported lost by residents">
          <div class="kiosk-stat__head">
            <div class="kiosk-stat__icon" aria-hidden="true"><img src="icons/badge.png" alt="" aria-hidden="true"></div>
            <div class="kiosk-stat__label"><span>Lost</span></div>
@@ -123,7 +123,7 @@
          <div class="kiosk-stat__value" x-text="stats.lost">0</div>
          <div class="kiosk-stat__meta">Reported lost</div>
        </div>
-       <div class="kiosk-stat kiosk-stat--damage" role="region" aria-label="Damage cards">
+       <div class="kiosk-stat kiosk-stat--damage" role="region" aria-label="Damage cards — IDs reported damaged by residents">
          <div class="kiosk-stat__head">
            <div class="kiosk-stat__icon" aria-hidden="true"><img src="icons/alert.png" alt="" aria-hidden="true"></div>
            <div class="kiosk-stat__label"><span>Damage</span></div>
