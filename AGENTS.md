@@ -147,7 +147,7 @@ Remodeled the Welcome dashboard into a kiosk layout (`src/index.html` + `src/css
 | Card status | `src/index.html` | `.kiosk-section--status` wraps `.kiosk-status-group` with 4 color-coded status cards (Active/Renew/Lost/Damage); `.kiosk-section__head` header; grid gap-12 for comfortable card separation |
 | Section CSS | `src/css/style.css` | `.kiosk-section`, `.kiosk-section__head`, `.kiosk-section__title` rules; `.kiosk-stat` padding 22px/20px, 2px border, radius 16px, hover lift with border-color transition + box-shadow |
 | Gap utilities | `src/css/tailwind.css` | Added `gap-8` (2rem), `gap-10` (2.5rem), `gap-12` (3rem); card status grid uses `gap-12` |
-| Gauge | `src/index.html` | `.kiosk-gauge` always visible (no `<details>` wrapper), keeps `stat-hero__side stat-hero__side--left` class for regression pins |
+| Gauge | removed | The SVG balance gauge and `stat-hero` layout were deleted outright (no `gaugeArcs()`/`gaugeGap()` in `app.dashboard.js`); gender split is now the `.kiosk-stat__bar` inline bar + Male/Female counts |
 | Service tiles | `src/index.html` | `.kiosk-tiles` grid with oversized touch tiles (`.kiosk-tile`, min-height 120px, 72px icons, 40px arrow) |
 | Icons | `src/index.html` | PNG glyphs under `src/icons/` referenced via `<img src="icons/*.png" />` (person, users, calendar, check, refresh, badge, alert, document, search, settings). Sizes via `width`/`height` CSS (24px stat, 32px tile) — fixed-color PNGs, no `currentColor` theming. |
 | CSS | `src/css/style.css` | `.kiosk-stat__icon img` and `.kiosk-tile__icon img` use `width`/`height`/`object-fit:contain` for fixed sizing — no `font-size`/`line-height` Unicode scaling. |
