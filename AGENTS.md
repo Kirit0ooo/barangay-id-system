@@ -246,7 +246,7 @@ Applied visual polish to the "Register New Resident" view (`src/index.html` + `s
 |--------|------|--------|
 | Header polish | `src/index.html:146-158` | `register-head` class + `register-eyebrow` + `register-sub` hint; `register-clear` buttons; flex-1 title column |
 | Section animation | `src/index.html:196,222,239` | Added `register-section` class to Personal Info / Address / Emergency sections so CSS entry animation (`register-enter`) fires |
-| Section icons | `src/index.html:199,225,242` | Added `register-section__icon` SVG glyphs beside section numbers (person icon for Personal Info, location pin for Address, phone for Emergency) |
+| Section icons | `src/index.html` | `.register-section__icon` PNG glyphs beside section titles (person.png → Personal Information, address.png → Address, contact.png → Emergency Contact, card_stats.png → Card Status; ID.png in the 1×1 photo well). Number discs (1/2/3) and inline SVGs retired 2026-10-19; Card Status gained a proper `.form-section__head`. |
 | Required badge | `src/index.html:205` | `* required` badge: `hidden sm:block` (hidden on mobile to avoid crowding), `text-slate-500` contrast, `whitespace-nowrap` |
 | ID row layout | `src/index.html:183` | Wrapped Resident ID input + Generate button in `register-idrow` for stacked-mobile / side-by-side-sm layout |
 | Actions bar | `src/index.html:273-279` | Added `register-actions__note` hint + `register-actions__btns` wrapper for sticky mobile actions |
