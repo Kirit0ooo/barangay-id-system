@@ -194,7 +194,37 @@ window.appState = {
             }
         }
     },
-    
+
+    // Focus the first focusable element on the current view so keyboard users
+    // don't lose their place when switching views via Alpine x-show/x-cloak.
+    // All views coexist in the DOM (x-show toggles display:none), so we scope
+    // the lookup to the actually-visible view root rather than querying
+    // globally — otherwise `document.querySelector('button')` could match a
+    // hidden view's button and focus() would silently no-op. Only one view
+    // root is visible at a time and each root precedes its descendant x-show
+    // divs, so the first `div[x-show]` with `offsetParent !== null` is the
+    // current view root in every case.
+    focusView() {
+        const view = this.currentView;
+        const visibleView = Array.from(document.querySelectorAll('div[x-show]'))
+            .find(el => el.offsetParent !== null);
+        if (!visibleView) return;
+
+        const firstFocusable = {
+            dashboard: '.kiosk-tile',
+            register: '#resident-id',
+            search: '#search-input',
+            settings: '.hub-back',
+            detail: '.hub-back'
+        }[view];
+        if (!firstFocusable) return;
+
+        setTimeout(() => {
+            const el = visibleView.querySelector(firstFocusable);
+            if (el) el.focus({ preventScroll: true });
+        }, 0);
+    },
+
     // ─── Init + theme ──────────────────────────────────────────────────
     async init() {
         try {
@@ -209,11 +239,15 @@ window.appState = {
                     try { const r = await API.scheduledBackup(); Logger.info('scheduled_backup', r); } catch(e) { Logger.warn('scheduled_backup failed', e); }
                 }, 24 * 60 * 60 * 1000);
             } catch {}
+
+            // Wire keyboard focus management to view switches so the user's
+            // place is never lost when Alpine toggles views via x-show.
+            this.$watch('currentView', () => this.focusView());
         } catch(e) {
             Logger.error('init failed:', e);
         }
     },
-    
+
     applyTheme() {
         this.theme = localStorage.getItem('barangayTheme') === 'red-gradient' ? 'red-gradient' : 'paper';
         if (this.theme === 'red-gradient') document.documentElement.dataset.theme = 'red-gradient';
@@ -254,7 +288,18 @@ window.appState = {
             this.settings = { ...this.settings, ...clean };
         } catch(e) { Logger.warn('loadSettings failed', e); }
     },
-    
+
+    // ─── Dashboard: load aggregate stats (boot + post-mutation refresh) ───
+    // Stats only — resident rows are loaded by searchResidents() at each mutation
+    // site and by the search view's x-init, not here.
+    async loadDashboard() {
+        try {
+            const stats = await API.getDashboardStats();
+            if (stats) this.stats = stats;
+            Logger.info('dashboard', { total: this.stats.total });
+        } catch (e) { Logger.warn('loadDashboard failed', e); this.showToast('Dashboard stats failed: ' + e, 'error'); }
+    },
+
     // Save settings to backend civic.json (source of truth for ID cards)
     async saveSettings() {
         try {

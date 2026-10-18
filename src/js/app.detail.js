@@ -151,8 +151,8 @@ Object.assign(window.appState, {
         }
         if (!addrCity) addrCity = 'BASEY';
         if (!addrProvince) addrProvince = 'SAMAR';
-        const addressRaw = `PUROK ${purok}, ${short}, ${addrCity}, ${addrProvince}`;
-        const address = truncateCard(addressRaw, 62);
+        let addressRaw = `PUROK ${purok}, ${short}, ${addrCity}, ${addrProvince}`;
+        let address = truncateCard(addressRaw, 62);
         // Validity (L1): backend is truth — id_card.rs::valid_until_display.
         let vuRaw = (r.valid_until || '').trim();
         if (!vuRaw) {
@@ -177,6 +177,14 @@ Object.assign(window.appState, {
             if (pick(civic.province_line)) this.settings.provinceName = pick(civic.province_line);
             if (cBarangay) this.settings.barangayName = cBarangay;
             if (cPunong) this.settings.punongName = cPunong;
+        }
+        // Use civic barangay_short as the canonical short barangay name for card
+        // addresses. barangayCardDisplay/getShortBarangay compose paren-form names
+        // like "NOUVELAS OCCIDENTAL (BALUD)" but the address needs just "BALUD".
+        if (civic && civic.barangay_short) {
+            short = civic.barangay_short.toUpperCase();
+            addressRaw = `PUROK ${purok}, ${short}, ${addrCity}, ${addrProvince}`;
+            address = truncateCard(addressRaw, 62);
         }
         let province = 'Province of Samar', municipality = 'Municipality of Basey';
         const provLine = pick(civic && civic.province_line, (this.settings.provinceName || 'Province of Samar \u2022 Municipality of Basey').trim() || 'Province of Samar \u2022 Municipality of Basey');
@@ -223,16 +231,20 @@ Object.assign(window.appState, {
         };
     },
 
+    fillTemplate(el, payload) {
+        const IMG = { photo: 1, qr: 1, seal: 1, emblem: 1 };
+        el.querySelectorAll('[data-field]').forEach((el2) => {
+            const k = el2.getAttribute('data-field');
+            if (!(k in payload) || payload[k] == null || payload[k] === '') return;
+            if (IMG[k] && el2.tagName === 'IMG') { if (isSafeImgSrc(payload[k])) el2.setAttribute('src', payload[k]); }
+            else el2.textContent = payload[k];
+        });
+    },
+
     fillTemplateHtml(html, payload) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
-        const IMG = { photo: 1, qr: 1, seal: 1, emblem: 1 };
-        doc.querySelectorAll('[data-field]').forEach((el) => {
-            const k = el.getAttribute('data-field');
-            if (!(k in payload) || payload[k] == null || payload[k] === '') return;
-            if (IMG[k] && el.tagName === 'IMG') { if (isSafeImgSrc(payload[k])) el.setAttribute('src', payload[k]); }
-            else el.textContent = payload[k];
-        });
+        this.fillTemplate(doc, payload);
         if (payload.resident_id) doc.title = 'ID Card - ' + payload.resident_id;
         return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
     },
@@ -358,13 +370,7 @@ Object.assign(window.appState, {
                         };
                         const payload = await this.buildCardPayloadForRow(r, pre);
                         const filled = new DOMParser().parseFromString(tpl, 'text/html');
-                        const IMG = { photo: 1, qr: 1, seal: 1, emblem: 1 };
-                        filled.querySelectorAll('[data-field]').forEach((el) => {
-                            const k = el.getAttribute('data-field');
-                            if (!(k in payload) || payload[k] == null || payload[k] === '') return;
-                            if (IMG[k] && el.tagName === 'IMG') { if (isSafeImgSrc(payload[k])) el.setAttribute('src', payload[k]); }
-                            else el.textContent = payload[k];
-                        });
+                        this.fillTemplate(filled, payload);
                         const parts = [...filled.querySelectorAll('.sheet > .bleed, .sheet > .cutline')]
                             .map((el) => el.outerHTML).join('\n');
                         sections.push(`<div${i < batchRows.length - 1 ? ' style="page-break-after:always"' : ''}>${parts}</div>`);

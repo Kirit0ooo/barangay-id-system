@@ -139,12 +139,10 @@ Object.assign(window.appState, {
         this.form = emptyForm();
         this.editingResident = null;
         this.editPhotoUrl = '';
-        // Auto-generate ID for new entries
+        // generateID reports its own failure (try/catch + toast), so this stays sync.
         this.generateID();
-        // Pre-fill address defaults: barangay from settings, city BASEY, province SAMAR (editable)
-        this.form.address_barangay = '(NOUVELAS OCCIDENTAL) BALUD';
-        this.form.address_city = 'BASEY';
-        this.form.address_province = 'SAMAR';
+        // Address defaults (barangay/city/province) are already set by emptyForm()
+        // as fixed literals; nothing here reads settings.barangayName.
     },
     
     // ─── Register: edit mode ───────────────────────────────────────────

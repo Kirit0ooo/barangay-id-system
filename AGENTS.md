@@ -1,4 +1,22 @@
-# AGENTS.md — Barangay ID Registration System
+# AGENTS.md — Barangay ID Registration System - Permanent Guidance
+
+Applies to all sessions in this workspace.
+
+## Planning & tracking
+- Plan non-trivial work with `/plan` before editing; keep `/todos` current as work progresses.
+- Break large efforts into small, reviewable tasks and mark them done only when verified.
+
+## Editing discipline
+- Make small, reviewable edits; never reformat unrelated code.
+- Prefer reading existing files and patterns over inventing new ones.
+- Use checkpoints (`/rewind` available) before risky refactors so we can recover.
+
+## Quality gates
+- Run the project's tests/lint/typecheck after changes; do not declare done while checks are red.
+
+## Communication
+- Ask a clarifying question when a requirement is ambiguous instead of guessing.
+
 
 This file instructs every AI agent working in this project. Read it before making any change.
 
@@ -44,7 +62,7 @@ Frontend (Alpine SPA, src/index.html → src/js/app.js)
 | `get_qr_data_url` | Mint plain 7-key JSON QR (unsigned-by-design); completeness gate via `validate_resident_complete` |
 | `get_cards_batch` | Batch print data (max 200 IDs per IPC) |
 | `backup_database` / `restore_database` | Atomic copy-to-tmp-then-rename; WAL checkpoint; 30-day retention; photo GC |
-| `export_excel` / `import_excel` | 31-column workbook write + strict import |
+| `export_excel` / `import_excel` | 37-column workbook write + strict import |
 | `optimize_database_cmd` | PRAGMA optimize + incremental vacuum (Settings → Database Health) |
 | `encryption_generate_key` | Generate 256-bit AES key at `.crypto-key/key.bin` (fails if key exists) |
 | `encryption_status` | Report key exists?, DB plaintext/encrypted?, photo counts plaintext/encrypted |
@@ -62,9 +80,10 @@ File-level AES-256-GCM encryption for `data/residents.db` and `data/photos/*`:
 | Crypto module | `src-tauri/src/crypto.rs` | AES-256-GCM encrypt/decrypt, key file ops, dir-level encrypt/decrypt, unit tests |
 | Tauri commands | `src-tauri/src/encryption.rs` | 6 commands: generate key, status, encrypt/decrypt DB, encrypt/decrypt photos |
 | Key storage | `.crypto-key/key.bin` | 32-byte random key, created on first `encryption_generate_key`, never rotated |
-| File format | `[nonce(12)][ciphertext+GCM tag]` | Standard GCM layout, random nonce per file |
+| File format | `[magic(8) "BRGYENC1"][version(1)][nonce(12)][ciphertext+GCM tag]` | 9-byte header + nonce + ciphertext+GCM tag, random nonce per file |
 | API wrappers | `src/js/api.js` | `encryptionGenerateKey`, `encryptionStatus`, `encryptionEncryptDatabase`, `encryptionDecryptDatabase`, `encryptionEncryptPhotos`, `encryptionDecryptPhotos` |
 | Settings methods | `src/js/app.settings.js` | UI methods calling each API wrapper with toast feedback |
+| Photo decrypt-on-read | `src-tauri/src/residents.rs` `resolve_photo_bytes` | Wired `crate::crypto::load_key` + `CryptoKey::decrypt_or_plaintext` (was `#[allow(dead_code)]`, zero callers) so `get_photo_base64`/`get_resident_photo`/`id_card` print decrypted photos instead of broken images after `encryption_encrypt_photos`. Falls back to raw bytes when no key exists. |
 
 **Threat model:** Protects data from being read by anyone who copies files without also copying `.crypto-key/`. Does NOT protect against an attacker who has both the key file and the data (key sits beside data by design per operator request).
 
@@ -78,8 +97,8 @@ File-level AES-256-GCM encryption for `data/residents.db` and `data/photos/*`:
 | `src/js/helpers.js` | Pure helpers (dates, contacts, purok options, `residentStatus`, `parseValidUntil`, `todayISO`); dependency-free so tests can load it |
 | `src/js/api.js` | Tauri invoke wrappers for all commands |
 | `src/js/logger.js` / `verbose.js` | Frontend logging to localStorage buffer + backend `log_frontend` invoke |
-| `src/css/style.css` | Scoped components; hub tile styles (`.hub-grid`, `.hub-tile`, `.hub-back`, `.hub-welcome`); opt-in `html[data-theme="red-gradient"]` body rule |
-| `src/css/tailwind.css` | Prebuilt static utilities; freshness-guarded by `tools/check-css.mjs` (fingerprint over index.html+app.js) |
+| `src/css/style.css` | Scoped components; kiosk dashboard styles (`.kiosk-head`, `.kiosk-stats`, `.kiosk-stat`, `.kiosk-tiles`, `.kiosk-tile`, `.kiosk-status-group`) + legacy hub/dashboard classes; opt-in `html[data-theme="red-gradient"]` body rule |
+| `src/css/tailwind.css` | Prebuilt static utilities; freshness-guarded by `tools/check-css.mjs` (fingerprint over index.html + all src/js/*.js except vendored libs, derived at runtime) |
 | `src/card-template.html` | CR100 print template; `textContent` for text + image allowlist (`SAFE_IMG` drops `javascript:`) |
 
 ### Hub-and-spoke user workflow (non-tech-savvy officers)
@@ -116,6 +135,25 @@ Every spoke view has a **← Back to Home** button that returns to the hub. On s
 
 ---
 
+## Dashboard kiosk remodel (2026-10-18)
+
+Remodeled the Welcome dashboard into a kiosk layout (`src/index.html` + `src/css/style.css`), zero logic changes:
+
+| Change | File | Detail |
+|--------|------|--------|
+| Layout | `src/index.html:42-174` | Replaced `<details class="breakdown">` collapsible section with always-visible kiosk dashboard; no collapsible/expandable sections |
+| Header | `src/index.html` | `.kiosk-head` header with serif `DASHBOARD` title (`--font-display`) |
+| Stat row | `src/index.html` | `.kiosk-section--registry` wraps `.kiosk-stats` grid with 3 stat cards (Total Residents / By Gender / Registrations This Year); `.kiosk-section__head` header with title + live total badge; cards have `.kiosk-stat:hover` lift effect; gender card shows inline bar chart + male/female ratio |
+| Card status | `src/index.html` | `.kiosk-section--status` wraps `.kiosk-status-group` with 4 color-coded status cards (Active/Renew/Lost/Damage); `.kiosk-section__head` header; grid gap-12 for comfortable card separation |
+| Section CSS | `src/css/style.css` | `.kiosk-section`, `.kiosk-section__head`, `.kiosk-section__title` rules; `.kiosk-stat` padding 22px/20px, 2px border, radius 16px, hover lift with border-color transition + box-shadow |
+| Gap utilities | `src/css/tailwind.css` | Added `gap-8` (2rem), `gap-10` (2.5rem), `gap-12` (3rem); card status grid uses `gap-12` |
+| Gauge | `src/index.html` | `.kiosk-gauge` always visible (no `<details>` wrapper), keeps `stat-hero__side stat-hero__side--left` class for regression pins |
+| Service tiles | `src/index.html` | `.kiosk-tiles` grid with oversized touch tiles (`.kiosk-tile`, min-height 120px, 72px icons, 40px arrow) |
+| Icons | `src/index.html` | PNG glyphs under `src/icons/` referenced via `<img src="icons/*.png" />` (person, users, calendar, check, refresh, badge, alert, document, search, settings). Sizes via `width`/`height` CSS (24px stat, 32px tile) — fixed-color PNGs, no `currentColor` theming. |
+| CSS | `src/css/style.css` | `.kiosk-stat__icon img` and `.kiosk-tile__icon img` use `width`/`height`/`object-fit:contain` for fixed sizing — no `font-size`/`line-height` Unicode scaling. |
+
+Validation: `npm test` 57/0/12, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
+
 ## Standard project coding workflows
 
 ### Run tests
@@ -131,8 +169,8 @@ npm test
 ```
 npm run check:css
 ```
-- `tools/check-css.mjs` fingerprints `index.html` + `app.js`; must report **CSS fresh**.
-- If you change `index.html` or `app.js` markup/classes, run `npm run stamp:css` to update `tools/css-fingerprint.txt` (only if you intentionally changed CSS-relevant markup; zero new CSS classes → just restamp).
+- `tools/check-css.mjs` fingerprints `index.html` + every `src/js/*.js` (vendored libs excluded, derived at runtime); must report **CSS fresh**.
+- If you change `index.html` or any `src/js/*.js` markup/classes, run `npm run stamp:css` to update `tools/css-fingerprint.txt` (only if you intentionally changed CSS-relevant markup; zero new CSS classes → just restamp).
 
 ### Rust backend (CI-only locally)
 - `cargo test`, `cargo clippy`, `cargo fmt --check` **cannot run on this host** (no libsoup-2.4/GTK; documented env limit). Rust verification is CI-only via `.github/workflows/ci.yml` (`cargo test --manifest-path src-tauri/Cargo.toml`).
@@ -272,3 +310,57 @@ Applied robustness fixes to the Windows PowerShell/batch launchers, zero logic c
 | -Logs narrative | `run.ps1` | `.SYNOPSIS` reworded from "replaces view-logs.bat" to "supersedes view-logs.bat logic; wrapper remains" since view-logs.bat still exists as a live Explorer wrapper |
 
 Validation: `npm test` 57/0/12, `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
+
+## Settings page card redesign (2026-10-17)
+
+Applied visual polish to the Settings page cards (`src/index.html` + `src/css/style.css`), zero logic changes:
+
+| Change | File | Detail |
+|--------|------|--------|
+| Card wrapper | `src/index.html:398,424,474,488,507` | All 5 cards now use `.card card--section` with bordered surface; About card uses `.card--about` dark slate surface |
+| Section headers | `src/index.html` | All 5 section heads now use `.section-head` with inline SVG icon + `.section-head__title`
+| Action chip grid | `src/index.html:430-495` | Data & Maintenance (`.settings-grid` at :430), Printing (`.settings-grid` at :480), System Logs (`.settings-grid settings-grid--log` at :495); each chip uses `.settings-chip` with consistent icon+label layout |
+| Settings actions | `src/index.html:411-416` | Barangay Information actions moved to `.settings-actions` with `.settings-btn--save/--reset/--theme` subclasses |
+| Progress bar | `src/index.html:463` | Replaced undefined `bg-gray-200`/`bg-blue-600` with `.settings-progress__track` + `.settings-progress__fill` rules in style.css |
+| Checkbox accent | `src/index.html:416,435` | Replaced undefined `text-blue-600 focus:ring-blue-500` with `.settings-checkbox` (accent-color var) — theme toggle at :416, backup toggle at :435 |
+| Photo grid | `src/index.html:447` | Fixed bare `grid-cols-3` → `sm:grid-cols-3` so 3 columns render at ≥640px (1 column below) — bare `grid-cols-3` was inert since it is not in the hand-built tailwind.css subset |
+| CSS | `src/css/style.css` | Added `.card--section`, `.card--about`, `.settings-grid`, `.settings-grid--log`, `.settings-chip`, `.settings-actions`, `.settings-progress__track`, `.settings-progress__fill`, `.settings-checkbox`, `.about-grid`, `.about-kv__key`, `.about-kv__value`, `.about-note`, `.section-head__icon`, `.settings-chip svg`, `.log-info`, `.log-info__label`, `.log-info__text` |
+
+Validation: `npm test` 57/0/12, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
+
+## Fonts & bundled type (2026-10-17)
+
+All typefaces are bundled locally — no CDN, no external fonts:
+
+| Font | File | Used in |
+|------|------|----------|
+| Inter (400/500/600/700) | `src/fonts/Inter-{Regular,Medium,SemiBold,Bold}.ttf` | SPA `--font-sans`, card `--font-body`/`--font-data` |
+| Source Serif Pro (600) | `src/fonts/SourceSerifPro-SemiBold.ttf` | `--font-display` (dashboard title, card titles) |
+| JetBrains Mono (400) | `src/fonts/JetBrainsMono-Regular.ttf` | `--font-mono` |
+| OFL license text | `src/fonts/OFL.txt` | SIL OFL 1.1 notice for the three families |
+
+- `src/css/style.css`: `@font-face` declarations reference `../fonts/` (style.css lives in `src/css/`).
+- `src/card-template.html`: `@font-face` declarations reference `fonts/` (template lives at `src/` root).
+- Replaced `"Work Sans"` with `"Inter"` in card-template.html header comment and README.md body-font line.
+- CSP: `tauri.conf.json` has no `font-src`, so bundled fonts load under `default-src 'self'` (no CSP change needed).
+
+Validation: `npm test` 57/0/12, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
+
+## Icons (2026-10-17)
+
+Dashboard glyphs are PNG files under `src/icons/` referenced via `<img src="icons/*.png" />` in `src/index.html` (person, users, calendar, check, refresh, badge, alert, document, search, settings). These are static image assets — they do not respond to `currentColor` theming but keep theming consistent across the navy/gold token system since each PNG is a fixed-color render. Five inline `<svg>` section-head icons on the Settings cards were replaced with PNG `<img>` tags on 2026-10-18; PNG icons are the intended source for all dashboard glyphs.
+
+Validation: `npm test` 57/0/12, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
+
+## Accessibility & focus polish (2026-10-18)
+
+Zero logic changes — accessibility hardening only:
+
+| Change | File | Detail |
+|--------|------|--------|
+| Birth date aria pairing | `src/index.html:202` | `aria-describedby="bdate-help"` on input + matching `id="bdate-help"` on help paragraph |
+| Valid until aria pairing | `src/index.html:475` | `aria-describedby="valid-until-help"` on input + matching `id="valid-until-help"` on help paragraph |
+| Resident ID aria pairing | `src/index.html:179` | Pre-existing `aria-describedby="resident-id-help"` — verified pairing with help paragraph |
+| Focus management | `src/js/app.core.js` | Added `focusView()` method that scopes to the visible view container (offsetParent !== null, since all views coexist under x-show) and focuses the first focusable element: dashboard→.kiosk-tile, register→#resident-id, search→#search-input, settings→.hub-back, detail→.hub-back. Wired via `this.$watch('currentView', () => this.focusView())` in `init()`. |
+
+Validation: `npm test` 57/0/12, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.

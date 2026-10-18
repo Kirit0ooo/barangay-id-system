@@ -120,7 +120,13 @@ Object.assign(window.appState, {
 
     // ─── Settings: database maintenance ────────────────────────────────
     async optimizeDatabase() {
-        return await API.optimizeDatabase();
+        try {
+            await API.optimizeDatabase();
+            this.showToast('Database optimized', 'success');
+        } catch (e) {
+            this.showToast('Database optimize failed: ' + e, 'error');
+            Logger.error('optimizeDatabase failed', e);
+        }
     },
     
     // ─── Settings: encryption at rest ──────────────────────────────────

@@ -22,6 +22,13 @@ const configRs = readFileSync(join(root, 'src-tauri/src/config.rs'), 'utf8');
 const scheduledRs = readFileSync(join(root, 'src-tauri/src/scheduled.rs'), 'utf8');
 const loggerRs = readFileSync(join(root, 'src-tauri/src/logger.rs'), 'utf8');
 const pkgJson = readFileSync(join(root, 'package.json'), 'utf8');
+let cssGuard = '';
+try {
+  cssGuard = readFileSync(join(root, 'tools/check-css.mjs'), 'utf8');
+} catch {
+  // guard file moved/renamed — check below will fail gracefully instead of
+  // aborting the whole module and masking every check below it.
+}
 const cardTpl = readFileSync(join(root, 'src/card-template.html'), 'utf8');
 const buildPs1 = readFileSync(join(root, 'build.ps1'), 'utf8');
 const runPs1 = readFileSync(join(root, 'run.ps1'), 'utf8');
@@ -199,6 +206,11 @@ check('backup/safety/log retention exists (P2-6)', backupRs.includes('prune_olde
 check('resolve_unique_path errors on exhaustion (P2-8)', dbRs.includes('refusing to overwrite'), 'collision fall-through still overwrites');
 check('get_logs_dir returns Result (P2-9)', loggerRs.includes('pub fn get_logs_dir() -> Result<PathBuf, String>'), 'panic path still present');
 check('CSS freshness check wired (P2-10)', pkgJson.includes('check:css'), 'no stale-CSS guard');
+// Note: this pin matches local identifiers jsDir / vendorName / '.min.js' inside
+// tools/check-css.mjs. A legitimate refactor that renames those locals trips this
+// check as a false red — update the spelling here rather than restoring the old
+// hardcoded sources = ['src/index.html','src/js/app.js'] pair.
+check('check-css derives JS sources at runtime', cssGuard.includes('readdirSync(jsDir)') && cssGuard.includes('name === vendorName') && cssGuard.includes('.min.js'), 'guard missing or reverted to hardcoded sources');
 check('update ignores echoed photo filename (P2-12)', residentsRs.includes('never trust the echoed client filename'), 'stale echo can still overwrite photo');
 check('todayISO uses local time (P2-14)', appJs.includes('getFullYear') && !/function todayISO\(\)\s*\{[^}]*toISOString/.test(appJs), 'todayISO still UTC');
 
@@ -242,27 +254,21 @@ check('save enforces 11-digit mobiles', appJs.includes('mustBeMobile'), 'submit 
 
 // 31. dashboard status cards + gender pie (male/female ratio cards retired)
 check('status cards present (active/renew/lost/damage)', ['Active cards', 'Renew cards', 'Lost cards', 'Damage cards'].every(s => indexHtml.includes(s)), 'status card missing');
-check('balance gauge present (offline SVG, no chart lib)', indexHtml.includes('svg class="gauge"') && indexHtml.includes('gauge-legend'), 'gauge missing');
+
 check('old ratio cards retired', !indexHtml.includes('stat-card--male') && !indexHtml.includes('stat-card--female'), 'old male/female cards still present');
 check('backend serves status counts', residentsRs.includes('pub active: i64') && residentsRs.includes("UPPER(remarks) = 'RENEW'") && residentsRs.includes("UPPER(remarks) = 'LOST'") && residentsRs.includes("UPPER(remarks) = 'DAMAGE'"), 'status queries missing');
-check('gauge arcs use pathLength helper + gap rule', appJs.includes('gaugeArcs()') && appJs.includes('gaugeGap()') && indexHtml.includes('pathLength="100"'), 'gauge math missing');
+
 check('primary stat dominant (34px)', styleCss.includes('.stat-card--primary .stat-card__value{ color:var(--color-text); font-size:34px; }'), 'primary dominance missing');
-check('year stacked under total, pie middle (no right side)', indexHtml.includes('stat-hero__side--left') && !indexHtml.includes('stat-hero__side--right') && !indexHtml.includes('stat-card--primary" role') && !indexHtml.includes('stat-card--secondary" role'), 'stacked hero missing');
-check('hero stat icons tinted (total navy, year blue)', styleCss.includes('.stat-hero__stat--total .stat-card__icon') && styleCss.includes('.stat-hero__stat--year .stat-card__icon'), 'hero icons untinted');
-check('hero chart zone capped (no ultrawide sprawl)', styleCss.includes('.stat-hero__chart{ min-width:0; max-width:380px;'), 'chart cap missing');
-check('hero stat slots aligned (label/value/meta rows)', styleCss.includes('.stat-hero__stat .stat-card__value{ min-height:40px;'), 'slot alignment missing');
 check('root clips horizontal overflow (full-bleed sticky nav)', styleCss.includes('html,body{ overflow-x:clip; }'), 'nav can scroll sideways');
 check('uniform 40px buttons, label-fit widths', styleCss.includes('min-height:40px;') && !indexHtml.includes('min-height: 100px') && indexHtml.includes('action-chip'), 'button heights vary');
 check('edit mode hides Clear Form, shows Back (new keeps Clear)', indexHtml.includes('x-show="!editingResident" @click="clearForm"') && indexHtml.includes('x-show="editingResident" @click="goBackFromEdit()"'), 'edit/new buttons not gated');
 check('edit mode has Back only (Cancel is new-only)', indexHtml.includes('x-show="!editingResident" @click="clearForm"') && !appJs.includes('async revertEdit()') && appJs.includes('async goBackFromEdit()'), 'edit-mode buttons wrong');
 check('detail hero shows ID expiry below pills', indexHtml.includes('detail-view-validity') && indexHtml.includes('expiryCountdown(detailResident)') && appJs.includes('expiryCountdown('), 'expiry line missing');
-check('gauge chips have proportion bars', indexHtml.includes('gauge-fill--male') && indexHtml.includes('gauge-fill--female'), 'gauge bars missing');
+
 
 // 36. balance-gauge replaces the donut (new visual language)
-check('balance gauge present (track + two arcs)', indexHtml.includes('svg class="gauge"') && indexHtml.includes('gauge-arc--male') && indexHtml.includes('gauge-arc--female'), 'gauge missing');
-check('gauge helper returns both arc lengths', appJs.includes('gaugeArcs()'), 'gaugeArcs missing');
-check('gauge gap only when both sides non-trivial', appJs.includes('gaugeGap()'), 'gap rule missing');
-check('gauge center shows label below total (no M·F sub)', indexHtml.includes('gauge-center__label') && !indexHtml.includes('gauge-center__sub'), 'M·F sub still present');
+
+
 check('donut layers retired', !indexHtml.includes('pieGradMale') && !indexHtml.includes('url(#pieSoft)') && !indexHtml.includes('opacity="0.65"'), 'donut remnants still present');
 check('donut helpers retired', !appJs.includes('pieSpan()') && !appJs.includes('pieOff()') && !appJs.includes('pieBoth()'), 'donut helpers still present');
 
@@ -295,12 +301,6 @@ check('all launchers ASCII-only (PS 5.1 codepage-safe)', [runPs1, buildPs1, runB
 check('run.ps1 gate probes MSVC linker', runPs1.includes('link.exe'), 'tauri dev would fail at link after compiling');
 check('Node floor aligned at 20+ in both launchers', runPs1.includes('LTS 20+') && buildPs1.includes('20'), 'run says 18+, build requires 20+');
 check('bat wrappers forward flags to ps1', runBat.includes('%*') && buildBat.includes('%*'), 'flags silently dropped by wrapper');
-
-// 37. gauge polish: balance marker, quartile ticks, arc depth, chip lift
-check('gauge midtick marker removed (decluttered top center)', !indexHtml.includes('gauge-midtick'), 'midtick still present');
-check('gauge has quartile tick dots', (indexHtml.match(/gauge-tick/g) || []).length >= 3, 'track has no proportion ticks');
-check('gauge arcs carry soft depth shadow', styleCss.includes('.gauge-arc') && styleCss.includes('drop-shadow'), 'arcs flat against track');
-check('gauge chips lift on hover (reduced-motion safe)', styleCss.includes('.gauge-chip:hover'), 'chips feel static');
 
 // 38. Release hygiene: stale bundle outputs removed pre-build, patch version auto-increments
 check('build.ps1 cleans stale bundle dir before build', buildPs1.includes('Remove-Item') && buildPs1.includes('release\\bundle') && buildPs1.includes('NoClean'), 'no bundle clean step');
@@ -336,6 +336,7 @@ check('frontend log strips newline injection', loggerRs.includes("\\n") && (logg
 check('frontend log caps single-message size', /8000|truncate|chars\(\)\.take/.test(loggerRs), 'one unbounded message blows past 5MB rotation check');
 check('photo_gc compares basenames case-insensitively', scheduledRs.includes('to_lowercase'), 'ABC.JPG vs abc.jpg false-orphan on Windows');
 check('card template allows only safe img schemes', cardTpl.includes('data:image') && (cardTpl.includes('asset:') || cardTpl.includes('allowlist') || cardTpl.includes('SAFE_IMG')), 'javascript: src would execute in print window');
+check('photo read path decrypts at-rest photos', residentsRs.includes('decrypt_or_plaintext') && residentsRs.includes('load_key()'), 'encrypted photos render broken images on read');
 check('frontend log download revokes URL on delay (no slow-disk abort)', !loggerJs.includes('a.click(); URL.revokeObjectURL(url)'), 'immediate revoke may abort download');
 const residentIdTag = /<input[^>]*id="resident-id"[^>]*>/.exec(indexHtml)?.[0] || '';
 check('resident-id input has single aria-describedby', (residentIdTag.match(/aria-describedby/g) || []).length <= 1, 'duplicate aria-describedby on #resident-id');

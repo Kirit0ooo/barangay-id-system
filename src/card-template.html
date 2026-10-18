@@ -10,8 +10,8 @@
 <!--
   OFFICIAL Barangay Resident's Card template — portable, offline-first. CR100.
   - No CDN, no tracking, no external fonts: all CSS inlined.
-    Type: "Source Serif Pro", Georgia, serif (civic display) + "Work Sans",
-    "Segoe UI", Arial (body/data) with system fallbacks so print works offline.
+    Type: "Source Serif Pro", Georgia, serif (civic display) + "Inter",
+    "Segoe UI", Arial (body/data) with locally bundled fonts (offline).
   - Logos resolve to local isolated assets: ./assets/BALUD.png and
     ./assets/bagong-pilipinas.png (transparent PNGs seated directly on the
     lime header — no medallion, no circle crop, art blends into the green).
@@ -30,8 +30,28 @@
     --red:#e41119;
     --ink:#111827; --muted:#475569; --line:#d1d5db; --label-bg:#e5e7eb;
     --font-display:"Source Serif Pro",Georgia,"Times New Roman",serif;
-    --font-body:"Work Sans","Segoe UI",Arial,Helvetica,sans-serif;
-    --font-data:"Work Sans","Segoe UI",Arial,Helvetica,sans-serif;
+    --font-body:"Inter","Segoe UI",Arial,Helvetica,sans-serif;
+    --font-data:"Inter","Segoe UI",Arial,Helvetica,sans-serif;
+  }
+  @font-face{
+    font-family:"Inter"; font-style:normal; font-weight:400; font-display:swap;
+    src:url("fonts/Inter-Regular.ttf") format("truetype");
+  }
+  @font-face{
+    font-family:"Inter"; font-style:normal; font-weight:500; font-display:swap;
+    src:url("fonts/Inter-Medium.ttf") format("truetype");
+  }
+  @font-face{
+    font-family:"Inter"; font-style:normal; font-weight:600; font-display:swap;
+    src:url("fonts/Inter-SemiBold.ttf") format("truetype");
+  }
+  @font-face{
+    font-family:"Inter"; font-style:normal; font-weight:700; font-display:swap;
+    src:url("fonts/Inter-Bold.ttf") format("truetype");
+  }
+  @font-face{
+    font-family:"Source Serif Pro"; font-style:normal; font-weight:600; font-display:swap;
+    src:url("fonts/SourceSerifPro-SemiBold.ttf") format("truetype");
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   html,body{background:#e8eaf0; font-family:var(--font-body); color:var(--ink);}

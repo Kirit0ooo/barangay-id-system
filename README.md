@@ -197,7 +197,7 @@ One folder, exe + data together. Details: `src-tauri/wix/main.wxs` is the offici
 * **Search** — `last_name LIKE ? OR first_name LIKE ? OR resident_id LIKE ? OR contact_number LIKE ?` + digit-stripped contact match (so `09171234567` finds stored `0917-123-4567`) + optional `address_purok = ?` + `is_active` toggle, `LIMIT 2000`, ordered `last_name,first_name`.
 * **Soft delete** — `UPDATE is_active=0`, no hard delete; search can include inactive.
 * **ID Card** — Preview → Print on CR100 via `card-template.html` (single render path) — see next section.
-* **Excel** — `rust_xlsxwriter` 31 columns, header navy `#003366`, frozen pane row 1, widths per column, `is_active=1` only.
+* **Excel** — `rust_xlsxwriter` 37 columns, header navy `#003366`, frozen pane row 1, widths per column, `is_active=1` only.
 * **Backup/Restore** — `PRAGMA wal_checkpoint(TRUNCATE)` → `fs::copy` to validated `data/backups/residents_backup_{timestamp}.db` (+ `photos_backup_{file}` dir copy). Restore copies safety backup first.
 
 ---
@@ -285,7 +285,7 @@ last_pdf_path TEXT, last_pdf_generated_at TEXT, -- legacy PDF audit trail: DORMA
 * **Front:** navy header (Republic / Province / Municipality / Barangay), gold accent, white logo wells (placeholder `LOGO`), title, 1×1 photo card (inner white), signature line, 3-row grid: (Last/First/Middle) → (DOB/Gender/Civil) → (Purok/Contact/Blood), navy ID pill + white `VALID DD-MM-YYYY` chip, punong `RAYMUND ROSILLER R. DE VEYRA` + year chips, micro-footer. Faint `BALUD` watermark (38pt) + guilloche dots.
 * **Back:** navy `IN CASE OF EMERGENCY…` bar, Name/Relationship/Address (PUROK…, house/street second line if present)/Contact, yellow validity box, 17 mm QR (white bordered), footer `If found…`.
 * **QR data (JSON):** `{"id","name":"Last, First Middle","dob":"DD-MM-YYYY","purok","contact","valid","status":"remarks"}` rendered via `qrcode` at 200 px (`get_qr_data_url`), fallback 1×1 PNG on error.
-* **Fonts:** the card template requests Source Serif Pro/Work Sans with offline system fallbacks (no external TTF required). Screen preview and print share the exact CR100 geometry (98.6×66.8 seats, photo 20.9×26.9, QR pad 14.6) so WYSIWYG holds.
+* **Fonts:** the card template requests Source Serif Pro/Inter with locally bundled TTFs (offline, no CDN). Screen preview and print share the exact CR100 geometry (98.6×66.8 seats, photo 20.9×26.9, QR pad 14.6) so WYSIWYG holds.
 
 ---
 
@@ -330,7 +330,7 @@ View: `logs/app.log.2026-09-09`, `logs/frontend.log`. Verbose: `set RUST_LOG=deb
 
 * **Backup:** `Dashboard → Backup` or `Settings → Backup` → `data/backups/residents_backup_{timestamp}.db` (+ `photos_backup_{file}` dir). Implementation: `wal_checkpoint(TRUNCATE)` → `fs::copy` validated inside-tree (no string-interpolated `VACUUM INTO`).
 * **Restore:** `Settings → Restore` → pick file inside tree (validated `starts_with(root)`), safety copy to `data/backups/safety_backup_{ts}.db` before `fs::copy(source, data/residents.db)`. Restart app after restore (pool holds old handles).
-* **Excel:** `Dashboard/Settings → Export` or detail modal `Export to Excel` → validated inside-tree `*.xlsx`; 31 columns, navy header, thin borders, frozen row 1.
+* **Excel:** `Dashboard/Settings → Export` or detail modal `Export to Excel` → validated inside-tree `*.xlsx`; 37 columns, navy header, thin borders, frozen row 1.
 
 ---
 
@@ -381,7 +381,7 @@ with a legacy cmd fallback. `run.ps1` is canonical — `.bat` wrappers only forw
 * Photo size guard 8 MB base64 / 6 MB decoded + JPEG re-encode 600×800.
 * All `sqlx` queries use `bind()` (no injection); backup no longer interpolates SQL.
 * ID `MAX(substr(...,-5))` per year avoids `COUNT` reuse; R2 retries `MAX→INSERT` once on UNIQUE `resident_id` violation (`BEGIN IMMEDIATE` + re-query MAX) and cleans orphan photo on each failure.
-* R4 Excel import guards: header/width desync asserted (`36` cols), header count mismatch warns & rejects severely malformed sheets, row `len()>headers` truncated, missing columns padded as empty, logged via `tracing::warn!`.
+* R4 Excel import guards: header/width desync asserted (`37` cols), header count mismatch warns & rejects severely malformed sheets, row `len()>headers` truncated, missing columns padded as empty, logged via `tracing::warn!`.
 * R5 Scheduled maintenance: `src-tauri/src/scheduled.rs` — `scheduled_backup` (`wal_checkpoint(TRUNCATE)` → `data/backups/scheduled_*.db`, isolated) and `photo_gc` (orphan scan under `data/photos`, logs count, deletes only with flag) wired via `main.rs` + frontend 24h `setInterval` + Settings Scan/Clean buttons. 100% offline.
 
 ### Alpine CSP `unsafe-eval` Removal (R6 — completed in M1 pass)

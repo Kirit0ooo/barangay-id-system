@@ -1,4 +1,4 @@
-// Dashboard view methods (gauge, status, expiry).
+// Dashboard view methods (status, expiry).
 // Extends window.appState (defined in app.core.js).
 Object.assign(window.appState, {
     
@@ -17,30 +17,6 @@ Object.assign(window.appState, {
         // Use UTC date strings to avoid local timezone off-by-one
         const today = this.todayISO();
         return iso < today;
-    },
-    
-    // ─── Dashboard: gauge arc math ─────────────────────────────────────
-    // Balance-gauge arc math: male grows from the left end of the 180-degree
-    // track, female from the right end (pathLength=100 units). A 3-unit gap
-    // separates the arcs only when both sides are non-trivial (>2% and
-    // <98%); empty and single-side states stay clean with no gap.
-    gaugeSeg(part) {
-        if (!this.stats.total || part <= 0) return 0;
-        return (part / this.stats.total) * 100;
-    },
-    gaugeGap() {
-        if (!this.stats.total) return false;
-        const m = (this.stats.male / this.stats.total) * 100;
-        return m > 2 && m < 98;
-    },
-    gaugeArcs() {
-        if (!this.stats.total) return { mLen: 0, fLen: 0, fOff: -100 };
-        const m = this.gaugeSeg(this.stats.male);
-        const gap = this.gaugeGap() ? 3 : 0;
-        const mLen = Math.max(m - gap / 2, 0);
-        const fLen = Math.max((100 - m) - gap / 2, 0);
-        // Female dash must END at the path end (100): offset = fLen - 100.
-        return { mLen, fLen, fOff: fLen - 100 };
     },
     
     // ─── Dashboard: expiry ─────────────────────────────────────────────

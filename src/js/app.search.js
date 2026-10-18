@@ -17,7 +17,7 @@ Object.assign(window.appState, {
             const cat = (this.searchCategory || 'all').toLowerCase();
             const needInactive = (cat === 'all' || cat === 'inactive');
             const rows = await API.searchResidents(
-                this.searchQuery,
+                (this.searchQuery || '').toUpperCase(),
                 this.searchPurok || null,
                 needInactive
             );
@@ -29,6 +29,7 @@ Object.assign(window.appState, {
         } catch (e) {
             Logger.error('Search error:', e);
             this.searchResults = [];
+            this.showToast('Search failed: ' + e, 'error');
         }
         this.searching = false;
     },

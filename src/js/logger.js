@@ -38,7 +38,11 @@ const Logger = (() => {
   }
 
   function fmt(args) {
-    return args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+    return args.map(a => {
+      if (a instanceof Error) return a.stack || (a.name + ': ' + a.message);
+      try { return typeof a === 'object' ? JSON.stringify(a) : String(a); }
+      catch { return String(a); }
+    }).join(' ');
   }
 
   function log(level, ...args) {

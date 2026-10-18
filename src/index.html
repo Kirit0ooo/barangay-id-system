@@ -13,7 +13,7 @@
 </head>
 <body class="min-h-screen text-slate-900 antialiased selection:bg-amber-200 selection:text-slate-900">
  <a href="#main-content" class="skip-link">Skip to content</a>
- <div id="app" x-data="app()" x-init="init()" @keydown.escape.window="if (currentView === 'detail') closeDetail()">
+ <div id="app" x-data="app()" x-init="init()" x-effect="focusView()" @keydown.escape.window="if (currentView === 'detail') closeDetail()">
  
  <!-- NAV — 70/20/10 restrained: navy + solid gold rule, no blur, no gradient -->
  <nav class="sticky top-0 z-50 border-b border-slate-800 bg-[#0F2B5E] text-white" aria-label="Primary">
@@ -39,133 +39,145 @@
  <main id="main-content" tabindex="-1" class="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 focus:outline-none">
  
  <!-- WELCOME HUB — big service tiles for non-tech-savvy officers -->
- <div x-show="currentView === 'dashboard'" x-cloak class="space-y-6" x-transition.opacity>
- <div class="flex items-baseline justify-between gap-3">
- <div>
- <h2 class="text-2xl font-extrabold tracking-tight text-slate-900 view-title">Welcome</h2>
- <p class="hub-motto">"Serving our community, one resident at a time."</p>
+ <div x-show="currentView === 'dashboard'" x-cloak class="space-y-8" x-transition.opacity>
+ <div class="kiosk-head">
+   <h2 class="kiosk-head__title view-title">DASHBOARD</h2>
  </div>
- <span class="hub-pill" aria-hidden="true">Dashboard</span>
- </div>
-
- <div class="hub-grid">
- <button @click="clearForm(); currentView='register'" class="hub-tile hub-tile--register" aria-label="New Resident Registration — add a resident and create their ID card">
- <span class="hub-tile__icon hub-tile__icon--register"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span>
- <span class="hub-tile__title">New Resident Registration</span>
- <span class="hub-tile__desc">Add a resident and create their ID card</span>
- <span class="hub-tile__arrow" aria-hidden="true">→</span>
- <span class="hub-tile__steps"><span>1</span>Fill form <span>2</span>Add photo <span>3</span>Save</span>
- </button>
-
- <button @click="searchResidents(); currentView='search'" class="hub-tile hub-tile--search" aria-label="Resident List &amp; Search — find, filter, edit &amp; print cards">
- <span class="hub-tile__icon hub-tile__icon--search"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-3.5-3.5"/></svg></span>
- <span class="hub-tile__title">Resident List &amp; Search</span>
- <span class="hub-tile__desc">Find, filter, edit &amp; print cards</span>
- <span class="hub-tile__arrow" aria-hidden="true">→</span>
- <span class="hub-tile__chips">All · Active · Renew · Lost · Damage · Search</span>
- </button>
-
- <button @click="await loadCivicConfig(); currentView='settings'" class="hub-tile hub-tile--settings" aria-label="Settings — barangay info, backup, database health">
- <span class="hub-tile__icon hub-tile__icon--settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></span>
- <span class="hub-tile__title">Settings</span>
- <span class="hub-tile__desc">Barangay info, backup, database health</span>
- <span class="hub-tile__arrow" aria-hidden="true">→</span>
- <span class="hub-tile__chips">Backup · Restore · Excel · Logs</span>
- </button>
- </div>
-
- <!-- Population hero — civic overview: totals left, gauge center -->
- <div class="stat-card stat-hero" role="region" aria-label="Population overview">
- <div class="stat-hero__accent" aria-hidden="true"></div>
- <div class="stat-hero__layout">
- <div class="stat-hero__side stat-hero__side--left">
- <div class="stat-hero__stat stat-hero__stat--total">
- <div class="stat-hero__stat-head">
- <div class="stat-card__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
- <div class="stat-card__label"><span>Total Residents</span><span class="stat-hero__dot" aria-hidden="true"></span></div>
- </div>
- <div class="stat-card__value" x-text="stats.total">0</div>
- <div class="stat-card__meta">Active records in registry</div>
- </div>
- <div class="stat-hero__stat stat-hero__stat--year">
- <div class="stat-hero__stat-head">
- <div class="stat-card__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"/></svg></div>
- <div class="stat-card__label"><span>This Year</span><span x-show="stats.thisYear > 0" class="stat-hero__badge">new</span></div>
- </div>
- <div class="stat-card__value" x-text="stats.thisYear">0</div>
- <div class="stat-card__meta">Registered <span x-text="new Date().getFullYear()">2026</span> · current year</div>
- </div>
- </div>
- <div class="stat-hero__divider" aria-hidden="true"></div>
- <div class="stat-hero__chart">
- <div class="gauge-wrap">
- <svg class="gauge" viewBox="0 0 200 122" role="img" :aria-label="'Male ' + stats.male + ', Female ' + stats.female">
- <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="var(--border)" stroke-width="14" stroke-linecap="round" class="gauge-track" aria-hidden="true"/>
- <g class="gauge-ticks" aria-hidden="true" fill="var(--border-strong)"><circle class="gauge-tick" cx="43.4" cy="43.4" r="2.5"/><circle class="gauge-tick" cx="100" cy="20" r="2.5"/><circle class="gauge-tick" cx="156.6" cy="43.4" r="2.5"/></g>
- <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="var(--color-primary)" stroke-width="14" stroke-linecap="round" pathLength="100" class="gauge-arc gauge-arc--male" :stroke-dasharray="gaugeArcs().mLen + ' 100'"/>
- <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="var(--color-accent)" stroke-width="14" stroke-linecap="round" pathLength="100" class="gauge-arc gauge-arc--female" :stroke-dasharray="gaugeArcs().fLen + ' 100'" :stroke-dashoffset="gaugeArcs().fOff"/>
- </svg>
- <div class="gauge-center" aria-hidden="true">
- <span class="gauge-center__value" x-text="stats.total">0</span>
- <span class="gauge-center__label">Total residents</span>
- </div>
- </div>
- <div class="gauge-legend" role="list" aria-label="Gender breakdown">
- <div class="gauge-chip gauge-chip--male" role="listitem"><span class="gauge-dot gauge-dot--male" aria-hidden="true"></span><span class="gauge-chip__label">Male</span><span class="gauge-chip__count" x-text="stats.male">0</span><span class="gauge-chip__pct" x-text="stats.total ? Math.round(stats.male/stats.total*100)+'%' : '—'">—</span><div class="gauge-chip__bar" aria-hidden="true"><div class="gauge-fill--male" :style="'width:' + (stats.total ? (stats.male/stats.total*100) : 0) + '%'"></div></div></div>
- <div class="gauge-chip gauge-chip--female" role="listitem"><span class="gauge-dot gauge-dot--female" aria-hidden="true"></span><span class="gauge-chip__label">Female</span><span class="gauge-chip__count" x-text="stats.female">0</span><span class="gauge-chip__pct" x-text="stats.total ? Math.round(stats.female/stats.total*100)+'%' : '—'">—</span><div class="gauge-chip__bar" aria-hidden="true"><div class="gauge-fill--female" :style="'width:' + (stats.total ? (stats.female/stats.total*100) : 0) + '%'"></div></div></div>
- </div>
+ <div class="kiosk-section kiosk-section--registry">
+   <div class="kiosk-section__head">
+     <h3 class="kiosk-section__title">Registry overview</h3>
+   </div>
+   <div class="kiosk-stats">
+     <div class="kiosk-stat kiosk-stat--total" role="region" aria-label="Total Residents">
+       <div class="kiosk-stat__head">
+         <div class="kiosk-stat__icon" aria-hidden="true"><img src="icons/person.png" alt="" aria-hidden="true"></div>
+         <div class="kiosk-stat__label"><span>Total Residents</span></div>
+       </div>
+       <div class="kiosk-stat__value" x-text="stats.total">0</div>
+       <div class="kiosk-stat__meta">Active records in registry</div>
+     </div>
+     <div class="kiosk-stat kiosk-stat--gender" role="region" aria-label="By Gender">
+       <div class="kiosk-stat__head">
+         <div class="kiosk-stat__icon" aria-hidden="true"><img src="icons/users.png" alt="" aria-hidden="true"></div>
+         <div class="kiosk-stat__label"><span>By Gender</span></div>
+       </div>
+       <div class="kiosk-stat__bar">
+         <div class="kiosk-stat__bar-fill kiosk-stat__bar-fill--male" :style="'width:' + (stats.total ? (stats.male/stats.total*100) : 0) + '%'"></div>
+         <div class="kiosk-stat__bar-fill kiosk-stat__bar-fill--female" :style="'width:' + (stats.total ? (stats.female/stats.total*100) : 0) + '%'"></div>
+       </div>
+       <div class="kiosk-stat__ratio">
+         <span class="kiosk-stat__ratio__group">
+           <span class="kiosk-stat__ratio__label--male">Male</span>
+           <span class="kiosk-stat__ratio--male" x-text="stats.male">0</span>
+         </span>
+         <span class="kiosk-stat__ratio__group">
+           <span class="kiosk-stat__ratio__label--female">Female</span>
+           <span class="kiosk-stat__ratio--female" x-text="stats.female">0</span>
+         </span>
+       </div>
+     </div>
+     <div class="kiosk-stat kiosk-stat--year" role="region" aria-label="Registrations This Year">
+       <div class="kiosk-stat__head">
+         <div class="kiosk-stat__icon" aria-hidden="true"><img src="icons/calendar.png" alt="" aria-hidden="true"></div>
+         <div class="kiosk-stat__label"><span>Registrations This Year</span></div>
+       </div>
+       <div class="kiosk-stat__value" x-text="stats.thisYear">0</div>
+       <div class="kiosk-stat__meta">Registered <span x-text="new Date().getFullYear()">2026</span> · current year</div>
+     </div>
+   </div>
  </div>
 
- </div>
+ <div class="kiosk-section kiosk-section--status">
+   <div class="kiosk-section__head">
+     <h3 class="kiosk-section__title">Card status</h3>
+   </div>
+   <div class="kiosk-status-group">
+     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-12">
+       <div class="kiosk-stat kiosk-stat--active" role="region" aria-label="Active cards">
+         <div class="kiosk-stat__head">
+           <div class="kiosk-stat__icon" aria-hidden="true"><img src="icons/check.png" alt="" aria-hidden="true"></div>
+           <div class="kiosk-stat__label"><span>Active</span></div>
+         </div>
+         <div class="kiosk-stat__value" x-text="stats.active">0</div>
+         <div class="kiosk-stat__meta">Valid cards in circulation</div>
+       </div>
+       <div class="kiosk-stat kiosk-stat--renew" role="region" aria-label="Renew cards">
+         <div class="kiosk-stat__head">
+           <div class="kiosk-stat__icon" aria-hidden="true"><img src="icons/refresh.png" alt="" aria-hidden="true"></div>
+           <div class="kiosk-stat__label"><span>Renew</span></div>
+         </div>
+         <div class="kiosk-stat__value" x-text="stats.renew">0</div>
+         <div class="kiosk-stat__meta">Marked for renewal</div>
+       </div>
+       <div class="kiosk-stat kiosk-stat--lost" role="region" aria-label="Lost cards">
+         <div class="kiosk-stat__head">
+           <div class="kiosk-stat__icon" aria-hidden="true"><img src="icons/badge.png" alt="" aria-hidden="true"></div>
+           <div class="kiosk-stat__label"><span>Lost</span></div>
+         </div>
+         <div class="kiosk-stat__value" x-text="stats.lost">0</div>
+         <div class="kiosk-stat__meta">Reported lost</div>
+       </div>
+       <div class="kiosk-stat kiosk-stat--damage" role="region" aria-label="Damage cards">
+         <div class="kiosk-stat__head">
+           <div class="kiosk-stat__icon" aria-hidden="true"><img src="icons/alert.png" alt="" aria-hidden="true"></div>
+           <div class="kiosk-stat__label"><span>Damage</span></div>
+         </div>
+         <div class="kiosk-stat__value" x-text="stats.damage">0</div>
+         <div class="kiosk-stat__meta">Reported damaged</div>
+       </div>
+     </div>
+   </div>
  </div>
 
 
- <!-- Card Status counts — Active / Renew / Lost / Damage -->
- <div class="stat-card-group">
- <p class="stat-card-group__label">Card Status</p>
- <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
- <div class="stat-card stat-card--active" role="region" aria-label="Active cards">
- <div class="stat-card__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 6L9 17l-5-5"/></svg></div>
- <div class="stat-card__label"><span>Active</span></div>
- <div class="stat-card__value" x-text="stats.active">0</div>
- <div class="stat-card__meta">Valid cards in circulation</div>
+
+ <div class="kiosk-section kiosk-section--services">
+   <div class="kiosk-section__head">
+     <h3 class="kiosk-section__title">Services</h3>
+   </div>
+   <div class="kiosk-tiles">
+   <button @click="clearForm(); currentView='register'" class="kiosk-tile kiosk-tile--register" aria-label="New Resident Registration — add a resident and create their ID card">
+     <div class="kiosk-tile__icon" aria-hidden="true"><img src="icons/document.png" alt="" aria-hidden="true"></div>
+     <div class="kiosk-tile__text">
+       <div class="kiosk-tile__title">Start a registration</div>
+       <div class="kiosk-tile__desc">Create a new resident card</div>
+     </div>
+     <div class="kiosk-tile__arrow" aria-hidden="true">→</div>
+   </button>
+
+   <button @click="searchResidents(); currentView='search'" class="kiosk-tile kiosk-tile--search" aria-label="Resident List &amp; Search — find, filter, edit &amp; print cards">
+     <div class="kiosk-tile__icon" aria-hidden="true"><img src="icons/search.png" alt="" aria-hidden="true"></div>
+     <div class="kiosk-tile__text">
+       <div class="kiosk-tile__title">Find a resident</div>
+       <div class="kiosk-tile__desc">Look up a resident record</div>
+     </div>
+     <div class="kiosk-tile__arrow" aria-hidden="true">→</div>
+   </button>
+
+   <button @click="await loadCivicConfig(); currentView='settings'" class="kiosk-tile kiosk-tile--settings" aria-label="Settings — barangay info, backup, database health">
+     <div class="kiosk-tile__icon" aria-hidden="true"><img src="icons/settings.png" alt="" aria-hidden="true"></div>
+     <div class="kiosk-tile__text">
+       <div class="kiosk-tile__title">Settings</div>
+       <div class="kiosk-tile__desc">Barangay info, backup, database health</div>
+     </div>
+     <div class="kiosk-tile__arrow" aria-hidden="true">→</div>
+   </button>
+   </div>
  </div>
- <div class="stat-card stat-card--renew" role="region" aria-label="Renew cards">
- <div class="stat-card__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a9 9 0 11-2.6-6.4"/><path d="M21 3v6h-6"/></svg></div>
- <div class="stat-card__label"><span>Renew</span></div>
- <div class="stat-card__value" x-text="stats.renew">0</div>
- <div class="stat-card__meta">Marked for renewal</div>
- </div>
- <div class="stat-card stat-card--lost" role="region" aria-label="Lost cards">
- <div class="stat-card__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg></div>
- <div class="stat-card__label"><span>Lost</span></div>
- <div class="stat-card__value" x-text="stats.lost">0</div>
- <div class="stat-card__meta">Reported lost</div>
- </div>
- <div class="stat-card stat-card--damage" role="region" aria-label="Damage cards">
- <div class="stat-card__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg></div>
- <div class="stat-card__label"><span>Damage</span></div>
- <div class="stat-card__value" x-text="stats.damage">0</div>
- <div class="stat-card__meta">Reported damaged</div>
- </div>
- </div>
-</div>
  </div>
 
  <!-- REGISTER — premium form system -->
  <div x-show="currentView === 'register'" x-cloak class="register-view space-y-5" x-transition.opacity>
- <div class="register-head">
+<div class="view-head register-head">
  <button @click="currentView='dashboard'" class="hub-back">← Back to Home</button>
- <div class="flex-1 min-w-0">
- <p class="register-eyebrow">Resident Registration</p>
+ <div class="view-head__title-block flex-1 min-w-0">
  <h2 class="text-2xl font-extrabold tracking-tight text-slate-900 view-title" x-text="editingResident ? 'Edit Resident' : 'Register New Resident'">Register New Resident</h2>
- <p class="register-sub" x-text="editingResident ? 'Update an existing resident record.' : 'Add a new resident to the barangay ID system.'">Add a new resident to the barangay ID system.</p>
  </div>
  <div class="flex items-center gap-2">
  <button x-show="!editingResident" @click="clearForm" class="action-btn action-btn--secondary register-clear">Clear Form</button>
- <button x-show="editingResident" @click="goBackFromEdit()" class="action-btn action-btn--secondary" aria-label="Back to resident details"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back</button>
+ <button x-show="editingResident" @click="goBackFromEdit()" class="action-btn action-btn--secondary" aria-label="Back to resident details"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.74" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back</button>
  </div>
- </div>
+</div>
 
  <form @submit.prevent="saveResident" class="space-y-5">
  
@@ -179,7 +191,7 @@
  <div class="w-[160px] aspect-square bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl flex items-center justify-center overflow-hidden relative group hover:border-slate-400 hover:bg-slate-100 transition upload-focus mx-auto lg:mx-0 register-photo">
  <img x-show="form.photoData || editPhotoUrl" x-cloak :src="form.photoData || editPhotoUrl" alt="Resident photo preview" class="max-w-full max-h-full object-contain register-photo__preview">
  <div x-show="!form.photoData && !editPhotoUrl" x-cloak class="text-center px-3">
- <div class="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center mx-auto text-slate-400" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 19a7 7 0 1 0 0-14 7 7 0 0 0 0 14z"/><path d="M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M12 16.5v3"/></svg></div>
+ <div class="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center mx-auto text-slate-400" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.13" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19a7 7 0 1 0 0-14 7 7 0 0 0 0 14z"/><path d="M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M12 16.5v3"/></svg></div>
  <div class="text-xs font-semibold text-slate-600 mt-2 register-photo__cta">Click to upload</div>
  <div class="text-[11px] text-slate-500 register-photo__hint">JPG/PNG · 6MB max</div>
  </div>
@@ -188,9 +200,7 @@
  <button type="button" x-show="form.photoData || editPhotoUrl" x-cloak @click="form.photoData = ''; form.photo_filename = ''; editPhotoUrl = ''" class="mt-2 text-xs font-semibold text-red-600 hover:text-red-700 register-remove">Remove Photo</button>
  </div>
  <div class="flex-1 space-y-4">
- <div class="grid sm:grid-cols-2 gap-4">
- <div class="sm:col-span-2">
- <label for="resident-id" class="form-field__label">Resident ID No. <span class="form-field__req" aria-hidden="true">*</span></label>
+<label for="resident-id" class="form-field__label">Resident ID No. <span class="form-field__req" aria-hidden="true">*</span></label>
  <div class="register-idrow">
  <input id="resident-id" type="text" x-model="form.resident_id" @input="onInputUpper($event, 'resident_id')" required placeholder="BRGY-2026-00001" autocomplete="off" spellcheck="false" aria-describedby="resident-id-help" class="form-field__input font-mono text-sm bg-slate-50">
  <button type="button" @click="generateID" aria-label="Generate next resident ID" class="shrink-0 action-btn action-btn--primary register-generate">Generate</button>
@@ -200,14 +210,12 @@
  </div>
  </div>
  </div>
- </div>
- </div>
 
  <!-- Personal Information -->
  <div class="form-section register-section">
  <div class="form-section__head">
  <span class="form-section__number register-number">1</span>
- <div class="register-section__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+ <div class="register-section__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
  <h3 class="form-section__title">Personal Information</h3>
  <span class="ml-auto hidden sm:block text-xs font-semibold text-slate-500 whitespace-nowrap">* required</span>
  </div>
@@ -217,7 +225,7 @@
  <div class="form-field"><label for="inp-first" class="form-field__label">First Name <span class="form-field__req" aria-hidden="true">*</span></label><input id="inp-first" type="text" x-model="form.first_name" @input="onInputUpper($event, 'first_name')" required autocomplete="given-name" class="form-field__input uppercase field-upper"></div>
  <div class="form-field"><label for="inp-middle" class="form-field__label">Middle Name</label><input id="inp-middle" type="text" x-model="form.middle_name" @input="onInputUpper($event, 'middle_name')" autocomplete="additional-name" class="form-field__input uppercase field-upper"></div>
  <div class="form-field"><label for="inp-suffix" class="form-field__label">Suffix</label><select id="inp-suffix" x-model="form.suffix" class="form-field__select"><option value="">None</option><option value="JR.">Jr.</option><option value="SR.">Sr.</option><option>II</option><option>III</option><option>IV</option></select></div>
- <div class="form-field"><label for="inp-bdate" class="form-field__label">Birth Date <span class="form-field__req" aria-hidden="true">*</span></label><input id="inp-bdate" type="date" x-model="form.birth_date" required autocomplete="bday" min="1900-01-01" :max="todayISO()" title="YYYY-MM-DD" class="form-field__input"><p class="form-field__help" x-show="form.birth_date" x-text="birthDateHelper()"></p></div>
+ <div class="form-field"><label for="inp-bdate" class="form-field__label">Birth Date <span class="form-field__req" aria-hidden="true">*</span></label><input id="inp-bdate" type="date" x-model="form.birth_date" required autocomplete="bday" min="1900-01-01" :max="todayISO()" title="YYYY-MM-DD" aria-describedby="bdate-help" class="form-field__input"><p id="bdate-help" class="form-field__help" x-show="form.birth_date" x-text="birthDateHelper()"></p></div>
  <div class="form-field"><label for="inp-bplace" class="form-field__label">Birth Place</label><input id="inp-bplace" type="text" x-model="form.birth_place" @input="onInputUpper($event, 'birth_place')" class="form-field__input uppercase field-upper"></div>
  <div class="form-field"><label for="inp-gender" class="form-field__label">Gender <span class="form-field__req" aria-hidden="true">*</span></label><select id="inp-gender" x-model="form.gender" required class="form-field__select"><option value="">Select...</option><option value="MALE">Male</option><option value="FEMALE">Female</option></select></div>
  <div class="form-field"><label for="inp-civil" class="form-field__label">Civil Status</label><select id="inp-civil" x-model="form.civil_status" class="form-field__select"><option value="">Select...</option><option value="SINGLE">Single</option><option value="MARRIED">Married</option><option value="WIDOWED">Widowed</option><option value="SEPARATED">Separated</option><option value="DIVORCED">Divorced</option></select></div>
@@ -233,7 +241,7 @@
  <div class="form-section register-section">
  <div class="form-section__head">
  <span class="form-section__number register-number">2</span>
- <div class="register-section__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
+ <div class="register-section__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
  <h3 class="form-section__title">Address</h3>
  </div>
  <div class="form-section__body">
@@ -250,7 +258,7 @@
  <div class="form-section register-section">
  <div class="form-section__head">
  <span class="form-section__number register-number">3</span>
- <div class="register-section__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.8 12.8 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.8 12.8 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div>
+ <div class="register-section__icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.8 12.8 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.8 12.8 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div>
  <h3 class="form-section__title">Emergency Contact</h3>
  </div>
  <div class="form-section__body">
@@ -269,11 +277,11 @@
  <label class="form-field__label">Card Status <span class="form-field__req" aria-hidden="true">*</span></label>
  <div class="flex gap-2 flex-wrap mb-4" role="radiogroup" aria-label="Card status">
  <template x-for="opt in ['ACTIVE','RENEW','LOST','DAMAGE']" :key="opt">
- <button type="button" role="radio" @click="form.remarks = opt" :aria-pressed="form.remarks === opt" :class="form.remarks === opt ? 'action-btn action-btn--primary' : 'action-btn action-btn--secondary'" x-text="opt"></button>
+ <button type="button" role="radio" @click="form.remarks = opt" :aria-checked="form.remarks === opt" :class="form.remarks === opt ? 'action-btn action-btn--primary' : 'action-btn action-btn--secondary'" x-text="opt"></button>
  </template>
  </div>
  <div class="form-grid form-grid--2">
- <div class="form-field"><label for="inp-valid-until" class="form-field__label">ID Expiry Date <span class="font-normal text-slate-500">· auto-filled (1 year), editable</span></label><input id="inp-valid-until" type="date" x-model="form.valid_until" autocomplete="off" :min="todayISO()" class="form-field__input"><p class="form-field__help">Default is 1 year from today. Change only if a different expiry is needed.</p></div>
+ <div class="form-field"><label for="inp-valid-until" class="form-field__label">ID Expiry Date <span class="font-normal text-slate-500">· auto-filled (1 year), editable</span></label><input id="inp-valid-until" type="date" x-model="form.valid_until" autocomplete="off" :min="todayISO()" aria-describedby="valid-until-help" class="form-field__input"><p id="valid-until-help" class="form-field__help">Default is 1 year from today. Change only if a different expiry is needed.</p></div>
  </div>
  <p class="form-field__help">Selected: <span class="font-semibold text-slate-900" x-text="form.remarks || 'None'"></span> · also used for ID validity tracking</p>
  </div>
@@ -295,20 +303,20 @@
 
  <!-- Search View — premium filter + table -->
  <div x-show="currentView === 'search'" x-cloak x-init="searchResidents()" class="space-y-5">
- <div class="flex items-center justify-between gap-4">
+<div class="view-head">
  <button @click="currentView='dashboard'" class="hub-back">← Back to Home</button>
- <div>
+ <div class="view-head__title-block">
  <h2 class="text-2xl font-extrabold tracking-tight text-slate-900 view-title">Search Residents</h2>
  </div>
- </div>
+</div>
  
- <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+ <div class="card">
  <div class="p-5 sm:p-6 border-b border-slate-100">
  <div class="flex flex-col lg:flex-row gap-3">
  <label for="search-input" class="flex-1 relative">
  <span class="sr-only">Search by name, ID or contact</span>
- <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-3.5-3.5"/></svg></span>
- <input id="search-input" type="text" x-model="searchQuery" @input.debounce.300ms="searchResidents" @input="$event.target.value = $event.target.value.toUpperCase(); searchQuery = $event.target.value" 
+ <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-3.5-3.5"/></svg></span>
+ <input id="search-input" type="text" x-model="searchQuery" @input.debounce.300ms="searchResidents" 
  placeholder="Search by name, ID number, or contact..." 
  aria-label="Search by name, ID number, or contact"
  autocomplete="off"
@@ -367,16 +375,16 @@
  </td>
  <td>
  <div class="flex justify-end items-center gap-1.5" role="group" :aria-label="`Actions for ${resident.last_name}, ${resident.first_name}`">
- <button @click="viewResident(resident.id)" class="action-btn action-btn--view" aria-label="View details" title="View details"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg><span class="hidden sm:inline">View</span></button>
- <button @click="editResident(resident.id)" class="action-btn action-btn--edit" aria-label="Edit resident" title="Edit resident"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg><span class="hidden sm:inline">Edit</span></button>
- <button x-show="isExpired(resident)" @click="renewResident(resident.id)" class="action-btn action-btn--renew" aria-label="Renew ID card" title="Renew ID card (extends validity 1 year)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12a9 9 0 11-2.6-6.4"/><path d="M21 3v6h-6"/></svg><span class="hidden sm:inline">Renew</span></button>
- <button @click="deleteResident(resident.id)" class="action-btn action-btn--delete" aria-label="Mark as inactive" title="Mark as inactive"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg><span class="hidden sm:inline">Delete</span></button>
+ <button @click="viewResident(resident.id)" class="action-btn action-btn--view" aria-label="View details" title="View details"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.95" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg><span class="hidden sm:inline">View</span></button>
+ <button @click="editResident(resident.id)" class="action-btn action-btn--edit" aria-label="Edit resident" title="Edit resident"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.95" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg><span class="hidden sm:inline">Edit</span></button>
+ <button x-show="isExpired(resident)" @click="renewResident(resident.id)" class="action-btn action-btn--renew" aria-label="Renew ID card" title="Renew ID card (extends validity 1 year)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.95" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.6-6.4"/><path d="M21 3v6h-6"/></svg><span class="hidden sm:inline">Renew</span></button>
+ <button @click="deleteResident(resident.id)" class="action-btn action-btn--delete" aria-label="Mark as inactive" title="Mark as inactive"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.95" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg><span class="hidden sm:inline">Delete</span></button>
  </div>
  </td>
  </tr>
  </template>
   <tr x-show="searchResults.length === 0 && !searching">
- <td colspan="8"><div class="empty-state"><div class="empty-state__icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-3.5-3.5"/></svg></div><div class="empty-state__title" x-text="searchQuery ? 'No match' : 'No residents yet'">No residents yet</div><div class="empty-state__desc" x-text="searchQuery ? 'Try a different name, ID, or purok.' : 'No residents to show yet.'"></div></div></td>
+ <td colspan="8"><div class="empty-state"><div class="empty-state__icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-3.5-3.5"/></svg></div><div class="empty-state__title" x-text="searchQuery ? 'No match' : 'No residents yet'">No residents yet</div><div class="empty-state__desc" x-text="searchQuery ? 'Try a different name, ID, or purok.' : 'No residents to show yet.'"></div></div></td>
  </tr>
  </tbody>
  </table>
@@ -394,15 +402,16 @@
 
  <!-- Settings View — semantic card sections -->
  <div x-show="currentView === 'settings'" x-cloak class="space-y-5">
- <div class="flex items-center justify-between gap-4">
+<div class="view-head">
  <button @click="currentView='dashboard'" class="hub-back">← Back to Home</button>
- <div>
+ <div class="view-head__title-block">
  <h2 class="text-2xl font-extrabold tracking-tight text-slate-900 view-title">Settings</h2>
  </div>
- </div>
+</div>
  
- <div class="card">
+ <div class="card card--section">
  <div class="section-head">
+ <img src="icons/barangay_information.png" alt="" aria-hidden="true" class="section-head__icon">
  <div class="section-head__title">Barangay Information</div>
  </div>
  <div class="p-5 sm:p-6 space-y-4">
@@ -413,32 +422,35 @@
  <div class="form-field sm:col-span-2"><label for="set-prov" class="form-field__label">Province Line (e.g., "Province of Samar • Municipality of Basey")</label><input id="set-prov" type="text" x-model="settings.provinceName" @input="onSettingsUpper($event, 'provinceName')" autocomplete="off" class="form-field__input uppercase field-upper"></div>
  <div class="form-field sm:col-span-2"><label for="set-punong" class="form-field__label">Barangay Captain (printed on ID cards)</label><input id="set-punong" type="text" x-model="settings.punongName" @input="onSettingsUpper($event, 'punongName')" autocomplete="off" class="form-field__input uppercase field-upper"></div>
  </div>
+ <div class="settings-actions">
+ <button @click="saveSettings" class="action-btn action-btn--primary settings-btn--save">Save Changes</button>
+ <button @click="loadCivicConfig" class="action-btn action-btn--secondary settings-btn--reset">Reset to Saved</button>
  <div class="flex gap-2 items-center">
- <button @click="saveSettings" class="action-btn action-btn--primary">Save Changes</button>
- <button @click="loadCivicConfig" class="action-btn action-btn--secondary">Reset to Saved</button>
- <label class="action-btn action-btn--secondary action-chip" title="Apply a red-tinted backdrop theme (opt-in, defaults off). Saved in localStorage.">
-  <input type="checkbox" :checked="theme === 'red-gradient'" @change="setTheme($event.target.checked)" class="w-4 h-4 rounded border-slate-300" aria-label="Red gradient theme">
-  <span class="text-xs font-bold text-slate-700">Red gradient theme</span>
- </label>
+  <label class="action-btn action-btn--secondary action-chip settings-btn--theme" title="Apply a red-tinted backdrop theme (opt-in, defaults off). Saved in localStorage.">
+   <input type="checkbox" :checked="theme === 'red-gradient'" @change="setTheme($event.target.checked)" class="w-4 h-4 rounded border-slate-300 settings-checkbox" aria-label="Red gradient theme">
+   <span class="text-xs font-bold text-slate-700">Red gradient theme</span>
+  </label>
  </div>
  </div>
- </div>
+</div>
+</div>
 
- <div class="card">
+<div class="card card--section">
  <div class="section-head">
- <div class="section-head__title">Data & Maintenance</div>
+ <img src="icons/data_maintenance.png" alt="" aria-hidden="true" class="section-head__icon">
+ <div class="section-head__title">Data &amp; Maintenance</div>
  </div>
  <div class="p-5 sm:p-6">
- <div class="flex flex-wrap gap-3">
- <button @click="exportAllExcel" class="action-btn action-btn--secondary action-chip"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg><span class="text-xs font-bold text-slate-700">Export All to Excel</span></button>
- <button @click="importExcel" class="action-btn action-btn--secondary action-chip"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg><span class="text-xs font-bold text-slate-700">Import from Excel</span></button>
- <button @click="backupDB" class="action-btn action-btn--secondary action-chip"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 2l9 4.5v9L12 20 3 15.5v-9L12 2z"/><path d="M12 12L3 7.5M12 12l9-4.5M12 12v8"/></svg><span class="text-xs font-bold text-slate-700">Backup Database</span></button>
- <label class="action-btn action-btn--secondary action-chip" title="Run the daily automatic backup right now (saves a copy to the backups folder)">
- <input type="checkbox" x-model="backupRunScheduled" class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" aria-label="Run scheduled backup now">
+ <div class="settings-grid">
+ <button @click="exportAllExcel" class="action-btn action-btn--secondary action-chip settings-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg><span class="text-xs font-bold text-slate-700">Export All to Excel</span></button>
+ <button @click="importExcel" class="action-btn action-btn--secondary action-chip settings-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg><span class="text-xs font-bold text-slate-700">Import from Excel</span></button>
+ <button @click="backupDB" class="action-btn action-btn--secondary action-chip settings-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l9 4.5v9L12 20 3 15.5v-9L12 2z"/><path d="M12 12L3 7.5M12 12l9-4.5M12 12v8"/></svg><span class="text-xs font-bold text-slate-700">Backup Database</span></button>
+ <label class="action-btn action-btn--secondary action-chip settings-chip" title="Run the daily automatic backup right now (saves a copy to the backups folder)">
+ <input type="checkbox" x-model="backupRunScheduled" class="w-4 h-4 rounded border-slate-300 settings-checkbox" aria-label="Run scheduled backup now">
  <span class="text-xs font-bold text-slate-700">Run daily backup now</span>
  </label>
- <button @click="restoreDB" class="action-btn action-btn--secondary action-chip"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M21 12a9 9 0 11-2.6-6.4"/><path d="M21 3v6h-6"/></svg><span class="text-xs font-bold text-slate-700">Restore from Backup</span></button>
- <button @click="scanPhotos()" class="action-btn action-btn--secondary action-chip" x-ref="scanPhotosBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><circle cx="8" cy="13" r="1.5"/></svg><span class="text-xs font-bold text-slate-700">Check Photos</span></button>
+ <button @click="restoreDB" class="action-btn action-btn--secondary action-chip settings-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.6-6.4"/><path d="M21 3v6h-6"/></svg><span class="text-xs font-bold text-slate-700">Restore from Backup</span></button>
+ <button @click="scanPhotos()" class="action-btn action-btn--secondary action-chip settings-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><circle cx="8" cy="13" r="1.5"/></svg><span class="text-xs font-bold text-slate-700">Check Photos</span></button>
  </div>
  <template x-if="photoScanResult">
  <div class="mt-3 p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm">
@@ -446,7 +458,7 @@
  <span class="font-semibold text-slate-700">Photo Check Results</span>
  <button @click="photoScanResult = null" class="text-slate-400 hover:text-slate-600" aria-label="Dismiss">×</button>
  </div>
- <div class="grid grid-cols-3 gap-2 text-xs text-slate-600 mb-2">
+ <div class="grid sm:grid-cols-3 gap-2 text-xs text-slate-600 mb-2">
  <div>Total photos: <span class="font-mono text-slate-900" x-text="photoScanResult.total_files"></span></div>
  <div>In use: <span class="font-mono text-slate-900" x-text="photoScanResult.referenced"></span></div>
  <div>Unused: <span class="font-mono text-red-600" x-text="photoScanResult.orphan_count"></span></div>
@@ -462,10 +474,10 @@
  <span x-text="bulkProgress.inProgress ? ('Printing ' + bulkProgress.current + ' of ' + (bulkProgress.total || '…')) : ('Done: ' + bulkProgress.current + ' of ' + bulkProgress.total + (bulkProgress.failures ? ' · ' + bulkProgress.failures + ' failed' : ' · all successful'))"></span>
  <span class="font-mono" x-text="bulkProgress.percent + '%'"></span>
  </div>
- <div class="w-full bg-gray-200 h-2 rounded mt-1.5 overflow-hidden"><div class="bg-blue-600 h-2 rounded transition-all" :style="'width:'+bulkProgress.percent+'%'"></div></div>
+ <div class="settings-progress__track"><div class="settings-progress__fill" :style="'width:'+bulkProgress.percent+'%'"></div></div>
  <ul class="mt-1.5 space-y-0.5 max-h-24 overflow-y-auto text-xs font-mono text-slate-500">
  <template x-for="item in bulkProgress.recent.slice().reverse()" :key="item.file + item.status">
- <li class="flex items-center gap-1.5" :class="item.status === 'failed' ? 'text-red-600' : 'text-slate-500'"><svg x-show="item.status === 'failed'" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg><svg x-show="item.status !== 'failed'" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><span x-text="item.file"></span></li>
+ <li class="flex items-center gap-1.5" :class="item.status === 'failed' ? 'text-red-600' : 'text-slate-500'"><svg x-show="item.status === 'failed'" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.84" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg><svg x-show="item.status !== 'failed'" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.84" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><span x-text="item.file"></span></li>
  </template>
   </ul>
  </div>
@@ -473,58 +485,63 @@
  </div>
  </div>
 
- <div class="card">
+ <div class="card card--section">
  <div class="section-head">
+ <img src="icons/printing.png" alt="" aria-hidden="true" class="section-head__icon">
  <div class="section-head__title">Printing</div>
  </div>
  <div class="p-5 sm:p-6">
- <div class="flex flex-wrap gap-3">
- <button @click="printAllCards" class="action-btn action-btn--secondary action-chip"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="7"/></svg><span class="text-xs font-bold text-slate-700">Print All ID Cards</span></button>
+ <div class="settings-grid">
+ <button @click="printAllCards" class="action-btn action-btn--secondary action-chip settings-chip"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.13" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="7"/></svg><span class="text-xs font-bold text-slate-700">Print All ID Cards</span></button>
 <template x-if="bulkProgress.inProgress"><button @click="cancelBulkPrint" class="action-btn action-btn--delete action-chip"><span class="text-xs font-bold">Cancel Print</span></button></template>
  </div>
  <p class="text-xs text-slate-500 mt-3">Prints one card per active resident. Opens your browser's print dialog — choose "Save as PDF" to create a digital copy.</p>
  </div>
  </div>
 
- <div class="card">
+ <div class="card card--section">
  <div class="section-head">
+ <img src="icons/system_logs.png" alt="" aria-hidden="true" class="section-head__icon">
  <div class="section-head__title">System Logs</div>
  </div>
  <div class="p-5 sm:p-6">
  <p class="text-sm text-slate-600">All activity logs are saved in the system logs folder.</p>
- <div class="flex gap-2 flex-wrap mt-3">
- <button @click="Logger.download()" class="action-btn action-btn--secondary"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg> Download Activity Logs</button>
- <button @click="openLogsFolder()" class="action-btn action-btn--primary"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg> Open Logs Folder</button>
- <details class="ml-auto">
- <summary class="text-xs text-slate-500 cursor-pointer">Advanced</summary>
- <div class="mt-2 flex gap-2">
- <button @click="Logger.clear(); showToast('Frontend log buffer cleared', 'info')" class="action-btn action-btn--secondary">Clear Buffer</button>
+ <div class="settings-grid settings-grid--log">
+ <button @click="Logger.download()" class="action-btn action-btn--secondary settings-chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg><span class="text-xs font-bold text-slate-700">Download Activity Logs</span></button>
+ <button @click="openLogsFolder()" class="action-btn action-btn--primary settings-chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg><span class="text-xs font-bold text-slate-100">Open Logs Folder</span></button>
+ <button @click="Logger.clear(); showToast('Frontend log buffer cleared', 'info')" class="action-btn action-btn--secondary settings-chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg><span class="text-xs font-bold text-slate-700">Clear Buffer</span></button>
  </div>
- </details>
+ <div class="log-info">
+ <div class="log-info__label">Where logs live</div>
+ <p class="log-info__text text-xs text-slate-500">Backend: <code class="font-mono">logs/app.log</code> daily + <code class="font-mono">logs/frontend.log</code> · Frontend: localStorage 500 entries · <code class="font-mono">RUST_LOG=debug</code></p>
  </div>
- <p class="text-[11px] text-slate-500 mt-3">Backend: <code class="font-mono">logs/app.log</code> daily + <code class="font-mono">logs/frontend.log</code> · Frontend: localStorage 500 entries · <code class="font-mono">RUST_LOG=debug</code></p>
  </div>
  </div>
 
- <div class="bg-slate-900 text-white rounded-2xl border border-slate-800 p-5 sm:p-6">
- <h3 class="text-sm font-bold tracking-widest uppercase field-upper">About</h3>
- <div class="mt-3 grid sm:grid-cols-3 gap-4 text-sm">
- <div><div class="text-slate-400 text-xs uppercase tracking-wide">System</div><div class="font-semibold mt-1">Barangay Resident ID</div></div>
- <div><div class="text-slate-400 text-xs uppercase tracking-wide">Version</div><div class="font-mono font-semibold mt-1">1.0.0</div></div>
- <div><div class="text-slate-400 text-xs uppercase tracking-wide">Database</div><div class="font-semibold mt-1">SQLite · isolated</div></div>
+ <div class="card card--section card--about">
+ <div class="section-head">
+ <img src="icons/about.png" alt="" aria-hidden="true" class="section-head__icon">
+ <div class="section-head__title">About</div>
  </div>
- <p class="text-xs text-slate-400 mt-4">All data stored locally on this computer. Regular backups recommended. Offline 100%.</p>
+ <div class="p-5 sm:p-6">
+ <div class="about-grid">
+ <div><div class="about-kv__key">System</div><div class="about-kv__value">Barangay Resident ID</div></div>
+ <div><div class="about-kv__key">Version</div><div class="about-kv__value font-mono">1.0.0</div></div>
+ <div><div class="about-kv__key">Database</div><div class="about-kv__value">SQLite · isolated</div></div>
+ </div>
+ <p class="about-note text-xs text-slate-400 mt-4">All data stored locally on this computer. Regular backups recommended. Offline 100%.</p>
  </div>
  </div>
+</div>
 
  <!-- DETAIL VIEW — resident details (replaces modal) — x-cloak prevents FOUC leak onto other tabs -->
  <div x-show="currentView === 'detail'" x-cloak class="detail-view space-y-5">
- <div class="detail-view-head">
+<div class="view-head detail-view-head">
  <button @click="closeDetail(); currentView='dashboard'" class="hub-back detail-view-back">← Back to Home</button>
- <div>
+ <div class="view-head__title-block">
  <h2 class="text-2xl font-extrabold tracking-tight text-slate-900 view-title">Resident Details</h2>
  </div>
- </div>
+</div>
 
  <template x-if="detailResident">
  <div class="detail-view-body">
@@ -546,7 +563,7 @@
        <span :class="statusPillClass(detailResident)" x-text="statusLabel(detailResident)"></span>
       </div>
       <div class="detail-view-validity">
-       <span class="detail-view-validity__icon" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+       <span class="detail-view-validity__icon" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.95" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
        <span>ID valid until <strong x-text="detailResident.valid_until ? formatDateDDMMYYYY(detailResident.valid_until) : 'N/A'">N/A</strong></span>
        <span :class="detailResident.valid_until ? (isExpired(detailResident) ? 'status-pill status-pill--expired' : 'status-pill status-pill--active') : 'status-pill status-pill--inactive'" x-text="expiryCountdown(detailResident)">No expiry set</span>
       </div>
@@ -556,28 +573,28 @@
      <div>
       <h5 class="detail-view-group__title">Personal Information</h5>
       <dl class="detail-view-fields detail-view-fields--2col">
-       <div class="detail-field"><dt>Middle Name</dt><dd x-text="detailResident.middle_name || 'N/A'"></dd></div>
-       <div class="detail-field"><dt>Birth Date</dt><dd x-text="formatDateDDMMYYYY(detailResident.birth_date)"></dd></div>
-       <div class="detail-field"><dt>Civil Status</dt><dd x-text="detailResident.civil_status || 'N/A'"></dd></div>
-       <div class="detail-field"><dt>Citizenship</dt><dd x-text="detailResident.citizenship || 'Filipino'"></dd></div>
-       <div class="detail-field"><dt>Occupation</dt><dd x-text="detailResident.occupation || 'N/A'"></dd></div>
-       <div class="detail-field"><dt>Religion</dt><dd x-text="detailResident.religion || 'N/A'"></dd></div>
-       <div class="detail-field"><dt>Contact</dt><dd x-text="detailResident.contact_number || 'N/A'"></dd></div>
+       <div class="detail-field"><dt class="detail-field__label">Middle Name</dt><dd class="detail-field__value" x-text="detailResident.middle_name || 'N/A'"></dd></div>
+       <div class="detail-field"><dt class="detail-field__label">Birth Date</dt><dd class="detail-field__value" x-text="formatDateDDMMYYYY(detailResident.birth_date)"></dd></div>
+       <div class="detail-field"><dt class="detail-field__label">Civil Status</dt><dd class="detail-field__value" x-text="detailResident.civil_status || 'N/A'"></dd></div>
+       <div class="detail-field"><dt class="detail-field__label">Citizenship</dt><dd class="detail-field__value" x-text="detailResident.citizenship || 'Filipino'"></dd></div>
+       <div class="detail-field"><dt class="detail-field__label">Occupation</dt><dd class="detail-field__value" x-text="detailResident.occupation || 'N/A'"></dd></div>
+       <div class="detail-field"><dt class="detail-field__label">Religion</dt><dd class="detail-field__value" x-text="detailResident.religion || 'N/A'"></dd></div>
+       <div class="detail-field"><dt class="detail-field__label">Contact</dt><dd class="detail-field__value" x-text="detailResident.contact_number || 'N/A'"></dd></div>
       </dl>
      </div>
      <div>
       <h5 class="detail-view-group__title">Emergency Contact</h5>
       <dl class="detail-view-fields">
-       <div class="detail-field"><dt>Contact Person</dt><dd x-text="detailResident.emergency_contact_name || 'N/A'"></dd></div>
-       <div class="detail-field"><dt>Relationship</dt><dd x-text="detailResident.emergency_contact_relation || 'N/A'"></dd></div>
-       <div class="detail-field"><dt>Contact Number</dt><dd x-text="detailResident.emergency_contact_number || 'N/A'"></dd></div>
-       <div class="detail-field"><dt>Contact Address:</dt><dd x-text="detailResident.emergency_contact_address || 'N/A'"></dd></div>
+       <div class="detail-field"><dt class="detail-field__label">Contact Person</dt><dd class="detail-field__value" x-text="detailResident.emergency_contact_name || 'N/A'"></dd></div>
+       <div class="detail-field"><dt class="detail-field__label">Relationship</dt><dd class="detail-field__value" x-text="detailResident.emergency_contact_relation || 'N/A'"></dd></div>
+       <div class="detail-field"><dt class="detail-field__label">Contact Number</dt><dd class="detail-field__value" x-text="detailResident.emergency_contact_number || 'N/A'"></dd></div>
+       <div class="detail-field"><dt class="detail-field__label">Contact Address:</dt><dd class="detail-field__value" x-text="detailResident.emergency_contact_address || 'N/A'"></dd></div>
       </dl>
      </div>
     </div>
-    <div class="mt-5">
+    <div class="mt-5 detail-address-group">
      <h5 class="detail-view-group__title">Full Address</h5>
-     <p class="detail-view-address" x-text="(detailResident.address_street ? detailResident.address_street + ', ' : '') + 'Purok ' + (detailResident.address_purok || '') + ', ' + (detailResident.address_barangay || '') + (detailResident.address_city ? ', ' + detailResident.address_city : '') + (detailResident.address_province ? ', ' + detailResident.address_province : '')"></p>
+     <p class="detail-view-address"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg><span x-text="[detailResident.address_street, detailResident.address_purok ? 'Purok ' + detailResident.address_purok : null, detailResident.address_barangay, detailResident.address_city, detailResident.address_province].filter(Boolean).join(', ')"></span></p>
     </div>
    </div>
   </div>
@@ -598,11 +615,11 @@
 
  <div x-show="!detailResident" class="card" x-cloak>
  <div class="empty-state">
- <div class="empty-state__icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M5 20c0-4 3-7 7-7s7 3 7 7"/></svg></div>
+ <div class="empty-state__icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M5 20c0-4 3-7 7-7s7 3 7 7"/></svg></div>
  <div class="empty-state__title">No resident selected</div>
  <div class="empty-state__desc">Select a resident from Dashboard or Search to view details.</div>
  <ul class="detail-view-empty__steps" aria-hidden="true"><li><span>1</span> Search</li><li><span>2</span> View</li><li><span>3</span> Print</li></ul>
- <button @click="closeDetail()" class="action-btn action-btn--primary"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back</button>
+ <button @click="closeDetail()" class="action-btn action-btn--primary"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.74" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back</button>
  </div>
  </div>
  </div>
@@ -625,9 +642,9 @@
  'toast--info': toast.type === 'info'
  }">
  <span class="toast__icon" aria-hidden="true">
- <svg x-show="toast.type === 'success'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
- <svg x-show="toast.type === 'error'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
- <svg x-show="toast.type === 'info'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+ <svg x-show="toast.type === 'success'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+ <svg x-show="toast.type === 'error'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+ <svg x-show="toast.type === 'info'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
  </span>
  <span class="text-sm font-semibold" x-text="toast.message"></span>
  </div>

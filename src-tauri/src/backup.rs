@@ -9,30 +9,6 @@ use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
 
-/// Backup a single file: copy src→dst via tmp-then-rename, then encrypt dst
-/// in place if a key exists (plaintext left untouched if no key).
-fn backup_encrypt_file(src: &PathBuf, dst: &PathBuf) -> Result<(), String> {
-    if let Some(parent) = dst.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    let tmp = {
-        let mut p = dst.clone();
-        let name = format!(
-            "{}.tmp",
-            dst.file_name().ok_or("Invalid backup path")?.to_string_lossy()
-        );
-        p.set_file_name(name);
-        p
-    };
-    std::fs::copy(src, &tmp).map_err(|e| format!("Backup copy failed: {}", e))?;
-    std::fs::rename(&tmp, dst).map_err(|e| format!("Backup rename failed: {}", e))?;
-    // Encrypt in place if a key exists — keeps .db filename, ciphertext content.
-    if crate::crypto::key_exists() {
-        crate::crypto::encrypt_file_in_place(dst)?;
-    }
-    Ok(())
-}
-
 #[tauri::command]
 pub async fn backup_database(
     state: State<'_, Arc<Mutex<AppState>>>,

@@ -16,13 +16,16 @@
 use crate::db::{shm_path_for, wal_path_for, AppState};
 use sqlx::query;
 use std::fs;
+use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
 
 /// Generate a new 256-bit AES key in `.crypto-key/key.bin`.
 /// Fails if a key already exists.
 #[tauri::command]
-pub async fn encryption_generate_key(_state: State<'_, Arc<Mutex<AppState>>>) -> Result<String, String> {
+pub async fn encryption_generate_key(
+    _state: State<'_, Arc<Mutex<AppState>>>,
+) -> Result<String, String> {
     // key dir derives from app_data_dir parent — same resolver crypto uses.
     if crate::crypto::key_exists() {
         return Err("encryption key already exists".to_string());
@@ -93,7 +96,9 @@ pub async fn encryption_encrypt_database(
     // Flush WAL to the main DB before rename + encrypt so no uncommitted
     // pages are lost. Then delete sidecars — SQLite validates WAL magic on
     // open, so an encrypted-wal sidecar would make the DB unopenable.
-    let _ = query("PRAGMA wal_checkpoint(TRUNCATE)").execute(&pool).await;
+    let _ = query("PRAGMA wal_checkpoint(TRUNCATE)")
+        .execute(&pool)
+        .await;
     let wal = wal_path_for(&db_path);
     let shm = shm_path_for(&db_path);
     let _ = std::fs::remove_file(&wal);
@@ -104,7 +109,7 @@ pub async fn encryption_encrypt_database(
     // ciphertext is fully written). Then rename tmp → db.enc, then remove db.
     // Every failure point leaves either intact plaintext or complete ciphertext.
     let enc_tmp = db_enc_path.with_extension("db.enc.tmp");
-    crate::crypto::encrypt_file_to_tmp(db_path, &enc_tmp)?;
+    crate::crypto::encrypt_file_to_tmp(&db_path, &enc_tmp)?;
     fs::rename(&enc_tmp, &db_enc_path).map_err(|e| format!("rename tmp→db.enc: {e}"))?;
     let _ = std::fs::remove_file(&db_path);
     // Exit so next launch decrypts before init_db.

@@ -1,3 +1,4 @@
+use crate::crypto::load_key;
 use crate::db::AppState;
 use anyhow::Result;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
@@ -1220,6 +1221,7 @@ pub async fn get_all_residents(
 }
 
 #[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DashboardStats {
     pub total: i64,
     pub this_year: i64,
@@ -1563,13 +1565,20 @@ pub(crate) fn resolve_photo_bytes(stored: &str, app_data_dir: &PathBuf) -> Optio
     if t.is_empty() {
         return None;
     }
+    // Load the at-rest key if present; falls back to raw bytes when missing
+    // (e.g. tests, or before first encryption_generate_key).
+    let key = load_key().ok();
+    let decrypt = |b: Vec<u8>| match &key {
+        Some(k) => k.decrypt_or_plaintext(&b),
+        None => b,
+    };
     // (1) Absolute path inside the project tree.
     let raw = PathBuf::from(t);
     if raw.is_absolute() {
         if let Ok(ok) = crate::db::validate_isolated_write_path(&raw) {
             if ok.is_file() {
                 if let Ok(b) = fs::read(&ok) {
-                    return Some(b);
+                    return Some(decrypt(b));
                 }
             }
         }
@@ -1583,7 +1592,7 @@ pub(crate) fn resolve_photo_bytes(stored: &str, app_data_dir: &PathBuf) -> Optio
     for p in candidates {
         if p.is_file() {
             if let Ok(b) = fs::read(&p) {
-                return Some(b);
+                return Some(decrypt(b));
             }
         }
     }

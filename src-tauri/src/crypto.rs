@@ -33,19 +33,20 @@
 
 use aes_gcm::{
     aead::{Aead, KeyInit, OsRng},
-    Aes256Gcm, Key, Nonce,
+    Aes256Gcm, Nonce,
 };
 use rand::RngCore;
 use std::fs;
 use std::path::{Path, PathBuf};
 use zeroize::Zeroizing;
 
+use crate::db;
+
 const KEY_SIZE: usize = 32;
 const NONCE_SIZE: usize = 12;
 const TAG_SIZE: usize = 16;
 const KEY_DIR_NAME: &str = ".crypto-key";
 const KEY_FILE_NAME: &str = "key.bin";
-const DB_ENC_SUFFIX: &str = ".enc";
 // Magic prefix: 8 bytes + 1 version byte = 9-byte header before nonce.
 const MAGIC: &[u8; 8] = b"BRGYENC1";
 const VERSION: u8 = 1;
@@ -57,7 +58,7 @@ pub struct CryptoKey(Zeroizing<[u8; KEY_SIZE]>);
 impl CryptoKey {
     /// Encrypt a byte slice, returning magic+version+nonce+ciphertext+tag.
     pub fn encrypt(&self, plaintext: &[u8]) -> Vec<u8> {
-        let cipher = Aes256Gcm::new_from_slice(&self.0).expect("AES-256 key must be 32 bytes");
+        let cipher = Aes256Gcm::new_from_slice(&*self.0).expect("AES-256 key must be 32 bytes");
         let mut nonce_bytes = [0u8; NONCE_SIZE];
         OsRng.fill_bytes(&mut nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_bytes);
@@ -88,9 +89,9 @@ impl CryptoKey {
                 data[MAGIC.len()]
             ));
         }
-        let cipher = Aes256Gcm::new_from_slice(&self.0).expect("AES-256 key must be 32 bytes");
+        let cipher = Aes256Gcm::new_from_slice(&*self.0).expect("AES-256 key must be 32 bytes");
         let (nonce_bytes, ct_tag) = data.split_at(HEADER_SIZE + NONCE_SIZE);
-        let nonce = Nonce::from_slice(&nonce_bytes[MAGIC.len()+1..]);
+        let nonce = Nonce::from_slice(&nonce_bytes[MAGIC.len() + 1..]);
         let ct_and_tag = ct_tag;
         cipher
             .decrypt(nonce, ct_and_tag)
@@ -99,14 +100,13 @@ impl CryptoKey {
 
     /// Returns true if `data` looks like our encrypted format (magic + version).
     pub fn is_encrypted(data: &[u8]) -> bool {
-        data.len() >= HEADER_SIZE
-            && &data[..MAGIC.len()] == MAGIC
-            && data[MAGIC.len()] == VERSION
+        data.len() >= HEADER_SIZE && &data[..MAGIC.len()] == MAGIC && data[MAGIC.len()] == VERSION
     }
 
     /// Try decrypt; if it's not our encrypted format, return the original
     /// bytes as Ok — used for photo fallback where plaintext + ciphertext
     /// coexist.
+    #[allow(dead_code)]
     pub fn decrypt_or_plaintext(&self, data: &[u8]) -> Vec<u8> {
         if Self::is_encrypted(data) {
             match self.decrypt(data) {
@@ -123,8 +123,7 @@ impl CryptoKey {
 /// project root: `app_data_dir/../.crypto-key`). Single source of truth for
 /// key location — generation and loading must always agree.
 pub fn crypto_key_dir() -> Result<PathBuf, String> {
-    let app_data_dir = crate::db::get_app_data_dir()
-        .ok_or_else(|| "app data dir not resolved".to_string())?;
+    let app_data_dir = crate::db::get_app_data_dir();
     let dir = app_data_dir.join("..").join(KEY_DIR_NAME);
     fs::create_dir_all(&dir).map_err(|e| format!("create .crypto-key dir: {e}"))?;
     Ok(dir)
@@ -145,6 +144,16 @@ pub fn key_exists() -> bool {
 pub fn generate_key() -> Result<Vec<u8>, String> {
     let path = crypto_key_path()?;
     generate_key_to_path(&path)
+}
+
+fn generate_key_to_path(path: &Path) -> Result<Vec<u8>, String> {
+    if path.exists() {
+        return Err("encryption key already exists".to_string());
+    }
+    let mut key_bytes = [0u8; KEY_SIZE];
+    OsRng.fill_bytes(&mut key_bytes);
+    fs::write(path, &key_bytes).map_err(|e| format!("write key file: {e}"))?;
+    Ok(key_bytes.to_vec())
 }
 
 /// Load the key adjacent to `app_data_dir`.
@@ -179,12 +188,16 @@ pub fn load_key_from_path(path: &Path) -> Result<CryptoKey, String> {
 
 /// Convenience: check whether key exists at the given directory
 /// (used by `encryption_status`).
+/// Reserved for future encryption-status UI.
+#[allow(dead_code)]
 pub fn key_exists_with_dir(dir: &Path) -> bool {
     dir.join(KEY_FILE_NAME).exists()
 }
 
 /// Encrypt a file in place using tmp-then-rename (crash-safe).
 /// Skips if already encrypted.
+/// Reserved for encrypted-backup path (pre-encryption plaintext backups gap).
+#[allow(dead_code)]
 pub fn encrypt_file_in_place(path: &Path) -> Result<(), String> {
     let crypto = load_key()?;
     let plaintext = fs::read(path).map_err(|e| format!("read {path:?}: {e}"))?;
@@ -192,7 +205,13 @@ pub fn encrypt_file_in_place(path: &Path) -> Result<(), String> {
         return Ok(()); // already encrypted
     }
     let ciphertext = crypto.encrypt(&plaintext);
-    let tmp = path.with_extension(path.extension().unwrap_or_default().to_string() + ".tmp");
+    let tmp = path.with_extension(
+        path.extension()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned()
+            + ".tmp",
+    );
     fs::write(&tmp, &ciphertext).map_err(|e| format!("write tmp {tmp:?}: {e}"))?;
     fs::rename(&tmp, path).map_err(|e| format!("rename {path:?}: {e}"))?;
     Ok(())
@@ -203,7 +222,13 @@ pub fn decrypt_file_in_place(path: &Path) -> Result<(), String> {
     let crypto = load_key()?;
     let ciphertext = fs::read(path).map_err(|e| format!("read {path:?}: {e}"))?;
     let plaintext = crypto.decrypt(&ciphertext)?;
-    let tmp = path.with_extension(path.extension().unwrap_or_default().to_string() + ".tmp");
+    let tmp = path.with_extension(
+        path.extension()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned()
+            + ".tmp",
+    );
     fs::write(&tmp, &plaintext).map_err(|e| format!("write tmp {tmp:?}: {e}"))?;
     fs::rename(&tmp, path).map_err(|e| format!("rename {path:?}: {e}"))?;
     Ok(())
@@ -260,7 +285,13 @@ pub fn encrypt_dir_in_place(dir: &Path) -> Result<usize, String> {
                 continue; // already encrypted
             }
             let ciphertext = crypto.encrypt(&data);
-            let tmp = path.with_extension(path.extension().unwrap_or_default().to_string() + ".tmp");
+            let tmp = path.with_extension(
+                path.extension()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned()
+                    + ".tmp",
+            );
             fs::write(&tmp, &ciphertext).map_err(|e| format!("write tmp {tmp:?}: {e}"))?;
             fs::rename(&tmp, &path).map_err(|e| format!("rename {path:?}: {e}"))?;
             count += 1;
@@ -284,28 +315,16 @@ pub fn decrypt_dir_in_place(dir: &Path) -> Result<usize, String> {
                 continue; // not encrypted, skip
             }
             let plaintext = crypto.decrypt(&data)?;
-            let tmp = path.with_extension(path.extension().unwrap_or_default().to_string() + ".tmp");
+            let tmp = path.with_extension(
+                path.extension()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned()
+                    + ".tmp",
+            );
             fs::write(&tmp, &plaintext).map_err(|e| format!("write tmp {tmp:?}: {e}"))?;
             fs::rename(&tmp, &path).map_err(|e| format!("rename {path:?}: {e}"))?;
             count += 1;
-        }
-    }
-    Ok(count)
-}
-
-/// Count plaintext (non-encrypted) files in a directory.
-pub fn count_plaintext_files(dir: &Path) -> Result<usize, String> {
-    let mut count = 0usize;
-    for entry in fs::read_dir(dir).map_err(|e| format!("read dir {dir:?}: {e}"))? {
-        let entry = entry.map_err(|e| format!("dir entry: {e}"))?;
-        let path = entry.path();
-        if path.is_dir() {
-            count += count_plaintext_files(&path)?;
-        } else if path.is_file() {
-            let data = fs::read(&path).map_err(|e| format!("read {path:?}: {e}"))?;
-            if !CryptoKey::is_encrypted(&data) {
-                count += 1;
-            }
         }
     }
     Ok(count)
