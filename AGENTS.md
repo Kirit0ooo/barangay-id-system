@@ -379,5 +379,6 @@ Zero logic changes — accessibility hardening only:
 | Valid until aria pairing | `src/index.html:475` | `aria-describedby="valid-until-help"` on input + matching `id="valid-until-help"` on help paragraph |
 | Resident ID aria pairing | `src/index.html:179` | Pre-existing `aria-describedby="resident-id-help"` — verified pairing with help paragraph |
 | Focus management | `src/js/app.core.js` | Added `focusView()` method that scopes to the visible view container (offsetParent !== null, since all views coexist under x-show) and focuses the first focusable element: dashboard→.kiosk-tile, register→#resident-id, search→#search-input, settings→.hub-back, detail→.hub-back. Wired via `this.$watch('currentView', () => this.focusView())` in `init()`. |
+| Nav orientation chip | `src/index.html` + `src/js/app.core.js` + `src/css/style.css` | Added `.nav-page` chip beside the brand block showing the current view (`.nav-page__dot` gold dot + `.nav-page__label`). Driven by `navPageTitle()` in app.core.js (edit mode narrows Register → "Edit Resident"); `aria-live="polite"` announces view changes. Tab strip stays hidden in kiosk mode. |
 
 Validation: `npm test` 57/0/12, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.

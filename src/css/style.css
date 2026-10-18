@@ -61,6 +61,13 @@ nav[aria-label="Primary"] button:active{ transform:none; }
 nav[aria-label="Primary"] [role="tab"]:not(.bg-white){ color:#fff; }
 .nav-logo{ filter:drop-shadow(0 1px 2px rgba(0,0,0,.45)); }
 
+/* Nav page chip — current-view orientation (tab strip hidden in kiosk mode).
+   Sits right of the brand block; gold dot echoes the nav's gold rule. */
+.nav-page{ display:inline-flex; align-items:center; gap:8px; flex-shrink:0; padding:6px 12px; border-radius:999px; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.18); }
+.nav-page__dot{ width:6px; height:6px; border-radius:50%; background:var(--gold); flex-shrink:0; }
+.nav-page__label{ font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#fff; white-space:nowrap; }
+@media (max-width:480px){ .nav-page{ padding:5px 10px; } .nav-page__label{ font-size:10px; } }
+
 /* Scrollbar — single source */
 ::-webkit-scrollbar{ width:8px; height:8px; }
 ::-webkit-scrollbar-track{ background:var(--paper); }

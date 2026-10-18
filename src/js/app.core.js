@@ -225,6 +225,24 @@ window.appState = {
         }, 0);
     },
 
+    // ─── Nav: current-view orientation label ─────────────────────────
+    // Feeds the nav-page chip so the officer always knows which screen is
+    // open (the tab strip is hidden in kiosk mode). Edit mode narrows the
+    // register label; detail names the opened record's screen.
+    navPageTitle() {
+        if (this.currentView === 'register' && this.editingResident) {
+            return 'Edit Resident';
+        }
+        const VIEW_TITLES = {
+            dashboard: 'Dashboard',
+            register: 'New Registration',
+            search: 'Search Residents',
+            settings: 'Settings',
+            detail: 'Resident Details'
+        };
+        return VIEW_TITLES[this.currentView] || 'Dashboard';
+    },
+
     // ─── Init + theme ──────────────────────────────────────────────────
     async init() {
         try {
