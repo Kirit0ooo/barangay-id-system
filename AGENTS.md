@@ -166,6 +166,7 @@ Visual-consistency polish across all five views — CSS only, zero logic changes
 | Token aliases | `src/css/style.css` | Added `--color-accent-ink` (dark gold for AA text/fills on light) + `--color-damage`; kiosk lost/damage hover borders and female ratio label/value/bar now use tokens instead of raw hex — fixes gold-on-white contrast |
 | Required-asterisk contrast | `src/css/style.css` | `.form-field__req` keeps `--color-error` (the gold dupe that overrode it was removed); red required marks now AA on white |
 | `:root` tidy | `src/css/style.css` | Fixed `--font-display`/`--text-xs` indentation; `.kiosk-head__title` double `letter-spacing` deduped |
+| Kiosk tile arrows | `src/index.html` + `src/css/style.css` | Replaced the `→` text char with `src/icons/arrow.svg` `<img>` (20px); hover flips glyph white via `filter:brightness(0) invert(1)` since `currentColor` inside an `<img>` can't inherit page color |
 
 Validation: `npm test` 57/0/12, `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
 
@@ -364,7 +365,7 @@ Validation: `npm test` 57/0/12, `npm run stamp:css` + `npm run check:css` CSS fr
 
 ## Icons (2026-10-17)
 
-Dashboard glyphs are PNG files under `src/icons/` referenced via `<img src="icons/*.png" />` in `src/index.html` (person, users, calendar, check, refresh, badge, alert, document, search, settings). These are static image assets — they do not respond to `currentColor` theming but keep theming consistent across the navy/gold token system since each PNG is a fixed-color render. Five inline `<svg>` section-head icons on the Settings cards were replaced with PNG `<img>` tags on 2026-10-18; PNG icons are the intended source for all dashboard glyphs.
+Dashboard glyphs are PNG files under `src/icons/` referenced via `<img src="icons/*.png" />` in `src/index.html` (person, users, calendar, check, refresh, badge, alert, document, search, settings) plus `src/icons/arrow.svg` for the three kiosk-tile arrows (`→` text char retired; fixed-color glyph, hover inverts it white via CSS `filter`). These are static image assets — they do not respond to `currentColor` theming but keep theming consistent across the navy/gold token system since each PNG is a fixed-color render. Five inline `<svg>` section-head icons on the Settings cards were replaced with PNG `<img>` tags on 2026-10-18; PNG icons are the intended source for all dashboard glyphs.
 
 Validation: `npm test` 57/0/12, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
 

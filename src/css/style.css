@@ -1076,8 +1076,13 @@ html[data-theme="red-gradient"] .help {
 .kiosk-tile__text{ min-width:0; }
 .kiosk-tile__title{ font-size:20px; font-weight:800; letter-spacing:-0.01em; color:var(--color-text); line-height:1.2; margin:0 0 4px 0; }
 .kiosk-tile__desc{ font-size:14px; color:var(--color-text-muted); margin:0; }
-.kiosk-tile__arrow{ width:40px; height:40px; display:inline-flex; align-items:center; justify-content:center; border-radius:12px; background:var(--color-bg); color:var(--color-text-muted); font-size:20px; line-height:1; flex-shrink:0; }
+.kiosk-tile__arrow{ width:40px; height:40px; display:inline-flex; align-items:center; justify-content:center; border-radius:12px; background:var(--color-bg); color:var(--color-text-muted); flex-shrink:0; }
+/* Fixed-color SVG glyph (fill=currentColor resolves inside the img, not the page):
+   sized 20px like the retired text arrow; hover flips the well to navy, so the
+   glyph is forced white via filter to keep the inverted state legible. */
+.kiosk-tile__arrow img{ width:20px; height:20px; object-fit:contain; }
 .kiosk-tile:hover .kiosk-tile__arrow{ background:var(--color-primary); color:var(--color-text-inverse); }
+.kiosk-tile:hover .kiosk-tile__arrow img{ filter:brightness(0) invert(1); }
 
 @media(max-width:640px){
   .kiosk-stats{ grid-template-columns:1fr; }
