@@ -7,4 +7,4 @@ Isolated document store for Barangay ID System.
   Save-as-PDF via the browser print dialog when a file is needed).
 - `Excel/` — Backups of the complete resident list (full Excel exports).
 
-All files remain inside `D:\Barangay\barangay-id-system` per isolation mandate.
+All files remain inside the project folder per isolation mandate.

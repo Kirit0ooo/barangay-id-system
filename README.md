@@ -1,9 +1,9 @@
 # Barangay Resident ID Registration System
 
 **Offline-first desktop app for registering Barangay residents, printing CR100 ID cards, and exporting Excel — built with Rust + Tauri + SQLite + Alpine.js.**  
-Target: **5,000–10,000 residents**, **Windows 10/11 primary** (Linux/WSL secondary), **100% offline**, portable on `D:\Barangay\barangay-id-system` with zero cloud dependencies.
+Target: **5,000–10,000 residents**, **Windows 10/11 primary** (Linux/WSL secondary), **100% offline**, portable on any local folder with zero cloud dependencies.
 
-> **Version:** 1.0.0 · **Identifier:** `com.barangay.idsystem` · **Edition:** Tauri 1.5 · **Size:** ~18 MB installed
+> **Version:** 1.0.0 · **Identifier:** `com.barangay.idsystem` · **Edition:** Tauri 1.5
 
 ---
 
@@ -37,16 +37,16 @@ Target: **5,000–10,000 residents**, **Windows 10/11 primary** (Linux/WSL secon
 
 ```bat
 :: Windows — double-click run.bat OR Powershell
-D:\Barangay\barangay-id-system> run.bat
+run.bat
 :: or
-D:\Barangay\barangay-id-system> powershell -ExecutionPolicy Bypass -File .\run.ps1
+powershell -ExecutionPolicy Bypass -File .\run.ps1
 :: then use build.bat for installer
-D:\Barangay\barangay-id-system> build.bat
+build.bat
 ```
 
 WSL (dev only, needs GTK for cargo check):
 ```bash
-cd /mnt/d/Barangay/barangay-id-system
+cd <project-root>
 npm install
 npx tauri dev
 ```
@@ -55,10 +55,10 @@ npx tauri dev
 
 ## Folder Contract
 
-**Isolation Mandate:** *All* data, tests, tmp, cache, logs, build outputs **MUST** stay inside `D:\Barangay\barangay-id-system`. No writes to `%APPDATA%`, `%TEMP%`, drive root, or home. Verified by `tests/smoke.test.js` + `tests/regression.test.js`.
+**Isolation Mandate:** *All* data, tests, tmp, cache, logs, build outputs **MUST** stay inside the project folder. No writes to `%APPDATA%`, `%TEMP%`, drive root, or home. Verified by `tests/smoke.test.js` + `tests/regression.test.js`.
 
 ```
-D:\Barangay\
+<project-root>\
  ├── BarangayResidentID.txt              # original spec
  └── barangay-id-system\                 # ← ALL PROGRAM FILES (portable)
       ├── barangay.ico / barangay.png    # app icon
@@ -106,11 +106,10 @@ D:\Barangay\
       ├── run.bat                        # thin wrapper -> run.ps1 %* (pins same env; minimal :NOPS hint+pause only if PowerShell absent)
       ├── build.ps1 / build.bat          # release build -> src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/ + logs/build-*.log
       ├── view-logs.bat                  # thin wrapper -> run.ps1 -Logs + explorer logs\ (Explorer open is the double-click value; tail logic lives in run.ps1)
-      # REMOVED 2026-09-10: fix-tauri.bat (subsumed by run.ps1 -Fix; auto npm ci→install covers R5 deps) + fix-libclang.bat (pure Rust, no LLVM)
       └── README.md
 ```
 
-**How isolation works:** `src-tauri/src/db.rs:get_project_root()` walks `D:\ → exe parent → cwd` looking for marker `barangay.ico` or `src-tauri/`; `get_app_data_dir()` only returns inside that root; `logger::get_logs_dir()` returns `Result` (OS-temp fallback + error log, never `panic!`) (no `ProjectDirs` AppData fallback). Every write path (`backup`, `export`, `id_card`) calls `validate_isolated_write_path()` which asserts `parent.starts_with(root)`. `main.rs` pins `TMP/TEMP/TMPDIR/WEBVIEW2_USER_DATA_FOLDER` to `tmp/` at startup. `.npmrc` `cache=./.npm-cache` + Tauri `fs.scope` tight to `$APP/photos|documents|config|backups` + `$RESOURCE` prevents escape.
+**How isolation works:** `src-tauri/src/db.rs:get_project_root()` walks the drive root → exe parent → cwd looking for marker `barangay.ico` or `src-tauri/`; `get_app_data_dir()` only returns inside that root; `logger::get_logs_dir()` returns `Result` (OS-temp fallback + error log, never `panic!`) (no `ProjectDirs` AppData fallback). Every write path (`backup`, `export`, `id_card`) calls `validate_isolated_write_path()` which asserts `parent.starts_with(root)`. `main.rs` pins `TMP/TEMP/TMPDIR/WEBVIEW2_USER_DATA_FOLDER` to `tmp/` at startup. `.npmrc` `cache=./.npm-cache` + Tauri `fs.scope` tight to `$APP/photos|documents|config|backups` + `$RESOURCE` prevents escape.
 
 ---
 
@@ -118,8 +117,8 @@ D:\Barangay\
 
 ### Windows (primary)
 
-1. **Rust 1.75+** — https://rustup.rs — `rustc --version` (current: 1.98.1)
-2. **Node.js LTS 18+** — https://nodejs.org — `node --version` (tested: 22/24) + `npm --version`
+1. **Rust 1.75+** — https://rustup.rs — `rustc --version`
+2. **Node.js LTS 18+** — https://nodejs.org — `node --version` + `npm --version`
 3. **WebView2** — preinstalled on Win11; Win10: https://developer.microsoft.com/en-us/microsoft-edge/webview2/
 4. **Visual Studio Build Tools** — `Desktop development with C++` workload (for `tauri build` MSI). Without it `tauri dev` still runs (debug).
 
@@ -132,7 +131,7 @@ GTK needed for `cargo check`: `libglib2.0-dev libgtk-3-dev pkg-config`. Build no
 ## Installation & Run
 
 ```bat
-cd /d D:\Barangay\barangay-id-system
+cd <project-root>
 
 :: 1. deps (isolated cache .\.npm-cache, target inside src-tauri\target)
 npm install
@@ -142,7 +141,7 @@ npm install
 run.bat
 :: Option B — PowerShell (CANONICAL, transcript to logs/run-*.log)
 powershell -ExecutionPolicy Bypass -File .\run.ps1
-:: flags: .\run.ps1 -Logs (tail app.log.*+frontend.log+run/build, replaces view-logs.bat) | -Fix (deep clean, replaces fix-tauri.bat) | -NoInstall (fail fast) | -Help | -Audit (warn-only, parity with build.ps1)
+:: flags: .\run.ps1 -Logs (tail app.log.*+frontend.log+run/build, replaces view-logs.bat) | -Fix (deep clean) | -NoInstall (fail fast) | -Help | -Audit (warn-only, parity with build.ps1)
 ::          run.bat forwards all flags: run.bat -Logs / run.bat -Fix / run.bat -Audit
 :: Option C — direct (must pin env first — launchers do this for you)
 npx tauri dev
@@ -158,7 +157,7 @@ set RUST_LOG=debug && run.bat
 ## Production Build
 
 ```bat
-cd /d D:\Barangay\barangay-id-system
+cd <project-root>
 build.bat
 :: or
 powershell -ExecutionPolicy Bypass -File .\build.ps1
@@ -180,7 +179,7 @@ Install on Win10/11 (per-user MSI — no admin rights needed). The installer cre
  ├── Documents\  logs\  tmp\  config\
 ```
 
-One folder, exe + data together. Details: `src-tauri/wix/main.wxs` is the official Tauri v1.6 WiX template with two surgical changes — `InstallScope perUser` (+`limited` privileges) and `INSTALLDIR` under `LocalAppDataFolder` instead of Program Files (read-only; the app refuses to start there by design). If a `D:\Barangay\barangay-id-system\data` folder already exists, the app keeps using it (portable/USB workflow unchanged).
+One folder, exe + data together. Details: `src-tauri/wix/main.wxs` is the official Tauri v1.6 WiX template with two surgical changes — `InstallScope perUser` (+`limited` privileges) and `INSTALLDIR` under `LocalAppDataFolder` instead of Program Files (read-only; the app refuses to start there by design). If a `<project-root>\data` folder already exists, the app keeps using it (portable/USB workflow unchanged).
 
 > **Migrating from an old perMachine install:** uninstall the old MSI first (Windows can't upgrade perMachine → perUser in place), back up via Settings → Backup, then install the new MSI and restore.
 > **Uninstall wipes the install folder including `data\`** (stock WiX `RemoveFolder` behavior) — always take a Backup first.
@@ -225,7 +224,7 @@ index.html (Alpine) —api.js—> Tauri invoke —main.rs—> Rust commands
 | Layer | Tech | Version | Notes |
 |---|---|---|---|
 | Desktop | Tauri | 1.5 (cli 1.6.3) | `custom-protocol`, `fs-write/read`, `dialog-all`, `shell-open` |
-| Language | Rust | 1.98.1 | `edition 2021` |
+| Language | Rust | `edition 2021` |
 | Async | tokio | 1 full | |
 | DB | sqlx + sqlite | 0.7 | `runtime-tokio`, 5 conns, WAL |
 | QR (preview/print) | qrcode | 0.13 + image 0.24 + base64 0.21 | preview data-URL |
@@ -282,7 +281,7 @@ last_pdf_path TEXT, last_pdf_generated_at TEXT, -- legacy PDF audit trail: DORMA
 ## ID Card — CR100 3.88×2.63"
 
 * **Size:** `98.6 × 66.8 mm` (`CR100_W/H`).
-* **Front:** navy header (Republic / Province / Municipality / Barangay), gold accent, white logo wells (placeholder `LOGO`), title, 1×1 photo card (inner white), signature line, 3-row grid: (Last/First/Middle) → (DOB/Gender/Civil) → (Purok/Contact/Blood), navy ID pill + white `VALID DD-MM-YYYY` chip, punong `RAYMUND ROSILLER R. DE VEYRA` + year chips, micro-footer. Faint `BALUD` watermark (38pt) + guilloche dots.
+* **Front:** navy header (Republic / Province / Municipality / Barangay), gold accent, white logo wells (placeholder `LOGO`), title, 1×1 photo card (inner white), signature line, 3-row grid: (Last/First/Middle) → (DOB/Gender/Civil) → (Purok/Contact/Blood), navy ID pill + white `VALID DD-MM-YYYY` chip, punong `[PUNONG BARANGAY NAME]` + year chips, micro-footer. Faint `BALUD` watermark (38pt) + guilloche dots.
 * **Back:** navy `IN CASE OF EMERGENCY…` bar, Name/Relationship/Address (PUROK…, house/street second line if present)/Contact, yellow validity box, 17 mm QR (white bordered), footer `If found…`.
 * **QR data (JSON):** `{"id","name":"Last, First Middle","dob":"DD-MM-YYYY","purok","contact","valid","status":"remarks"}` rendered via `qrcode` at 200 px (`get_qr_data_url`), fallback 1×1 PNG on error.
 * **Fonts:** the card template requests Source Serif Pro/Inter with locally bundled TTFs (offline, no CDN). Screen preview and print share the exact CR100 geometry (98.6×66.8 seats, photo 20.9×26.9, QR pad 14.6) so WYSIWYG holds.
@@ -358,16 +357,15 @@ npm test                        :: runs all three via node --test
 writes escape to `%APPDATA%`/`%TEMP%`. `run.ps1`/`build.ps1` require PowerShell 5.1+;
 `.bat` files are thin wrappers (`powershell -ExecutionPolicy Bypass -File .\*.ps1 %*`)
 with a legacy cmd fallback. `run.ps1` is canonical — `.bat` wrappers only forward `%*` and set the same env pins.
-`fix-libclang.bat` was **deleted** (obsolete — `rust_xlsxwriter` 0.78 is pure Rust, no LLVM/libclang).
 
 | Script | Purpose | Isolation |
 |---|---|---|
-| `run.ps1` *(canonical)* | prereq check (node/npm/rustc with clear msgs) → auto `npm ci`→`install` if `tauri.cmd` missing (reproducible via `package-lock.json`, covers R5 `scheduled.rs`/`photo_gc`/DOB helpers) → `npx tauri dev`; flags `-Logs` (tails `app.log.*`+`frontend.log`+latest `run/build-*.log` and exits) `-Fix` (deep clean `node_modules`+`.npm-cache` then `npm ci`→`install`, subsumes `fix-tauri.bat`) `-NoInstall` `-Help` `-Audit` (warn-only cargo audit + npm audit, parity with `build.ps1 -Audit`); `Start-Transcript` to `logs/run-*.log` | `logs/run-*.log` + env pins above |
+| `run.ps1` *(canonical)* | prereq check (node/npm/rustc with clear msgs) → auto `npm ci`→`install` if `tauri.cmd` missing (reproducible via `package-lock.json`, covers R5 `scheduled.rs`/`photo_gc`/DOB helpers) → `npx tauri dev`; flags `-Logs` (tails `app.log.*`+`frontend.log`+latest `run/build-*.log` and exits) `-Fix` (deep clean `node_modules`+`.npm-cache` then `npm ci`→`install`) `-NoInstall` `-Help` `-Audit` (warn-only cargo audit + npm audit, parity with `build.ps1 -Audit`); `Start-Transcript` to `logs/run-*.log` | `logs/run-*.log` + env pins above |
 | `run.bat` | **thin wrapper** → `run.ps1 %*` (same env pins before `powershell`); minimal `:NOPS` hint+pause only if PowerShell absent; forwards all flags | same pins, `logs/run-*.log` |
 | `build.ps1` *(canonical)* | prereq check → `npm ci`→`install` if needed → `rustup target add` → `npx tauri build --target x86_64-pc-windows-msvc` → `bundle/msi/`+`bundle/nsis/`; transcript | `logs/build-*.log` + `src-tauri/target` |
 | `build.bat` | **thin wrapper** → `build.ps1 %*` (same env pins); legacy `:NOPS` fallback only if PowerShell absent | same pins |
 | `view-logs.bat` | **thin wrapper** → `run.ps1 -Logs` + `explorer logs\` (Explorer open is the double-click value; tail logic lives in `run.ps1`) | read-only, no env writes |
-| ~~`fix-tauri.bat`~~ | **deleted 2026-09-10** — functionality fully subsumed by `run.ps1 -Fix` (deep clean) + auto-install (non-destructive); no longer needed. For manual clean: `powershell -ExecutionPolicy Bypass -File .\run.ps1 -Fix` | was cache pinned to `.\.npm-cache` |
+
 
 `main.rs` pins `TMP/TEMP/TMPDIR/WEBVIEW2_USER_DATA_FOLDER` to `tmp/` at startup (`tmp/webview2/`).
 
@@ -383,10 +381,6 @@ with a legacy cmd fallback. `run.ps1` is canonical — `.bat` wrappers only forw
 * ID `MAX(substr(...,-5))` per year avoids `COUNT` reuse; R2 retries `MAX→INSERT` once on UNIQUE `resident_id` violation (`BEGIN IMMEDIATE` + re-query MAX) and cleans orphan photo on each failure.
 * R4 Excel import guards: header/width desync asserted (`37` cols), header count mismatch warns & rejects severely malformed sheets, row `len()>headers` truncated, missing columns padded as empty, logged via `tracing::warn!`.
 * R5 Scheduled maintenance: `src-tauri/src/scheduled.rs` — `scheduled_backup` (`wal_checkpoint(TRUNCATE)` → `data/backups/scheduled_*.db`, isolated) and `photo_gc` (orphan scan under `data/photos`, logs count, deletes only with flag) wired via `main.rs` + frontend 24h `setInterval` + Settings Scan/Clean buttons. 100% offline.
-
-### Alpine CSP `unsafe-eval` Removal (R6 — completed in M1 pass)
-
-Current CSP carries no `unsafe-eval` (see `src-tauri/tauri.conf.json` `security.csp`; pinned by `tests/regression.test.js` M1 checks) — it was dropped when the Play CDN Tailwind runtime was replaced by prebuilt `src/css/tailwind.css`, and Alpine reactivity is verified working without it in this Tauri version. Only `style-src`/`script-src 'unsafe-inline'` remain for `<style>` blocks and Alpine attributes. No app code introduces `eval`/`new Function`. If a future Alpine upgrade ever requires `eval`, switch to Alpine's CSP build (`https://github.com/alpinejs/alpine#using-the-csp-build`) which forbids `eval` and requires `x-data` to be pre-compiled — then re-verify bindings.
 
 ---
 
@@ -407,8 +401,8 @@ Current CSP carries no `unsafe-eval` (see `src-tauri/tauri.conf.json` `security.
 
 ## Deployment
 
-* Copy entire `D:\Barangay\barangay-id-system` to USB — data travels with it (portable).
-* MSI installs per-user to LocalAppData (no admin; see wix/main.wxs) but data check still prefers `D:\Barangay\barangay-id-system\data` if mounted (via `get_project_root()`), else install-adjacent `data\`.
+* Copy the project folder to USB — data travels with it (portable).
+* MSI installs per-user to LocalAppData (no admin; see wix/main.wxs) but data check still prefers `<project-root>\data` if mounted (via `get_project_root()`), else install-adjacent `data\`.
 * For air-gapped: vendored `src/vendor/alpine.min.js` + prebuilt `src/css/tailwind.css` — no CDN needed.
 
 ---
