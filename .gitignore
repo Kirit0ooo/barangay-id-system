@@ -23,6 +23,7 @@ Documents/Excel/*
 Documents/Verify/*
 !Documents/Verify/.gitkeep
 !Documents/Verify/README.md
+config/civic.json
 config/qr_hmac_secret
 config/qr_hmac_secret.tmp
 config/id_verify_private
