@@ -45,8 +45,8 @@
     },
     "bundle": {
       "active": true,
+      "useLocalToolsDir": true,
       "targets": [
-        "msi",
         "nsis"
       ],
       "identifier": "com.barangay.idsystem",

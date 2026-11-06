@@ -1,11 +1,11 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Barangay ID System - portable release build (Tauri MSI/NSIS).
+    Barangay ID System - portable release build (Tauri NSIS; MSI target deferred).
 .DESCRIPTION
     Run:
       powershell -ExecutionPolicy Bypass -File .\build.ps1
-    Output stays isolated: src-tauri\target\x86_64-pc-windows-msvc\release\bundle\ (msi/ + nsis/) + portable exe
+    Output stays isolated: src-tauri\target\x86_64-pc-windows-msvc\release\bundle\nsis\ + portable exe
     Transcript: logs\build-YYYYMMDD-HHmmss.log
     Portable pins (same as run.ps1) before any npm/cargo:
       NPM_CONFIG_CACHE=./.npm-cache CARGO_TARGET_DIR=./src-tauri/target TMP/TEMP/TMPDIR=./tmp
@@ -67,10 +67,12 @@ Usage:
 Pre-build: stale bundle/ outputs removed (see -NoClean); patch version auto-increments
 x.y.z -> x.y.z+1 across package.json / package-lock.json / tauri.conf.json / Cargo.toml /
 Cargo.lock (see -NoBump) so the compiled binary and installers carry the new version.
-Output: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/ (msi/ + nsis/) + portable exe
+Output: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/ + portable exe
 Transcript: logs/build-YYYYMMDD-HHmmss.log (isolated)
-Prereqs (fail-fast $Prereqs gate): Node 20+, npm, Rust MSVC, MSVC linker, WiX v3.11, NSIS, rustup (warn-only).
-Future deps = one $Prereqs row (Name/Level/Test/Fix). MSI also downloads the WebView2 offline installer at build time (network needed).
+Prereqs (fail-fast $Prereqs gate): Node 20+, npm, Rust MSVC, MSVC linker. Optional (warn-only, no
+action needed): WiX v3 + NSIS 3 (Tauri downloads both into src-tauri\target\.tauri-tools on first
+build) and rustup.
+Future deps = one $Prereqs row (Name/Level/Test/Fix). The MSI leg (when re-enabled) also downloads the WebView2 offline installer at build time (network needed).
 Portable pins BEFORE any npm/cargo: NPM_CONFIG_CACHE=./.npm-cache CARGO_TARGET_DIR=./src-tauri/target TMP/TEMP/TMPDIR=./tmp
 Build includes get_cards_batch (bulk print) + optimize_database (E2) - no extra flags needed.
 For comment-based help: Get-Help .\build.ps1 -Detailed
@@ -107,6 +109,8 @@ try {
     # Level 'required' throws once listing ALL missing tools; 'warn' prints
     # yellow and continues. Tests must be side-effect free (Get-Command /
     # Test-Path only) - version echoes come after the gate passes.
+    # WiX/NSIS stay 'warn' on purpose: Tauri v1 provisions its own copies
+    # (tauri.bundle.useLocalToolsDir) and never uses a system install.
     $Prereqs = @(
         @{ Name = 'Node.js 20+'; Level = 'required'; Fix = 'https://nodejs.org (LTS 20+; CI pins 20, npm test needs import.meta.dirname)';
            Test = { [bool](Get-Command 'node' -ErrorAction SilentlyContinue) } },
@@ -123,16 +127,17 @@ try {
                         if ($vsPath -and (Test-Path (Join-Path $vsPath 'VC\Tools\MSVC'))) { return $true }
                     }
                     return (Test-Path (Join-Path ${env:ProgramFiles} 'Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC')) } },
-        @{ Name = 'WiX Toolset v3.11 (MSI leg; Tauri v1 rejects v4+)'; Level = 'required'; Fix = 'https://wixtoolset.org/releases/ (v3.11)';
-           Test = { if (Test-Path (Join-Path ${env:ProgramFiles(x86)} 'WiX Toolset v3.11\bin\candle.exe')) { return $true }
+        @{ Name = 'WiX Toolset v3 (MSI leg)'; Level = 'warn'; Fix = 'Tauri provisions this itself on the first build - no manual install needed';
+           Test = { if (Test-Path (Join-Path $Root 'src-tauri\target\.tauri-tools\tauriWixTools314\candle.exe')) { return $true }
+                    if (Test-Path (Join-Path ${env:ProgramFiles(x86)} 'WiX Toolset v3.11\bin\candle.exe')) { return $true }
                     if (Get-Command 'candle.exe' -ErrorAction SilentlyContinue) {
                         $ver = (& candle.exe -version 2>$null | Out-String).Trim()
-                        if ($ver -match 'v3\.11') { return $true }
-                        Write-Host "[wix] candle.exe on PATH is v4+ (Tauri v1 needs v3.11): $ver" -ForegroundColor Yellow
+                        return ($ver -match 'v3\.11')
                     }
                     return $false } },
-        @{ Name = 'NSIS makensis (nsis leg)'; Level = 'required'; Fix = 'https://nsis.sourceforge.io/Download';
-           Test = { if (Get-Command 'makensis.exe' -ErrorAction SilentlyContinue) { return $true }
+        @{ Name = 'NSIS makensis (nsis leg)'; Level = 'warn'; Fix = 'Tauri provisions this itself on the first build - no manual install needed';
+           Test = { if (Test-Path (Join-Path $Root 'src-tauri\target\.tauri-tools\NSIS\makensis.exe')) { return $true }
+                    if (Get-Command 'makensis.exe' -ErrorAction SilentlyContinue) { return $true }
                     return (Test-Path 'C:\Program Files (x86)\NSIS\makensis.exe') } },
         @{ Name = 'rustup (auto-adds the x86_64-pc-windows-msvc target below)'; Level = 'warn'; Fix = 'https://rustup.rs';
            Test = { [bool](Get-Command 'rustup' -ErrorAction SilentlyContinue) } }
@@ -142,15 +147,15 @@ try {
         $ok = $false
         try { $ok = [bool](& $p.Test) } catch { $ok = $false }
         if ($ok) { Write-Host "ok: $($p.Name)" -ForegroundColor Green }
-        elseif ($p.Level -eq 'warn') { Write-Host "missing (warn-only): $($p.Name) - $($p.Fix)" -ForegroundColor Yellow }
+        elseif ($p.Level -eq 'warn') { Write-Host "optional: $($p.Name) not found - $($p.Fix)" -ForegroundColor Yellow }
         else { $missing += "  - $($p.Name): $($p.Fix)" }
     }
     if ($missing.Count -gt 0) { throw ("Missing build dependencies:`n" + ($missing -join "`n") + "`nInstall the above, then re-run .\build.ps1") }
-    Write-Host '[note] MSI embeds the WebView2 offline installer (~150MB download at build time - network required even though the app itself is offline-first)' -ForegroundColor DarkGray
+    Write-Host '[note] The installer uses the WebView2 bootstrapper (network needed the first time it installs; the app itself is offline-first)' -ForegroundColor DarkGray
     try { $v = (Invoke-SafeNative node --version | Out-String).Trim(); if ($LASTEXITCODE -ne 0) { throw "exit $LASTEXITCODE" }; Write-Host "node $v" -ForegroundColor Green
         $m = [regex]::Match($v, 'v(\d+)'); if ($m.Success -and [int]$m.Groups[1].Value -lt 20) { Write-Host '[WARN] Node < 20: npm test needs Node 20.11+ (import.meta.dirname)' -ForegroundColor Yellow } } catch { throw 'Node/npm not found - https://nodejs.org' }
     try { $v = (Invoke-SafeNative npm --version | Out-String).Trim(); if ($LASTEXITCODE -ne 0) { throw "exit $LASTEXITCODE" }; Write-Host "npm $v (cache $env:NPM_CONFIG_CACHE)" -ForegroundColor Green } catch { throw 'npm not found - reinstall Node.js' }
-    try { $v = (Invoke-SafeNative rustc --version | Out-String).Trim(); if ($LASTEXITCODE -ne 0) { throw "exit $LASTEXITCODE" }; Write-Host "$v" -ForegroundColor Green } catch { throw 'Rust not found - https://rustup.rs (needed for tauri build MSI)' }
+    try { $v = (Invoke-SafeNative rustc --version | Out-String).Trim(); if ($LASTEXITCODE -ne 0) { throw "exit $LASTEXITCODE" }; Write-Host "$v" -ForegroundColor Green } catch { throw 'Rust not found - https://rustup.rs (needed for tauri build)' }
     $prevEap=$ErrorActionPreference; $ErrorActionPreference='Continue'
     # Skip the network install when the target is already present (fail-open:
     # any check failure falls through to the install, preserving old behavior).
@@ -253,11 +258,11 @@ try {
     } finally { $ErrorActionPreference=$prevEap }
     if ($LASTEXITCODE -ne 0) { throw "tauri build (x86_64-pc-windows-msvc) failed (exit $LASTEXITCODE)" }
 
-    Write-Host "`n[Barangay ID] x64 release outputs (portable exe + msi/nsis bundles):" -ForegroundColor Green
+    Write-Host "`n[Barangay ID] x64 release outputs (portable exe + nsis bundle):" -ForegroundColor Green
     Get-ChildItem (Join-Path $Root 'src-tauri\target\x86_64-pc-windows-msvc\release') -File -ErrorAction SilentlyContinue |
         Where-Object { $_.Extension -in @('.exe', '.msi') } | Select-Object Name, Length, LastWriteTime | Format-Table -AutoSize
 
-    Write-Host "`n[Barangay ID] Bundles at: src-tauri\target\x86_64-pc-windows-msvc\release\bundle\ (msi/ + nsis/)" -ForegroundColor Green
+    Write-Host "`n[Barangay ID] Bundles at: src-tauri\target\x86_64-pc-windows-msvc\release\bundle\nsis\" -ForegroundColor Green
     Get-ChildItem (Join-Path $Root 'src-tauri\target\x86_64-pc-windows-msvc\release\bundle') -Recurse -File -ErrorAction SilentlyContinue |
         Select-Object FullName, Length, LastWriteTime | Format-Table -AutoSize
 } catch [System.Management.Automation.PipelineStoppedException] {
