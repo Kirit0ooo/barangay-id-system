@@ -8,6 +8,27 @@ use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
 
+/// Turn a requested export destination into a safe, non-colliding `.xlsx` path.
+///
+/// # Arguments
+///
+/// * `requested` — Destination from the save dialog (blank handling is the
+///   caller's job).
+///
+/// # Returns
+///
+/// An absolute path inside the project tree, with the file name sanitized and a
+/// `.xlsx` extension enforced. When the target already exists the next free
+/// `name (2).xlsx` sibling is returned, so an export never overwrites.
+///
+/// # Errors
+///
+/// Returns an error when the path escapes the project tree, or when more than
+/// 999 same-name variants already exist.
+///
+/// # Side Effects
+///
+/// Path probing only; the file itself is written later by [`write_excel`].
 fn sanitized_excel_dest(requested: &str) -> Result<String, String> {
     let validated = validate_isolated_write_path(Path::new(requested)).map_err(|e| {
         format!(
@@ -34,6 +55,28 @@ fn sanitized_excel_dest(requested: &str) -> Result<String, String> {
         .to_string())
 }
 
+/// Write every active resident to a formatted Excel workbook.
+///
+/// # Arguments
+///
+/// * `save_path` — Requested destination. When blank, a dated
+///   `Documents/Excel/BACKUP-YYYY-MM-DD.xlsx` is used.
+///
+/// # Returns
+///
+/// `true` once the workbook is saved.
+///
+/// # Errors
+///
+/// * The destination escapes the project tree.
+/// * The residents query fails.
+/// * Workbook generation or saving fails (for example the file is open in Excel).
+///
+/// # Side Effects
+///
+/// Reads the database and writes the `.xlsx` file, creating parent directories.
+/// The blocking workbook write runs on a dedicated thread so the async runtime
+/// stays responsive.
 #[tauri::command]
 pub async fn export_to_excel(
     state: State<'_, Arc<Mutex<AppState>>>,
@@ -72,6 +115,11 @@ pub async fn export_to_excel(
     Ok(true)
 }
 
+/// Join street, `Purok <name>`, barangay, city and province into one line.
+///
+/// Empty components are dropped and the rest are comma-joined, so the export's
+/// "Full Address" column never shows a dangling separator. Presentation only —
+/// the individual address columns are still exported and re-imported verbatim.
 fn full_address_of(r: &Resident) -> String {
     // Single-line display address for the organized "Full Address" column.
     let parts = [
@@ -92,6 +140,25 @@ fn full_address_of(r: &Resident) -> String {
         .join(", ")
 }
 
+/// Build and save the BACKUP workbook for `residents`.
+///
+/// # Arguments
+///
+/// * `residents` — Rows to write, already filtered to active residents.
+/// * `save_path` — Absolute destination, validated by [`sanitized_excel_dest`].
+///
+/// # Returns
+///
+/// `Ok(())` once the workbook is on disk.
+///
+/// # Errors
+///
+/// Returns an error when a cell cannot be written, a header/width table is
+/// inconsistent, or the workbook cannot be saved.
+///
+/// # Side Effects
+///
+/// Creates missing parent directories and writes the `.xlsx` file (blocking).
 fn write_excel(residents: &[Resident], save_path: &str) -> Result<()> {
     // Organized BACKUP workbook: spec columns first (DB ID, ID No., names,
     // DOB, gender, civil, purok, addresses, contact, emergency fields, photo
@@ -160,14 +227,16 @@ fn write_excel(residents: &[Resident], save_path: &str) -> Result<()> {
         32.0, 15.0, 15.0, 15.0, 12.0, 10.0, 8.0, 8.0, 14.0, 14.0, 14.0, 14.0, 20.0, 12.0, 18.0,
         18.0, 10.0, 14.0, 16.0, 16.0, 20.0, 20.0,
     ];
-    // M-2: guard against header/width desync that would silently truncate columns
-    assert_eq!(
-        headers.len(),
-        widths.len(),
-        "headers/widths length mismatch: {} vs {}",
-        headers.len(),
-        widths.len()
-    );
+    // M-2: guard against header/width desync that would silently truncate
+    // columns. Returned as an error rather than an assertion so a programming
+    // slip can never abort the app while an operator is exporting.
+    if headers.len() != widths.len() {
+        return Err(anyhow::anyhow!(
+            "headers/widths length mismatch: {} vs {}",
+            headers.len(),
+            widths.len()
+        ));
+    }
 
     for (col, width) in widths.iter().enumerate() {
         worksheet.set_column_width(col as u16, *width)?;
@@ -413,14 +482,21 @@ fn write_excel(residents: &[Resident], save_path: &str) -> Result<()> {
 // report. Returns diff counts (updated / skipped / total).
 // ---------------------------------------------------------------------------
 
+/// Outcome of an Excel re-import, returned to the frontend and written to the log.
 #[derive(Debug, serde::Serialize)]
 pub struct ImportReport {
+    /// Rows whose values actually changed and were committed.
     pub updated: usize,
+    /// Rows left untouched: unchanged, blank, unmatched, or rejected.
     pub skipped: usize,
+    /// Data rows found in the sheet (excluding the header).
     pub total_rows: usize,
+    /// Per-row rejection reasons, truncated to 50 entries with a tail summary.
     pub errors: Vec<String>,
 }
 
+/// Render a calamine cell as trimmed text. `Data::Empty` becomes an empty
+/// string so callers can treat "missing cell" and "blank cell" identically.
 fn data_to_string(d: &Data) -> String {
     if matches!(d, Data::Empty) {
         String::new()
@@ -429,6 +505,24 @@ fn data_to_string(d: &Data) -> String {
     }
 }
 
+/// Read an `.xlsx` file into its header row plus non-blank data rows.
+///
+/// Prefers the sheet named `Residents` and falls back to the first sheet, so a
+/// workbook exported by this app and one assembled by hand both import.
+///
+/// # Returns
+///
+/// `(headers, rows)` where every row is materialized as trimmed strings.
+///
+/// # Errors
+///
+/// Returns an error when the workbook cannot be opened, has no sheets, has an
+/// empty header row, or the chosen sheet cannot be read. Blank data rows are
+/// skipped rather than reported.
+///
+/// # Side Effects
+///
+/// Reads the file. Blocking — callers run it on a blocking thread.
 fn parse_excel_rows(path: &std::path::PathBuf) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
     let mut wb: Xlsx<_> =
         open_workbook(path).map_err(|e| format!("Cannot open Excel file: {}", e))?;
@@ -464,12 +558,15 @@ fn parse_excel_rows(path: &std::path::PathBuf) -> Result<(Vec<String>, Vec<Vec<S
     Ok((headers, out))
 }
 
+/// Position of a header by trimmed case-insensitive name; `None` when absent.
+/// A missing optional column therefore simply keeps the stored value.
 fn col_idx(headers: &[String], name: &str) -> Option<usize> {
     headers
         .iter()
         .position(|h| h.trim().eq_ignore_ascii_case(name))
 }
 
+/// Trimmed cell text, or an empty string when the column or cell is absent.
 fn cell(row: &[String], idx: Option<usize>) -> String {
     idx.and_then(|i| row.get(i))
         .cloned()
@@ -478,6 +575,8 @@ fn cell(row: &[String], idx: Option<usize>) -> String {
         .to_string()
 }
 
+/// Trimmed cell text, or `None` when empty — the distinction that drives the
+/// "blank cell keeps the stored value" rule for optional fields.
 fn opt_cell(row: &[String], idx: Option<usize>) -> Option<String> {
     let v = cell(row, idx);
     if v.is_empty() {
@@ -525,6 +624,33 @@ fn validate_import_photo(stored: &str, app_data_dir: &std::path::Path) -> Result
     }
 }
 
+/// Merge an edited BACKUP workbook back into the database.
+///
+/// Rows are matched on `ID No.` (the resident ID); the import updates existing
+/// records only and never inserts. Blank cells keep the stored value for
+/// required fields and clear optional fields, a blank photo cell preserves the
+/// current photo, and each row passes the same normalization, duplicate-person
+/// and emergency-contact FK gates as register/edit.
+///
+/// # Arguments
+///
+/// * `file_path` — An `.xlsx` file inside the project tree.
+///
+/// # Returns
+///
+/// An [`ImportReport`] with honest updated/skipped counts and per-row errors.
+///
+/// # Errors
+///
+/// Returns an error when the path is blank, escapes the project tree, is not an
+/// `.xlsx`, exceeds 15 MB, has more than 20 000 rows, has more than 37 header
+/// columns, has fewer than 10 header columns, or lacks the `ID No.` column.
+/// Individual bad rows are skipped into `ImportReport::errors` instead.
+///
+/// # Side Effects
+///
+/// Updates `residents` rows in 100-row transactions, each with its own
+/// `date_updated`, and writes a summary line to the log.
 #[tauri::command]
 pub async fn import_from_excel(
     state: State<'_, Arc<Mutex<AppState>>>,
@@ -1107,5 +1233,58 @@ mod export_tests {
         assert!(strict_valid_until_opt("not-a-date").is_err());
         assert!(strict_valid_until_opt("32-13-2027").is_err());
         assert!(strict_valid_until_opt("2027").is_err());
+    }
+
+    #[test]
+    fn full_address_joins_present_parts_in_display_order() {
+        let mut r = dummy_resident(1);
+        r.address_street = None;
+        r.address_purok = None;
+        r.address_barangay = None;
+        r.address_city = None;
+        r.address_province = None;
+        assert_eq!(full_address_of(&r), "");
+
+        r.address_street = Some("12 RIZAL ST".into());
+        r.address_purok = Some("AVOCADO".into());
+        r.address_barangay = Some("BALUD".into());
+        r.address_city = Some("BASEY".into());
+        r.address_province = Some("SAMAR".into());
+        assert_eq!(
+            full_address_of(&r),
+            "12 RIZAL ST, Purok AVOCADO, BALUD, BASEY, SAMAR"
+        );
+
+        // Whitespace-only parts are dropped, not joined as empty segments.
+        r.address_street = Some("   ".into());
+        r.address_barangay = None;
+        assert_eq!(full_address_of(&r), "Purok AVOCADO, BASEY, SAMAR");
+    }
+
+    #[test]
+    fn column_lookup_is_case_and_space_insensitive() {
+        let headers = vec!["ID No.".to_string(), "Last Name".to_string()];
+        assert_eq!(col_idx(&headers, "id no."), Some(0));
+        assert_eq!(col_idx(&headers, " LAST NAME "), Some(1));
+        assert_eq!(col_idx(&headers, "Gender"), None);
+    }
+
+    #[test]
+    fn blank_cells_read_as_absent() {
+        let row = vec!["  a  ".to_string(), String::new(), "   ".to_string()];
+        assert_eq!(cell(&row, Some(0)), "a");
+        assert_eq!(cell(&row, None), "");
+        assert_eq!(cell(&row, Some(99)), "");
+        assert_eq!(opt_cell(&row, Some(0)), Some("a".to_string()));
+        assert_eq!(opt_cell(&row, Some(1)), None);
+        assert_eq!(opt_cell(&row, Some(2)), None);
+    }
+
+    #[test]
+    fn workbook_cells_flatten_to_trimmed_strings() {
+        assert_eq!(data_to_string(&Data::Empty), "");
+        assert_eq!(data_to_string(&Data::String(" x ".to_string())), "x");
+        assert_eq!(data_to_string(&Data::Float(12.0)), "12");
+        assert_eq!(data_to_string(&Data::Int(7)), "7");
     }
 }

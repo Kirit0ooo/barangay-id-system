@@ -21,12 +21,30 @@ use db::AppState;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+/// Persist one frontend log line to the isolated `logs/frontend.log`.
+///
+/// # Arguments
+///
+/// * `level` — Free-form severity label; non-alphanumerics are stripped and it
+///   is uppercased.
+/// * `message` — Log text; CR/LF are replaced with spaces and the value is
+///   capped at 8000 characters so one call cannot forge extra log lines.
+///
+/// # Errors
+///
+/// Never. An unresolvable logs directory or a failed write still emits the
+/// message through `tracing`, so logging can never break the UI.
 #[tauri::command]
 fn log_frontend(level: String, message: String) -> Result<(), String> {
     logger::append_frontend_log(&level, &message);
     Ok(())
 }
 
+/// Return the isolated logs directory as a string for display in Settings.
+///
+/// # Errors
+///
+/// Returns an error when no project-local logs directory can be resolved.
 #[tauri::command]
 fn get_logs_dir() -> Result<String, String> {
     Ok(logger::get_logs_dir()?.to_string_lossy().to_string())
@@ -40,16 +58,45 @@ fn get_documents_pdf_dir() -> Result<String, String> {
     Err("PDF export removed: use Preview → Print (CR100), or Save as PDF via the browser print dialog".to_string())
 }
 
+/// Return `Documents/Excel` as a string — the default Excel export location.
+///
+/// # Side Effects
+///
+/// Creates the directory (best effort, via `db::get_documents_excel_dir`).
 #[tauri::command]
 fn get_documents_excel_dir() -> Result<String, String> {
     Ok(db::get_documents_excel_dir().to_string_lossy().to_string())
 }
 
+/// Return the `Documents` directory as a string.
+///
+/// # Side Effects
+///
+/// Creates `Documents/Excel` (best effort). `Documents/PDF` is PDF-era legacy
+/// and is never created.
 #[tauri::command]
 fn get_documents_dir() -> Result<String, String> {
     Ok(db::get_documents_dir().to_string_lossy().to_string())
 }
 
+/// Application entry point.
+///
+/// Pins the process temp directories inside the project, starts file logging,
+/// decrypts `residents.db.enc` when it is present and no plaintext database
+/// exists, opens the database, and hands the shared [`AppState`] to Tauri along
+/// with the full command list.
+///
+/// # Errors
+///
+/// Returns an error when the encrypted database cannot be decrypted or the
+/// database cannot be opened. A Tauri runtime failure is logged and the process
+/// exits with status 1 instead of panicking.
+///
+/// # Side Effects
+///
+/// Sets `TMP`/`TEMP`/`TMPDIR`/`WEBVIEW2_USER_DATA_FOLDER`, creates `tmp/` and
+/// `tmp/webview2`, writes logs, opens the database, and blocks for the lifetime
+/// of the window.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Pin OS temp dirs to project-local tmp/ per isolation mandate

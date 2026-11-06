@@ -5,7 +5,7 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use chrono::Local;
 use image::ImageFormat;
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, SqlitePool};
+use sqlx::FromRow;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -72,13 +72,37 @@ pub struct Resident {
 /// for readability; sqlx maps by name, not position.
 pub const RESIDENT_COLUMNS: &str = "id, resident_id, last_name, first_name, middle_name, suffix, birth_date, birth_place, gender, civil_status, citizenship, occupation, contact_number, address_street, address_purok, address_barangay, address_city, address_province, religion, blood_type, height, weight, philhealth, sss, tin, voters_id, emergency_contact_name, emergency_contact_relation, emergency_contact_number, emergency_contact_resident_id, photo_filename, is_active, date_registered, date_updated, remarks, valid_until, last_pdf_path, last_pdf_generated_at, emergency_contact_address";
 
+/// Payload for the register and edit commands.
+///
+/// The photo travels beside the record as a `data:` URL instead of a multipart
+/// body, so one invoke carries both the row and its image.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ResidentInput {
+    /// The resident fields to create or update.
     pub resident: Resident,
+    /// Optional new photo as a base64 `data:` URL, capped at 8 MB of base64
+    /// (~6 MB binary). Empty or absent means "keep the stored photo".
     #[serde(rename = "photoData")]
     pub photo_data: Option<String>,
 }
 
+/// Mint the next free `BRGY-YYYY-XXXXX` identifier for the current year.
+///
+/// # Returns
+///
+/// The next identifier, e.g. `BRGY-2026-00042`. The value is a preview for the
+/// register form: [`create_resident`] re-derives it inside its write
+/// transaction, so a stale preview can never collide.
+///
+/// # Errors
+///
+/// Returns an error when the connection cannot be acquired, the `MAX` query
+/// fails, or the transaction cannot be committed.
+///
+/// # Side Effects
+///
+/// Opens and closes a short `BEGIN IMMEDIATE` transaction (rolled back on error)
+/// so concurrent callers serialize instead of reading the same suffix.
 #[tauri::command]
 pub async fn generate_next_id(state: State<'_, Arc<Mutex<AppState>>>) -> Result<String, String> {
     let pool = { state.lock().await.pool.clone() };
@@ -153,7 +177,7 @@ pub fn normalize_ph_contact(raw: &str) -> Result<String, String> {
     ))
 }
 
-/// Lenient display formatter for PDF/QR/frontend: PH mobiles → `09XX-XXX-XXXX`,
+/// Lenient display formatter for cards/QR/frontend: PH mobiles → `09XX-XXX-XXXX`,
 /// anything else passes through trimmed (legacy landlines/short numbers keep
 /// the old charset rule in validate_resident_input).
 pub fn format_contact_for_display(raw: &str) -> String {
@@ -178,7 +202,7 @@ pub fn validate_resident_complete(r: &Resident) -> Result<(), String> {
     if r.resident_id.trim().is_empty() {
         return Err("Incomplete record — missing resident ID".into());
     }
-    // Birth date must parse AND be in the past (rejects 10-09-2026-style futures at PDF time too).
+    // Birth date must parse AND be in the past (rejects 10-09-2026-style futures at card time too).
     normalize_birth_date(&r.birth_date).map_err(|_| {
         format!(
             "Incomplete record — invalid or future birth date ({})",
@@ -221,8 +245,22 @@ fn digit_search_pattern(query: &str) -> Option<String> {
     }
 }
 
-/// Parse DD-MM-YYYY, DD/MM/YYYY, or YYYY-MM-DD into canonical YYYY-MM-DD (no future check — shared by DOB + validity).
-fn parse_any_date_to_iso(raw: &str, label: &str) -> Result<String, String> {
+/// Parse DD-MM-YYYY, DD/MM/YYYY or YYYY-MM-DD into a real calendar date.
+///
+/// # Arguments
+///
+/// * `raw` — The operator-entered date, already trimmed.
+/// * `label` — Field name used in the error message, e.g. `"Birth date"`.
+///
+/// # Returns
+///
+/// The parsed date. No future/age checks here — callers own those rules.
+///
+/// # Errors
+///
+/// Returns an error when the value is empty, longer than 20 characters, or does
+/// not match any accepted format.
+fn parse_any_date(raw: &str, label: &str) -> Result<chrono::NaiveDate, String> {
     let s = raw.trim();
     if s.is_empty() {
         return Err(format!("{} is required", label));
@@ -230,48 +268,61 @@ fn parse_any_date_to_iso(raw: &str, label: &str) -> Result<String, String> {
     if s.len() > 20 {
         return Err(format!("{} too long", label));
     }
-    let parsed = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
+    chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
         .or_else(|_| chrono::NaiveDate::parse_from_str(s, "%d-%m-%Y"))
         .or_else(|_| chrono::NaiveDate::parse_from_str(s, "%d/%m/%Y"))
-        .map_err(|_| format!("{} must be YYYY-MM-DD (or DD-MM-YYYY / DD/MM/YYYY)", label))?;
-    Ok(parsed.format("%Y-%m-%d").to_string())
+        .map_err(|_| format!("{} must be YYYY-MM-DD (or DD-MM-YYYY / DD/MM/YYYY)", label))
 }
 
 /// P1-6: valid_until storage is canonical ISO YYYY-MM-DD (display converts to
 /// DD-MM-YYYY at the edge). Accepts legacy DD-MM-YYYY / DD/MM/YYYY on the way in.
+///
+/// # Errors
+///
+/// Returns an error when the value is empty, over-long, or not a real date. No
+/// future check: a validity date is legitimately in the future.
 pub fn normalize_valid_until(raw: &str) -> Result<String, String> {
-    parse_any_date_to_iso(raw, "Valid until")
+    Ok(parse_any_date(raw, "Valid until")?
+        .format("%Y-%m-%d")
+        .to_string())
 }
 
-/// R3 — DOB normalization: accept DD-MM-YYYY, DD/MM/YYYY, YYYY-MM-DD, trim, validate real date and not future, return canonical YYYY-MM-DD.
+/// R3 — DOB normalization: accept DD-MM-YYYY, DD/MM/YYYY, YYYY-MM-DD, validate a
+/// real past date, and return canonical YYYY-MM-DD.
+///
+/// # Errors
+///
+/// Returns an error when the value is empty, over-long, unparseable, in the
+/// future, or older than 120 years — a living registrant cannot exceed that.
 pub fn normalize_birth_date(raw: &str) -> Result<String, String> {
-    let s = raw.trim();
-    if s.is_empty() {
-        return Err("Birth date is required".into());
-    }
-    if s.len() > 20 {
-        return Err("Birth date too long".into());
-    }
-    let iso = parse_any_date_to_iso(s, "Birth date")?;
-    let parsed = chrono::NaiveDate::parse_from_str(&iso, "%Y-%m-%d").expect("helper emits ISO");
-    if parsed > chrono::Local::now().date_naive() {
+    let parsed = parse_any_date(raw, "Birth date")?;
+    let today = chrono::Local::now().date_naive();
+    if parsed > today {
         return Err("Birth date cannot be in the future".into());
     }
     // P2-8: sanity cap — a living person cannot be more than 120 years old
     // at time of registration.
-    let oldest_allowed = chrono::Local::now().date_naive() - chrono::Duration::days(365 * 120);
+    let oldest_allowed = today - chrono::Duration::days(365 * 120);
     if parsed < oldest_allowed {
         return Err("Birth date is too old — person would be over 120 years".into());
     }
-    Ok(iso)
+    Ok(parsed.format("%Y-%m-%d").to_string())
 }
 
 /// Auto-uppercase helper: trim + to_uppercase for all text fields except birth_date (ISO canonical).
 fn upper_opt(o: &Option<String>) -> Option<String> {
     o.as_ref().map(|s| s.trim().to_uppercase())
 }
-/// Verify an emergency_contact_resident_id FK value exists (nullable = skip).
-/// Runs inside the caller's txn/conn so create + update share one gate.
+/// Verify an `emergency_contact_resident_id` value names a real resident.
+///
+/// A `None` or blank value is accepted (free-text emergency contacts are still
+/// allowed). Runs on the caller's connection so it shares the caller's write
+/// transaction and cannot race the row it validates.
+///
+/// # Errors
+///
+/// Returns an error naming the missing identifier when no resident matches, or
+/// when the lookup query itself fails.
 async fn check_emergency_fk_conn(
     conn: &mut sqlx::SqliteConnection,
     fk: &Option<String>,
@@ -283,25 +334,6 @@ async fn check_emergency_fk_conn(
                 sqlx::query_scalar("SELECT id FROM residents WHERE resident_id = ? LIMIT 1")
                     .bind(t)
                     .fetch_optional(&mut *conn)
-                    .await
-                    .map_err(|e| e.to_string())?;
-            if ok.is_none() {
-                return Err(format!("Emergency contact resident {} not found", t));
-            }
-        }
-    }
-    Ok(())
-}
-
-#[allow(dead_code)]
-async fn check_emergency_fk_pool(pool: &SqlitePool, fk: &Option<String>) -> Result<(), String> {
-    if let Some(f) = fk {
-        let t = f.trim();
-        if !t.is_empty() {
-            let ok: Option<i64> =
-                sqlx::query_scalar("SELECT id FROM residents WHERE resident_id = ? LIMIT 1")
-                    .bind(t)
-                    .fetch_optional(pool)
                     .await
                     .map_err(|e| e.to_string())?;
             if ok.is_none() {
@@ -444,6 +476,18 @@ pub(crate) async fn update_resident_row(
     .map_err(|e| e.to_string())
 }
 
+/// Canonicalize every text field of a resident before validation and storage.
+///
+/// # Arguments
+///
+/// * `r` — The record to normalize in place.
+///
+/// # Side Effects
+///
+/// Mutates `r`: names and free text are trimmed and uppercased, Philippine
+/// mobile numbers become `09XX-XXX-XXXX`, and a `BRGY-` emergency-contact value
+/// is kept as an identifier rather than being phone-formatted. `birth_date` is
+/// only trimmed here — call [`normalize_birth_date`] afterwards for the ISO form.
 pub(crate) fn normalize_resident_strings(r: &mut Resident) {
     r.resident_id = r.resident_id.trim().to_uppercase();
     r.last_name = r.last_name.trim().to_uppercase();
@@ -456,7 +500,7 @@ pub(crate) fn normalize_resident_strings(r: &mut Resident) {
     r.citizenship = upper_opt(&r.citizenship);
     r.occupation = upper_opt(&r.occupation);
     // Contact numbers: PH mobiles stored in display form 09XX-XXX-XXXX (source
-    // of truth for PDF/QR/preview); other values keep trimmed passthrough.
+    // of truth for card/QR/preview); other values keep trimmed passthrough.
     r.contact_number = r
         .contact_number
         .as_ref()
@@ -495,6 +539,18 @@ pub(crate) fn normalize_resident_strings(r: &mut Resident) {
     r.birth_date = r.birth_date.trim().to_string();
 }
 
+/// Validate a resident record against every storage rule.
+///
+/// Single validator for the create, edit and Excel-import paths, so all three
+/// enforce the same rules. Runs after [`normalize_resident_strings`].
+///
+/// # Errors
+///
+/// Returns the first problem found: missing required fields, a name over 100
+/// characters, an invalid/future/over-120 birth date, a contact number that is
+/// neither a valid PH mobile nor a legacy 7–20 character value, an emergency
+/// contact name or number outside its allowed shape, a purok outside
+/// [`ALLOWED_PUROKS`], or a missing/over-long resident ID.
 pub(crate) fn validate_resident_input(r: &Resident) -> Result<(), String> {
     if r.last_name.trim().is_empty() {
         return Err("Last name is required".into());
@@ -610,6 +666,34 @@ pub(crate) fn validate_resident_input(r: &Resident) -> Result<(), String> {
     Ok(())
 }
 
+/// Register a new resident, optionally storing a new photo.
+///
+/// # Arguments
+///
+/// * `input` — The record plus an optional base64 photo.
+///
+/// # Returns
+///
+/// The SQLite row id of the inserted resident.
+///
+/// # Errors
+///
+/// * Invalid input (validated before any write).
+/// * Photo larger than 8 MB of base64, an unsupported format, or an image whose
+///   dimensions exceed the decode guard; photo processing also times out after 10s.
+/// * The supplied resident ID already exists — an explicitly typed ID is never
+///   silently reassigned.
+/// * The same normalized name and birth date already exist (duplicate gate).
+/// * The emergency-contact resident ID does not exist.
+/// * The insert or commit fails.
+///
+/// # Side Effects
+///
+/// Writes the photo to `data/photos/` before opening the write transaction, and
+/// deletes it again on every failure path so no orphan photo is left behind.
+/// Generates the resident ID and a one-year `valid_until` inside the
+/// transaction, and can retry once with a freshly derived ID after a UNIQUE
+/// collision on an auto-generated ID.
 #[tauri::command]
 pub async fn create_resident(
     state: State<'_, Arc<Mutex<AppState>>>,
@@ -884,6 +968,12 @@ pub async fn create_resident(
     }
 }
 
+/// Fetch one resident by primary key.
+///
+/// # Errors
+///
+/// Returns an error when no row has that id or the query fails. Soft-deleted
+/// rows are still returned — the caller decides how to present them.
 #[tauri::command]
 pub async fn get_resident(
     state: State<'_, Arc<Mutex<AppState>>>,
@@ -903,6 +993,27 @@ pub async fn get_resident(
     Ok(resident)
 }
 
+/// Update an existing resident, optionally replacing the photo.
+///
+/// # Arguments
+///
+/// * `input` — The record (with `id`) plus an optional base64 photo.
+///
+/// # Returns
+///
+/// `true` when a row was changed, `false` when the id matched nothing (the
+/// transaction is rolled back and any new photo removed).
+///
+/// # Errors
+///
+/// Same input/photo/duplicate/emergency-FK rules as [`create_resident`], plus a
+/// resident ID that is already used by a different row.
+///
+/// # Side Effects
+///
+/// Writes a new photo file before opening the write transaction, deletes the
+/// replaced file after a successful commit, and deletes the new file on every
+/// failure path. Sets `date_updated`.
 #[tauri::command]
 pub async fn update_resident(
     state: State<'_, Arc<Mutex<AppState>>>,
@@ -1087,6 +1198,23 @@ pub async fn update_resident(
     Ok(result > 0)
 }
 
+/// Soft-delete a resident by setting `is_active = 0`.
+///
+/// # Returns
+///
+/// `true` when a row was deactivated, `false` when the id matched nothing.
+///
+/// # Errors
+///
+/// Returns an error when the resident is still referenced as another active
+/// resident's emergency contact, either through `emergency_contact_resident_id`
+/// or the legacy `emergency_contact_number` field. The message names the
+/// identifier and how many records block the change.
+///
+/// # Side Effects
+///
+/// Flips `is_active` and stamps `date_updated`. No row is removed and no photo
+/// is deleted; `photo_gc` collects the photo once nothing references it.
 #[tauri::command]
 pub async fn delete_resident(
     state: State<'_, Arc<Mutex<AppState>>>,
@@ -1149,6 +1277,27 @@ pub async fn delete_resident(
 
 pub const SEARCH_RESULT_LIMIT: i64 = 2000;
 
+/// Search residents by name, resident ID, or contact number.
+///
+/// # Arguments
+///
+/// * `query` — Free text. `%` and `_` are escaped so they match literally.
+/// * `purok` — Optional exact purok filter; empty means all puroks.
+/// * `include_inactive` — `Some(true)` also returns soft-deleted rows; the
+///   default hides them.
+///
+/// # Returns
+///
+/// Matching residents ordered by name, capped at [`SEARCH_RESULT_LIMIT`].
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+///
+/// # Side Effects
+///
+/// Read-only. A query with no digits skips the contact branches entirely
+/// instead of matching every row that has a contact number.
 #[tauri::command]
 pub async fn search_residents(
     state: State<'_, Arc<Mutex<AppState>>>,
@@ -1198,6 +1347,16 @@ pub async fn search_residents(
     Ok(residents)
 }
 
+/// Page through the active residents, ordered by name.
+///
+/// # Arguments
+///
+/// * `page` — 1-based page number; defaults to 1 and is never below 1.
+/// * `per_page` — Page size; defaults to 5000 and is clamped to 1–5000.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
 #[tauri::command]
 pub async fn get_all_residents(
     state: State<'_, Arc<Mutex<AppState>>>,
@@ -1220,19 +1379,28 @@ pub async fn get_all_residents(
     Ok(residents)
 }
 
+/// Aggregate counts for the Welcome dashboard, serialized as camelCase.
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DashboardStats {
+    /// Active residents of any status.
     pub total: i64,
+    /// Residents registered in the current calendar year.
     pub this_year: i64,
     pub male: i64,
     pub female: i64,
+    /// Remarks that are blank, `NULL`, or `ACTIVE`.
     pub active: i64,
     pub renew: i64,
     pub lost: i64,
     pub damage: i64,
 }
 
+/// Count the active residents.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
 #[tauri::command]
 pub async fn get_residents_count(state: State<'_, Arc<Mutex<AppState>>>) -> Result<i64, String> {
     let pool = { state.lock().await.pool.clone() };
@@ -1243,6 +1411,17 @@ pub async fn get_residents_count(state: State<'_, Arc<Mutex<AppState>>>) -> Resu
     Ok(n)
 }
 
+/// Compute every dashboard figure in one aggregate query.
+///
+/// # Returns
+///
+/// A [`DashboardStats`] whose status buckets treat blank, `NULL` and `ACTIVE`
+/// remarks as active, and whose male/female counts are case-insensitive for
+/// legacy mixed-case rows. Soft-deleted rows are excluded throughout.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
 #[tauri::command]
 pub async fn get_dashboard_stats(
     state: State<'_, Arc<Mutex<AppState>>>,
@@ -1282,6 +1461,15 @@ pub async fn get_dashboard_stats(
     })
 }
 
+/// Return the most recently registered active residents.
+///
+/// # Arguments
+///
+/// * `limit` — Row count; defaults to 10 and is clamped to 1–50.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
 #[tauri::command]
 pub async fn get_recent_residents(
     state: State<'_, Arc<Mutex<AppState>>>,
@@ -1300,6 +1488,16 @@ pub async fn get_recent_residents(
     Ok(residents)
 }
 
+/// List the active residents of one purok, ordered by name.
+///
+/// # Arguments
+///
+/// * `purok` — Stored purok value; matched exactly (already uppercased by the
+///   write path).
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
 #[tauri::command]
 pub async fn get_residents_by_purok(
     state: State<'_, Arc<Mutex<AppState>>>,
@@ -1434,6 +1632,10 @@ pub(crate) fn load_photo_oriented(bytes: &[u8]) -> image::ImageResult<image::Dyn
     Ok(normalize_orientation(img, jpeg_exif_orientation(bytes)))
 }
 
+/// Apply an EXIF orientation value (1–8) to decoded pixels.
+///
+/// Orientation 1 and any out-of-range value leave the image unchanged, which
+/// keeps the default path allocation-free.
 fn normalize_orientation(img: image::DynamicImage, o: u8) -> image::DynamicImage {
     match o {
         2 => img.fliph(),
@@ -1487,6 +1689,14 @@ fn jpeg_exif_orientation(bytes: &[u8]) -> u8 {
     1
 }
 
+/// Read the orientation tag (0x0112) from a TIFF/EXIF block.
+///
+/// # Returns
+///
+/// The tag value when it is 1–8, otherwise `None` — including for a truncated
+/// block, a missing byte-order mark, a bad magic, an out-of-range value, or a
+/// directory entry that would read past the buffer. Every offset is
+/// `checked_add`-ed, so hostile input cannot cause a panic.
 fn tiff_orientation(tiff: &[u8]) -> Option<u8> {
     if tiff.len() < 8 {
         return None;
@@ -1599,11 +1809,38 @@ pub(crate) fn resolve_photo_bytes(stored: &str, app_data_dir: &PathBuf) -> Optio
     None
 }
 
+/// Read a stored photo and return it as a JPEG data URL.
+///
+/// # Arguments
+///
+/// * `filename` — Value from `photo_filename`; may be a bare name, a relative
+///   path, or a stale absolute path.
+/// * `app_data_dir` — The resolved `data/` directory.
+///
+/// # Returns
+///
+/// `None` when the value is blank or the file is unreadable, so the caller
+/// renders no photo instead of a broken image. Bytes are decrypted first when
+/// an encryption key is present.
 pub fn get_photo_base64(filename: &str, app_data_dir: &PathBuf) -> Option<String> {
     resolve_photo_bytes(filename, app_data_dir)
         .map(|bytes| format!("data:image/jpeg;base64,{}", BASE64.encode(&bytes)))
 }
 
+/// Look up a resident's stored photo and return it as a JPEG data URL.
+///
+/// # Returns
+///
+/// `Ok(None)` when the resident has no photo or the file is missing — absence is
+/// a normal state, not an error.
+///
+/// # Errors
+///
+/// Returns an error when the resident row cannot be read.
+///
+/// # Side Effects
+///
+/// Reads the photo file from `data/photos` (decrypting first when a key exists).
 #[tauri::command]
 pub async fn get_resident_photo(
     state: State<'_, Arc<Mutex<AppState>>>,
@@ -1947,5 +2184,27 @@ mod validity_tests {
             digit_search_pattern("+639171234567").as_deref(),
             Some("%09171234567%")
         );
+    }
+
+    #[test]
+    fn escape_like_neutralizes_wildcards_for_literal_search() {
+        // F2: a typed '%' must match a literal '%', not "anything".
+        assert_eq!(escape_like("100%"), "100\\%");
+        assert_eq!(escape_like("a_b"), "a\\_b");
+        assert_eq!(escape_like("c:\\path"), "c:\\\\path");
+        assert_eq!(escape_like("plain"), "plain");
+        assert_eq!(escape_like(""), "");
+    }
+
+    #[test]
+    fn format_contact_keeps_legacy_values_and_formats_ph_mobiles() {
+        assert_eq!(format_contact_for_display("09171234567"), "0917-123-4567");
+        assert_eq!(
+            format_contact_for_display("  +63 917 123 4567 "),
+            "0917-123-4567"
+        );
+        // Legacy landline / short numbers pass through trimmed, never reformatted.
+        assert_eq!(format_contact_for_display(" 2-8888 "), "2-8888");
+        assert_eq!(format_contact_for_display(""), "");
     }
 }

@@ -8,8 +8,14 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
 
+/// Shared application state handed to every Tauri command.
+///
+/// Held by Tauri as `Arc<Mutex<AppState>>`. Commands clone `pool` /
+/// `app_data_dir` out of a short lock and release it before awaiting I/O.
 pub struct AppState {
+    /// Connection pool for `data/residents.db`.
     pub pool: SqlitePool,
+    /// Resolved `data/` directory; photos and backups live beneath it.
     pub app_data_dir: PathBuf,
 }
 
@@ -61,6 +67,24 @@ pub fn dir_is_writable(dir: &Path) -> bool {
     true
 }
 
+/// Resolve the project root, the anchor for every isolated path.
+///
+/// Order: a fixed deployment path that already carries project markers
+/// (`barangay.ico` or `src-tauri/`), then the executable's ancestors (max 6
+/// levels), then the working directory's ancestors, then the executable's own
+/// directory when it is writable (portable/MSI install), and finally the
+/// host-native [`default_root`].
+///
+/// # Returns
+///
+/// The resolved root, or `None` when nothing writable resolves — callers then
+/// fall back to [`default_root`]. Probing never creates a directory, so a
+/// non-native fixed candidate cannot mint a junk folder on another host.
+///
+/// # Side Effects
+///
+/// Filesystem existence and writability probes; may create `<native root>/data`
+/// as the last resort.
 pub fn get_project_root() -> Option<PathBuf> {
     // Single canonical resolution: accept a fixed candidate ONLY when it
     // already carries project markers. Never create directories while
@@ -138,6 +162,22 @@ pub fn get_project_root() -> Option<PathBuf> {
     None
 }
 
+/// Resolve `<project root>/Documents` and ensure `<...>/Excel` exists.
+///
+/// # Side Effects
+///
+/// Creates the directory. `Documents/PDF` is deliberately never created — it is
+/// PDF-era legacy, printing is HTML-only.
+///
+/// # Returns
+///
+/// The Documents directory (best effort; falls back to [`default_root`] when no
+/// root resolves).
+///
+/// # Errors
+///
+/// Never returns an error; a failed `create_dir_all` is ignored so the caller
+/// can still build a path and let the write surface the real problem.
 pub fn get_documents_dir() -> PathBuf {
     let root = get_project_root().unwrap_or_else(default_root);
     let docs = root.join("Documents");
@@ -147,12 +187,32 @@ pub fn get_documents_dir() -> PathBuf {
     docs
 }
 
+/// Resolve `<Documents>/Excel` — the default destination for Excel exports.
+///
+/// # Side Effects
+///
+/// Creates the directory (best effort).
 pub fn get_documents_excel_dir() -> PathBuf {
     let d = get_documents_dir().join("Excel");
     let _ = fs::create_dir_all(&d);
     d
 }
 
+/// Resolve the isolated `data/` directory and create its subdirectories.
+///
+/// The first writable candidate wins: `<project root>/data`, then
+/// `<native default root>/data`.
+///
+/// # Side Effects
+///
+/// Creates `data/photos`, `data/backups`, `logs` and `tmp`. Never creates the
+/// PDF-era `data/id_cards`.
+///
+/// # Returns
+///
+/// The chosen data directory. When no candidate is writable it logs an isolation
+/// error and returns the best-effort path instead of panicking — `init_db` then
+/// reports the failure to the operator. AppData/TEMP are never used.
 pub fn get_app_data_dir() -> PathBuf {
     // Isolation: ALL data must stay inside the project tree — no fallback to AppData/TEMP.
     // Ensure Documents structure exists as well.
@@ -195,8 +255,6 @@ pub fn get_app_data_dir() -> PathBuf {
     get_project_root().unwrap_or_else(default_root).join("data")
 }
 
-/// Validate that a user-supplied path is inside the isolated project tree before any write.
-/// Returns canonicalized absolute path or Err.
 /// Filename sanitization: strips Windows-illegal chars (\\/:*?"<>|), control
 /// chars and path separators from the final file-name component, collapses
 /// whitespace to a single underscore, truncates the stem, and enforces that
@@ -251,7 +309,8 @@ pub fn per_resident_export_stem(full_name: &str, resident_id: &str) -> String {
     sanitize_file_name_component(&raw, 120)
 }
 
-/// Legacy alias: per-resident PDF filename (kept for old DBs/tests) delegates to export stem.
+/// Legacy alias returning `<stem>.pdf`, kept for old databases and tests; the
+/// live export path uses [`per_resident_export_stem`] plus an `.xlsx` suffix.
 #[allow(dead_code)]
 pub fn per_resident_pdf_filename(full_name: &str, resident_id: &str) -> String {
     format!("{}.pdf", per_resident_export_stem(full_name, resident_id))
@@ -343,6 +402,11 @@ pub(crate) fn prune_oldest_files(dir: &Path, prefixes: &[&str], keep: usize) {
     );
 }
 
+/// Resolve `.` and `..` components textually, without touching the filesystem.
+///
+/// Used as a fallback when a path cannot be canonicalized because part of it
+/// does not exist yet — `ParentDir` pops the previous component, so a joined
+/// `..` that would escape is observable by the caller's prefix check.
 fn lexical_normalize(path: &Path) -> PathBuf {
     let mut out = PathBuf::new();
     for comp in path.components() {
@@ -358,6 +422,9 @@ fn lexical_normalize(path: &Path) -> PathBuf {
     out
 }
 
+/// Case-insensitive on Windows, case-sensitive elsewhere: is `child` inside `root`?
+/// Comparison is textual (no filesystem access) — pair it with canonicalization
+/// when symlinks could be involved.
 fn path_starts_with_inside(child: &Path, root: &Path) -> bool {
     #[cfg(windows)]
     {
@@ -373,13 +440,40 @@ fn path_starts_with_inside(child: &Path, root: &Path) -> bool {
     }
 }
 
+/// SQLite write-ahead log path for `db_path` (`<db>-wal`).
+///
+/// Appends the suffix instead of using `with_extension`, so `foo.sqlite`
+/// becomes `foo.sqlite-wal` rather than `foo-wal`.
 pub fn wal_path_for(db_path: &Path) -> PathBuf {
     PathBuf::from(format!("{}-wal", db_path.display()))
 }
+
+/// SQLite shared-memory path for `db_path` (`<db>-shm`). Volatile: it is never
+/// a meaningful backup artifact. See [`wal_path_for`] on the suffix rule.
 pub fn shm_path_for(db_path: &Path) -> PathBuf {
     PathBuf::from(format!("{}-shm", db_path.display()))
 }
 
+/// Validate that a user-supplied path is inside the isolated project tree.
+///
+/// # Arguments
+///
+/// * `raw` — Absolute or relative path from the frontend or a config file.
+///
+/// # Returns
+///
+/// The lexically normalized absolute path when it stays inside the project root.
+///
+/// # Errors
+///
+/// Returns an error when `raw` escapes the root — via `..` components, an
+/// absolute path elsewhere, or a symlink whose canonical parent resolves
+/// outside. The nearest existing ancestor is canonicalized so a not-yet-created
+/// destination is still checked correctly.
+///
+/// # Side Effects
+///
+/// Read-only filesystem probes (existence + canonicalization). Creates nothing.
 pub fn validate_isolated_write_path(raw: &Path) -> Result<PathBuf, String> {
     let root = get_project_root().unwrap_or_else(default_root);
     let root_canonical = root
@@ -458,6 +552,29 @@ pub fn validate_isolated_write_path(raw: &Path) -> Result<PathBuf, String> {
     Ok(abs)
 }
 
+/// Open (creating if needed) and migrate the resident database.
+///
+/// # Returns
+///
+/// A connection pool whose connections all use WAL journaling, `synchronous =
+/// NORMAL`, a 5s busy timeout, foreign keys on, a 64 MB page cache and
+/// in-memory temp storage (pragmatic settings for `/mnt/d` 9p mounts).
+///
+/// # Errors
+///
+/// Returns an error when the database cannot be created or opened — typically an
+/// MSI per-machine install under a read-only program directory. The message
+/// names the path and the reinstall options.
+///
+/// # Side Effects
+///
+/// Creates the `residents` table and indexes when absent and applies idempotent
+/// migrations: `valid_until` canonicalized to ISO, the legacy `email` column
+/// dropped, `emergency_contact_resident_id` / `emergency_contact_address` added,
+/// and the legacy `address_house` column dropped once (recorded in
+/// `_boot_flags`). Runs `PRAGMA optimize` + incremental vacuum at startup when
+/// the sentinel is older than 7 days. Best-effort migration statements are
+/// intentionally ignored when already applied.
 pub async fn init_db() -> Result<SqlitePool> {
     let app_data_dir = get_app_data_dir();
     let db_path = app_data_dir.join("residents.db");
@@ -646,6 +763,43 @@ pub async fn init_db() -> Result<SqlitePool> {
     Ok(pool)
 }
 
+/// Flush the write-ahead log into the main database file.
+///
+/// # Arguments
+///
+/// * `pool` — Pool for the database whose WAL should be flushed.
+///
+/// # Returns
+///
+/// The number of frames written back into the main database file, for
+/// diagnostics.
+///
+/// # Errors
+///
+/// Returns an error when the pragma fails, or when SQLite reports the
+/// checkpoint as busy (another connection still reading) — busy is a
+/// **successful** query, so the result row must be inspected.
+///
+/// Callers abort on error instead of continuing: every one of them relies on an
+/// empty `-wal` (they copy `residents.db` alone, or delete the sidecars).
+/// Continuing after a partial checkpoint silently loses committed transactions.
+pub async fn checkpoint_wal_truncate(pool: &SqlitePool) -> Result<i64, String> {
+    // Row shape: (busy, log_frames, checkpointed_frames).
+    let (busy, _log_frames, checkpointed_frames): (i64, i64, i64) =
+        sqlx::query_as("PRAGMA wal_checkpoint(TRUNCATE)")
+            .fetch_one(pool)
+            .await
+            .map_err(|e| format!("WAL checkpoint failed: {}", e))?;
+    if busy != 0 {
+        return Err(
+            "WAL checkpoint is busy (another connection is still reading); nothing was changed \
+             — retry in a moment"
+                .to_string(),
+        );
+    }
+    Ok(checkpointed_frames)
+}
+
 /// DB maintenance: lightweight online optimize — SQLite self-tuning
 /// (PRAGMA optimize) + incremental vacuum in 100-page chunks. Chunked
 /// vacuum reclaims free pages without the long exclusive lock of a full
@@ -683,6 +837,13 @@ pub fn optimize_due(app_data_dir: &Path) -> bool {
     now.saturating_sub(then) > SEVEN_DAYS
 }
 
+/// Record the current UNIX time in the `.last_optimize` sentinel so
+/// [`optimize_due`] stays false for the next 7 days.
+///
+/// # Side Effects
+///
+/// Writes `data/.last_optimize`. A write failure is ignored: the next startup
+/// then simply runs the (idempotent) optimize again.
 pub fn mark_optimized(app_data_dir: &Path) {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -692,7 +853,20 @@ pub fn mark_optimized(app_data_dir: &Path) {
 }
 
 /// Frontend-callable maintenance entry (Settings → Database Health).
-/// Runs the optimize now and refreshes the sentinel.
+///
+/// Runs [`optimize_database`] now and refreshes the sentinel.
+///
+/// # Returns
+///
+/// A human-readable confirmation message.
+///
+/// # Errors
+///
+/// Propagates a failing `PRAGMA optimize` / `incremental_vacuum`.
+///
+/// # Side Effects
+///
+/// Runs the SQLite maintenance pragmas and rewrites the sentinel file.
 #[tauri::command]
 pub async fn optimize_database_cmd(
     state: tauri::State<'_, std::sync::Arc<tokio::sync::Mutex<AppState>>>,
@@ -915,5 +1089,42 @@ mod validate_tests {
         // sanity: normal nested inside still allowed
         let inside = root.join("data/photos/test.jpg");
         assert!(validate_isolated_write_path(&inside).is_ok());
+    }
+
+    #[test]
+    fn backup_base_name_uses_the_local_date() {
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        assert_eq!(backup_base_name(), format!("BACKUP-{}", today));
+    }
+
+    #[test]
+    fn resolve_unique_path_never_overwrites_an_existing_file() {
+        // P2-8: exporting twice must not destroy the earlier workbook.
+        let root = get_project_root().unwrap_or_else(default_root);
+        let dir = root.join("tmp").join("unique_path_test");
+        assert!(
+            std::fs::create_dir_all(&dir).is_ok(),
+            "create test dir {:?}",
+            dir
+        );
+        let stamp = std::process::id();
+        let target = dir.join(format!("report_{}.xlsx", stamp));
+        let _ = std::fs::remove_file(&target);
+
+        // A free path is returned unchanged.
+        assert_eq!(resolve_unique_path(&target).unwrap(), target);
+
+        // An occupied path gets a " (2)" sibling instead of being overwritten.
+        std::fs::write(&target, b"x").expect("seed target file");
+        let second = resolve_unique_path(&target).expect("second resolution");
+        assert_ne!(second, target);
+        assert_eq!(
+            second.file_name().unwrap().to_string_lossy(),
+            format!("report_{} (2).xlsx", stamp)
+        );
+        assert_eq!(std::fs::read(&target).unwrap(), b"x", "original untouched");
+
+        let _ = std::fs::remove_file(&target);
+        let _ = std::fs::remove_dir(&dir);
     }
 }

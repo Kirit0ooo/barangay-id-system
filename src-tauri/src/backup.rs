@@ -1,5 +1,13 @@
+//! Manual backup and restore of the resident database.
+//!
+//! Both commands copy files, so every path is first gated by
+//! [`validate_isolated_write_path`] — nothing may be written or read outside the
+//! project tree. Copies are staged as `<name>.tmp` and renamed into place so an
+//! interrupted run never leaves a truncated `.db` that still looks valid.
+
 use crate::db::{
-    get_project_root, shm_path_for, validate_isolated_write_path, wal_path_for, AppState,
+    checkpoint_wal_truncate, get_project_root, shm_path_for, validate_isolated_write_path,
+    wal_path_for, AppState,
 };
 use anyhow::Result;
 use chrono::Local;
@@ -9,6 +17,31 @@ use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
 
+/// Copy the live database (and its photo directory) into a backup file.
+///
+/// # Arguments
+///
+/// * `backup_path` — Explicit destination file. When `None`, a timestamped
+///   `data/backups/residents_backup_YYYYMMDD_HHMMSS.db` is used.
+///
+/// # Returns
+///
+/// The absolute path of the written `.db` backup.
+///
+/// # Errors
+///
+/// * The destination resolves outside the project tree.
+/// * `data/residents.db` does not exist yet (nothing has been registered).
+/// * The copy or rename fails (for example the destination is locked).
+///
+/// # Side Effects
+///
+/// * Flushes the SQLite WAL first; a busy checkpoint aborts the backup rather
+///   than writing a snapshot that silently omits committed transactions.
+/// * Creates directories and writes the `.db` file, plus a sibling
+///   `photos_backup_<backup name>/` directory; a photo-copy failure is logged
+///   as a warning and does not fail the command.
+/// * Prunes older backups, keeping the newest 30 of each retention group.
 #[tauri::command]
 pub async fn backup_database(
     state: State<'_, Arc<Mutex<AppState>>>,
@@ -51,10 +84,9 @@ pub async fn backup_database(
         return Err("Database file not found - no data to backup yet".to_string());
     }
 
-    // Ensure WAL is checkpointed before copy; no pool lock held during copy
-    let _ = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
-        .execute(&pool)
-        .await;
+    // Flush the WAL before copying so residents.db alone is a complete
+    // snapshot; no pool lock is held during the copy itself.
+    checkpoint_wal_truncate(&pool).await?;
     // P0 atomic backup: write to .tmp then rename so a crash never leaves a
     // truncated .db that looks valid. All blocking I/O off the async runtime.
     let src_clone = source_db.clone();
@@ -112,6 +144,31 @@ pub async fn backup_database(
     Ok(destination.to_string_lossy().to_string())
 }
 
+/// Replace the live database with a backup file, then reopen the connection pool.
+///
+/// # Arguments
+///
+/// * `backup_file` — Existing `.db` backup inside the project tree.
+///
+/// # Returns
+///
+/// `true` once the file was copied and the pool reopened with the same WAL
+/// pragmas as [`crate::db::init_db`].
+///
+/// # Errors
+///
+/// * `backup_file` is missing or resolves outside the project tree.
+/// * The safety copy, the restore copy, or the pool reopen fails. The pool
+///   reopen case is the only one where the data was already replaced: the
+///   message asks the operator to restart the app.
+///
+/// # Side Effects
+///
+/// * Checkpoints and closes the current pool, then overwrites
+///   `data/residents.db` and removes its `-wal`/`-shm` sidecars.
+/// * Writes a `safety_backup_<timestamp>.db` copy of the current database
+///   before overwriting, and keeps the newest 10 safety backups.
+/// * Replaces `state.pool` with a fresh connection pool.
 #[tauri::command]
 pub async fn restore_database(
     state: State<'_, Arc<Mutex<AppState>>>,
@@ -160,9 +217,9 @@ pub async fn restore_database(
         .map_err(|e| format!("Restore task failed: {}", e))??;
     }
     if destination.exists() {
-        let _ = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
-            .execute(&pool)
-            .await;
+        // The safety copy is the operator's rollback path, so it must hold
+        // every committed row: a busy checkpoint aborts the restore here.
+        checkpoint_wal_truncate(&pool).await?;
         // Atomic safety backup: copy to tmp then rename
         let src_safety = destination.clone();
         let dst_safety = safety_backup.clone();
@@ -194,9 +251,7 @@ pub async fn restore_database(
         .await
         .map_err(|e| format!("Restore task failed: {}", e))??;
     } else {
-        let _ = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
-            .execute(&pool)
-            .await;
+        checkpoint_wal_truncate(&pool).await?;
     }
 
     // P2-6: retention — keep 10 newest safety backups.
@@ -320,6 +375,9 @@ pub async fn restore_database(
     Ok(true)
 }
 
+/// Recursively copy every file under `src` into `dst`, creating directories as
+/// needed. Blocking; callers run it on a blocking thread. Runs off the async
+/// runtime and is best-effort at the call site, where a failure only warns.
 fn copy_dir_all(src: &PathBuf, dst: &PathBuf) -> Result<()> {
     fs::create_dir_all(dst)?;
     for entry in fs::read_dir(src)? {

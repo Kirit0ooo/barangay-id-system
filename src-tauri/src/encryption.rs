@@ -13,8 +13,7 @@
 //! Decrypt: decrypt db.enc in place, rename back to db, delete sidecars,
 //!          then reopen pool.
 
-use crate::db::{shm_path_for, wal_path_for, AppState};
-use sqlx::query;
+use crate::db::{checkpoint_wal_truncate, shm_path_for, wal_path_for, AppState};
 use std::fs;
 use std::sync::Arc;
 use tauri::State;
@@ -93,12 +92,12 @@ pub async fn encryption_encrypt_database(
     if db_enc_path.exists() {
         return Err("database already encrypted".to_string());
     }
-    // Flush WAL to the main DB before rename + encrypt so no uncommitted
-    // pages are lost. Then delete sidecars — SQLite validates WAL magic on
-    // open, so an encrypted-wal sidecar would make the DB unopenable.
-    let _ = query("PRAGMA wal_checkpoint(TRUNCATE)")
-        .execute(&pool)
-        .await;
+    // Flush WAL to the main DB before rename + encrypt so no committed
+    // transaction is lost when the sidecars are removed below. A busy
+    // checkpoint aborts here: deleting a non-empty -wal would destroy data.
+    // The sidecars must then go — SQLite validates WAL magic on open, so an
+    // encrypted-wal sidecar would make the DB unopenable.
+    checkpoint_wal_truncate(&pool).await?;
     let wal = wal_path_for(&db_path);
     let shm = shm_path_for(&db_path);
     let _ = std::fs::remove_file(&wal);

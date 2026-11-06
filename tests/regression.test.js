@@ -6,7 +6,7 @@ const root = join(import.meta.dirname, '..');
 let failed = 0;
 function check(name, cond, hint='') {
   const ok = !!cond;
-  console.log(ok ? `✓ ${name}` : `✗ ${name}${hint ? ' — '+hint : ''}`);
+  console.log(ok ? `✓ ${name}` : `✗ ${name}${hint ? ` — ${hint}` : ''}`);
   if (!ok) failed++;
 }
 
@@ -35,8 +35,6 @@ const runPs1 = readFileSync(join(root, 'run.ps1'), 'utf8');
 const runBat = readFileSync(join(root, 'run.bat'), 'utf8');
 const buildBat = readFileSync(join(root, 'build.bat'), 'utf8');
 const viewLogsBat = readFileSync(join(root, 'view-logs.bat'), 'utf8');
-// Whitespace-collapsed copy: cargo fmt may wrap chained calls across lines.
-const idCardFlat = idCardRs.replace(/\s+/g, ' ');
 // Comment-stripped copy: historical notes may name deleted PDF items (allowed).
 const idCardCode = idCardRs.replace(/^\s*\/\/.*$/gm, '');
 const cargoCode = cargoToml.replace(/^\s*#.*$/gm, '');
@@ -73,7 +71,7 @@ check('explicit resident_id collision errors instead of silent reassign (C2)', r
 
 // 5. Backup — must use wal_checkpoint + isolated validation, no string-interpolated VACUUM INTO
 check('backup no longer uses string-interpolated VACUUM INTO', !backupRs.includes("VACUUM INTO '"), 'still has VACUUM INTO string interpolation (injection risk)');
-check('backup uses wal_checkpoint', backupRs.includes('wal_checkpoint'), 'missing wal_checkpoint');
+check('backup uses the guarded WAL checkpoint helper', backupRs.includes('checkpoint_wal_truncate'), 'backup must call db::checkpoint_wal_truncate');
 check('backup validates isolated write path', backupRs.includes('validate_isolated_write_path'), 'missing isolation validation');
 
 // 6. ID card QR hardening (HTML-only print: no PDF draw fns remain)
@@ -99,7 +97,7 @@ check('api.js wraps getQrDataUrl', apiJs.includes('getQrDataUrl'), 'frontend sti
 // App modules are split across app.core/app.register/app.search/app.settings/app.detail/app.dashboard/app.js.
 // Concatenate them so path-based string checks still cover all view logic.
 const appModuleFiles = ['app.core','app.register','app.search','app.settings','app.detail','app.dashboard','app'];
-const appJs = appModuleFiles.map(f => readFileSync(join(root, 'src/js/' + f + '.js'), 'utf8')).join('\n');
+const appJs = appModuleFiles.map(f => readFileSync(join(root, `src/js/${f}.js`), 'utf8')).join('\n');
 check('buildCardPayload calls getQrDataUrl', appJs.includes('API.getQrDataUrl(residentId)'), 'buildCardPayload still regex-first');
 check('shortBarangay BALUD-substring hack gone', !appJs.includes("if (s.includes('BALUD')) return 'BALUD'"), 'hack still present');
 check('update deletes old photo only after commit', residentsRs.includes('commit won'), 'photo-loss reorder missing');
@@ -126,6 +124,7 @@ check('civic.json size limit exists', configRs.includes('MAX_CIVIC_JSON'), 'no s
 // 10. barangay-impl-002 — M1 CSP tightening (prebuilt static CSS, no Play CDN)
 const dbRs = readFileSync(join(root, 'src-tauri/src/db.rs'), 'utf8');
 const tailwindCss = readFileSync(join(root, 'src/css/tailwind.css'), 'utf8');
+check('checkpoint helper inspects the busy result', dbRs.includes('PRAGMA wal_checkpoint(TRUNCATE)') && /busy\s*!=\s*0/.test(dbRs), 'a busy checkpoint is a successful query — the result row must be checked or committed WAL data is silently dropped');
 check('Play CDN runtime unlinked', !indexHtml.includes('vendor/tailwindcss.js'), 'tailwindcss.js script still linked');
 check('prebuilt static CSS linked', indexHtml.includes('css/tailwind.css'), 'tailwind.css link missing');
 check('prebuilt CSS has utilities', tailwindCss.includes('.bg-white') && tailwindCss.includes('@media(min-width:640px)'), 'tailwind.css looks empty');
@@ -285,7 +284,7 @@ const searchCap = Number((residentsRs.match(/pub const SEARCH_RESULT_LIMIT:\s*i6
 check('backupDB defined once (scheduled-aware wins)', (appJs.match(/async backupDB\(\)/g) || []).length === 1, 'duplicate backupDB still present');
 check('search cap centralized and matches backend', (() => { const m = appJs.match(/const SEARCH_RESULT_CAP\s*=\s*(\d+)/); const feCap = m ? Number(m[1]) : 0; return searchCap > 0 && feCap === searchCap && (appJs.match(/SEARCH_RESULT_CAP/g) || []).length >= 3; })(), 'frontend cap missing, duplicated, or != SEARCH_RESULT_LIMIT');
 check('frontend contact gate mirrors backend (PH-strict + legacy-charset +63)', appJs.includes('+63') && appJs.includes('7') && appJs.includes('mirrors backend'), 'frontend still blanket-rejects legacy numbers the backend accepts');
-check('bundle ships MSI (WiX per-user hardening is real)', tauriConf.tauri.bundle.targets.includes('msi'), 'targets still nsis-only');
+check('bundle targets NSIS only (MSI deferred: per-user WiX template fails ICE38/ICE64 at link)', tauriConf.tauri.bundle.targets.includes('nsis') && !tauriConf.tauri.bundle.targets.includes('msi'), 'msi target re-enabled without an ICE-clean per-user template');
 check('verify module removed', !mainRs.includes('mod verify;'), 'mod verify still present');
 check('verify commands unregistered', !mainRs.includes('verify::get_verify_qr_data_url') && !mainRs.includes('verify::get_verify_cards_batch') && !mainRs.includes('verify::export_verify_registry') && !mainRs.includes('publish_verify_trust'), 'verify commands still in invoke_handler');
 check('verify key infra removed from config', !configRs.includes('VerifyTrust') && !configRs.includes('ensure_verify_keypair') && !configRs.includes('verify_base_url'), 'verify remnants in config.rs');
@@ -295,7 +294,7 @@ check('verify crypto deps pruned', !cargoToml.includes('ed25519-dalek') && !carg
 check('build gate probes MSVC linker', buildPs1.includes('link.exe') && buildPs1.includes('vswhere'), 'cargo would fail at link after a long compile');
 check('build gate probes NSIS', buildPs1.includes('makensis'), 'nsis leg unchecked');
 check('build gate is table-driven for future deps', buildPs1.includes('$Prereqs') && buildPs1.includes("FUTURE deps are a one-row addition"), 'gate not extensible');
-check('all launchers ASCII-only (PS 5.1 codepage-safe)', [runPs1, buildPs1, runBat, buildBat, viewLogsBat].every(s => !/[^\x00-\x7F]/.test(s)), 'non-ASCII broke PS 5.1 parsing once');
+check('all launchers ASCII-only (PS 5.1 codepage-safe)', [runPs1, buildPs1, runBat, buildBat, viewLogsBat].every(s => [...s].every(ch => ch.codePointAt(0) < 0x80)), 'non-ASCII broke PS 5.1 parsing once');
 
 // 35. run.ps1 dev gate mirrors build gate (dev compiles Rust too; no bundling tools needed)
 check('run.ps1 gate probes MSVC linker', runPs1.includes('link.exe'), 'tauri dev would fail at link after compiling');
@@ -312,7 +311,6 @@ check('api.js has no publishVerifyTrust wrapper', !apiJs.includes('publishVerify
 check('settings has no publish-verify-trust action', !appJs.includes('async publishTrust()') && !indexHtml.includes('@click="publishTrust"'), 'dead publish UI remains');
 check('settings has no verify-URL field', !appJs.includes('verifyBaseUrl') && !indexHtml.includes('verifyBaseUrl'), 'dead verify URL field remains');
 // Legacy QR restored: id_card.rs mints the plain 7-key JSON again
-const goldenQr = readFileSync(join(root, 'tests/golden-card.test.js'), 'utf8');
 const qrReadme = readFileSync(join(root, 'gathered-md/QR_PII_README.md'), 'utf8');
 check('legacy qr_data() restored in id_card', idCardRs.includes('fn qr_data('), 'signed-URL minter still in place');
 check('QR doc prescribes qr_data() again', qrReadme.includes('qr_data()') && !qrReadme.includes('mint_verify_url'), 'doc still points at removed minter');

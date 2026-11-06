@@ -154,8 +154,58 @@ pub fn init() -> WorkerGuard {
     guard
 }
 
+/// Longest severity label kept in the frontend log file.
+const MAX_LOG_LEVEL_CHARS: usize = 16;
+/// Longest message (in bytes) kept in the frontend log file.
+const MAX_LOG_MESSAGE_BYTES: usize = 8000;
+
+/// Reduce a caller-supplied severity label to a safe, bounded token.
+///
+/// Non-alphanumeric characters are dropped so a label can never inject
+/// punctuation, markup, or whitespace into a log line, and the result is capped
+/// at [`MAX_LOG_LEVEL_CHARS`] — far longer than any real level name.
+fn sanitize_log_level(level: &str) -> String {
+    level
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .take(MAX_LOG_LEVEL_CHARS)
+        .collect()
+}
+
+/// Reduce a caller-supplied log message to a single, bounded line.
+///
+/// CR and LF become spaces so one frontend call can never forge extra log
+/// lines, and the value is capped at [`MAX_LOG_MESSAGE_BYTES`] so it cannot get
+/// past the 5 MB rotation check between writes. The cap is moved back to the
+/// nearest character boundary before truncating: cutting a multi-byte character
+/// in half panics, and a frontend string can place a non-boundary byte at
+/// exactly that offset.
+fn sanitize_log_message(message: &str) -> String {
+    let mut clean = message.replace('\r', " ").replace('\n', " ");
+    if clean.len() <= MAX_LOG_MESSAGE_BYTES {
+        return clean;
+    }
+    let mut cut = MAX_LOG_MESSAGE_BYTES;
+    while cut > 0 && !clean.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    clean.truncate(cut);
+    clean
+}
+
 /// Helper to append a frontend log line to the isolated logs file.
 /// Called via Tauri invoke from JS. Rotates when >5MB (keeps 3 generations).
+///
+/// # Arguments
+///
+/// * `level` — Severity label; used for the file line and the `tracing` mirror.
+/// * `message` — Log text, sanitized by [`sanitize_log_message`].
+///
+/// # Side Effects
+///
+/// Appends to `logs/frontend.log`, rotating to `.1`/`.2`/`.3` past 5 MB, and
+/// mirrors the message through `tracing`. An unresolvable logs directory or a
+/// failed write is swallowed by design — logging must never break the UI.
 pub fn append_frontend_log(level: &str, message: &str) {
     // P2-9: unresolvable logs dir → skip the file write, still emit via tracing.
     let logs_dir = match get_logs_dir() {
@@ -190,18 +240,9 @@ pub fn append_frontend_log(level: &str, message: &str) {
         }
     }
     let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-    // M5: single-line log discipline — strip CR/LF so one invoke call can
-    // never forge extra log lines; cap at 8000 chars so a single message
-    // cannot blow past the 5MB rotation check between writes.
-    let clean_level: String = level
-        .chars()
-        .filter(|c| c.is_alphanumeric())
-        .take(16)
-        .collect();
-    let mut clean_msg = message.replace('\r', " ").replace('\n', " ");
-    if clean_msg.len() > 8000 {
-        clean_msg.truncate(8000);
-    }
+    // M5: single-line log discipline — see the sanitize_* helpers.
+    let clean_level = sanitize_log_level(level);
+    let clean_msg = sanitize_log_message(message);
     let line = format!(
         "[{}] [frontend] [{}] {}\n",
         now,
@@ -216,5 +257,42 @@ pub fn append_frontend_log(level: &str, message: &str) {
         "error" => tracing::error!("[frontend] {}", clean_msg),
         "warn" => tracing::warn!("[frontend] {}", clean_msg),
         _ => tracing::info!("[frontend] {}", clean_msg),
+    }
+}
+
+#[cfg(test)]
+mod sanitize_tests {
+    use super::*;
+
+    #[test]
+    fn log_level_keeps_alphanumerics_only_and_bounds_length() {
+        assert_eq!(sanitize_log_level("warn"), "warn");
+        assert_eq!(sanitize_log_level("ERROR!!\n"), "ERROR");
+        assert_eq!(sanitize_log_level(""), "");
+        assert_eq!(sanitize_log_level(&"x".repeat(40)).chars().count(), 16);
+    }
+
+    #[test]
+    fn log_message_strips_line_breaks() {
+        assert_eq!(sanitize_log_message("plain"), "plain");
+        assert_eq!(sanitize_log_message("a\r\nb\nc"), "a  b c");
+    }
+
+    #[test]
+    fn log_message_cap_never_splits_a_character() {
+        // Regression: String::truncate panics when the byte offset lands inside
+        // a multi-byte character, and a frontend message can put one there.
+        let all_ascii = "a".repeat(MAX_LOG_MESSAGE_BYTES + 500);
+        assert_eq!(
+            sanitize_log_message(&all_ascii).len(),
+            MAX_LOG_MESSAGE_BYTES
+        );
+
+        let mut straddling = "a".repeat(MAX_LOG_MESSAGE_BYTES - 1);
+        straddling.push('é'); // 2 bytes: byte MAX_LOG_MESSAGE_BYTES is mid-character
+        straddling.push_str("tail");
+        let cleaned = sanitize_log_message(&straddling);
+        assert!(cleaned.len() <= MAX_LOG_MESSAGE_BYTES);
+        assert!(cleaned.starts_with(&"a".repeat(MAX_LOG_MESSAGE_BYTES - 1)));
     }
 }

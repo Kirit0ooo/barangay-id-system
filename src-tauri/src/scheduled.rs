@@ -6,18 +6,27 @@ use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
 
+/// Result of a scheduled backup, returned to the frontend caller.
 #[derive(Debug, serde::Serialize)]
 pub struct ScheduledBackupResult {
+    /// Absolute path of the written backup file.
     pub path: String,
+    /// Frames flushed from the WAL before the copy, for diagnostics.
     pub wal_checkpoint: String,
 }
 
+/// Result of a photo garbage-collection scan.
 #[derive(Debug, serde::Serialize)]
 pub struct PhotoGcResult {
+    /// Files found in `data/photos` (top level; subdirectories are not scanned).
     pub total_files: usize,
+    /// Files matched by a resident's `photo_filename`.
     pub referenced: usize,
+    /// Unreferenced files found.
     pub orphan_count: usize,
+    /// Up to 50 orphan names, with a tail entry counting the remainder.
     pub orphans: Vec<String>,
+    /// Orphans actually removed (0 when the command ran in scan-only mode).
     pub deleted: usize,
 }
 
@@ -45,8 +54,31 @@ fn is_machine_backup_name(file_name: &str) -> bool {
         })
 }
 
-/// R5 — scheduled backup: WAL checkpoint + isolated fs::copy to data/backups/scheduled_YYYYMMDD_HHMMSS.db
-/// Called via frontend setInterval (24h) when app stays open. 100% offline, no cron daemon.
+/// R5 — scheduled backup: WAL checkpoint + isolated copy to
+/// `data/backups/scheduled_YYYYMMDD_HHMMSS.db`.
+///
+/// Driven by a frontend `setInterval` (24h) while the app stays open; fully
+/// offline, no cron daemon.
+///
+/// # Returns
+///
+/// The written path plus WAL checkpoint diagnostics.
+///
+/// # Errors
+///
+/// * `data/residents.db` does not exist yet.
+/// * The WAL checkpoint fails.
+/// * The isolated path check fails.
+/// * All three copy attempts fail **and** the `VACUUM INTO` fallback fails or its
+///   destination name is not machine-generated.
+///
+/// # Side Effects
+///
+/// Checkpoints the WAL, writes a `.db` backup (retrying a locked copy, then
+/// falling back to `VACUUM INTO`), prunes each retention group to its newest 30
+/// entries, and runs [`photo_gc`] — deleting orphans unless
+/// `photo_gc_dry_run` is set in `config/civic.json`. A photo-GC failure is
+/// ignored so it can never fail the backup itself.
 #[tauri::command]
 pub async fn scheduled_backup(
     state: State<'_, Arc<Mutex<AppState>>>,
@@ -59,12 +91,11 @@ pub async fn scheduled_backup(
     if !source_db.exists() {
         return Err("Database file not found — no data to backup yet".into());
     }
-    // WAL checkpoint to ensure -wal is flushed before copy
-    let ck = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
-        .execute(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
-    let ck_msg = format!("{:?}", ck.rows_affected());
+    // Flush the WAL before copying so residents.db alone is a complete
+    // snapshot. A busy checkpoint aborts the backup: continuing would copy a
+    // file missing every transaction still held in the WAL.
+    let checkpointed_frames = crate::db::checkpoint_wal_truncate(&pool).await?;
+    let ck_msg = format!("checkpointed {} frame(s)", checkpointed_frames);
 
     let ts = Local::now().format("%Y%m%d_%H%M%S").to_string();
     let dest = app_data_dir
@@ -204,8 +235,33 @@ pub async fn scheduled_backup(
     })
 }
 
-/// R5 — photo GC: scan data/photos for orphan files not referenced in residents.photo_filename
-/// Logs count; only deletes when `delete` flag is true (Settings manual GC button passes true).
+/// R5 — photo GC: find files in `data/photos` that no resident references.
+///
+/// # Arguments
+///
+/// * `delete` — `Some(true)` removes the orphans, `Some(false)` / `None` only
+///   reports them. The Settings button passes `true`; the scheduled backup
+///   passes the inverse of `photo_gc_dry_run`.
+///
+/// # Returns
+///
+/// A [`PhotoGcResult`] with the file counts and the orphan names.
+///
+/// # Errors
+///
+/// Returns an error when the residents query or the directory scan fails. A
+/// missing `data/photos` directory is not an error — an empty result is returned.
+/// Individual delete failures are logged as warnings and skipped.
+///
+/// # Side Effects
+///
+/// Reads the database and the photos directory; deletes orphan files when
+/// `delete` is true, each gated by the isolation check so nothing outside the
+/// project tree can be removed. Name matching is case-folded for Windows.
+///
+/// # Panics
+///
+/// Never. A file that disappears between the scan and the delete is logged.
 #[tauri::command]
 pub async fn photo_gc(
     state: State<'_, Arc<Mutex<AppState>>>,

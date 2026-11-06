@@ -57,6 +57,15 @@ pub struct CryptoKey(Zeroizing<[u8; KEY_SIZE]>);
 
 impl CryptoKey {
     /// Encrypt a byte slice, returning magic+version+nonce+ciphertext+tag.
+    ///
+    /// A fresh random 96-bit nonce is generated per call, so encrypting the same
+    /// plaintext twice never produces the same ciphertext.
+    ///
+    /// # Panics
+    ///
+    /// The AES-256 key is an invariant `[u8; 32]` held by [`CryptoKey`], and the
+    /// GCM implementation does not fail for in-memory buffers, so neither
+    /// `expect` here can fire in practice.
     pub fn encrypt(&self, plaintext: &[u8]) -> Vec<u8> {
         let cipher = Aes256Gcm::new_from_slice(&*self.0).expect("AES-256 key must be 32 bytes");
         let mut nonce_bytes = [0u8; NONCE_SIZE];
@@ -74,8 +83,22 @@ impl CryptoKey {
     }
 
     /// Decrypt a byte slice in magic+version+nonce+ciphertext+tag format.
-    /// Returns Err if not our format (missing magic, wrong version, too
-    /// short, or GCM auth failure).
+    ///
+    /// # Returns
+    ///
+    /// The original plaintext bytes on success.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `data` is too short, carries a different magic or
+    /// version, or fails the GCM authentication tag check (tampered or truncated
+    /// ciphertext, or the wrong key).
+    ///
+    /// # Panics
+    ///
+    /// The nonce slice is exactly [`NONCE_SIZE`] bytes — enforced by the length
+    /// check above — and the key is an invariant `[u8; 32]`, so neither `expect`
+    /// can fire in practice.
     pub fn decrypt(&self, data: &[u8]) -> Result<Vec<u8>, String> {
         if data.len() < HEADER_SIZE + NONCE_SIZE + TAG_SIZE {
             return Err("not an encrypted file (too short)".to_string());
@@ -106,7 +129,10 @@ impl CryptoKey {
     /// Try decrypt; if it's not our encrypted format, return the original
     /// bytes as Ok — used for photo fallback where plaintext + ciphertext
     /// coexist.
-    #[allow(dead_code)]
+    ///
+    /// A decrypt failure on data that *does* carry our magic also returns the
+    /// input unchanged rather than erroring: callers show the raw bytes instead
+    /// of a blank image. Live caller: [`crate::residents::resolve_photo_bytes`].
     pub fn decrypt_or_plaintext(&self, data: &[u8]) -> Vec<u8> {
         if Self::is_encrypted(data) {
             match self.decrypt(data) {
@@ -146,6 +172,21 @@ pub fn generate_key() -> Result<Vec<u8>, String> {
     generate_key_to_path(&path)
 }
 
+/// Write a fresh random 256-bit key to `path`, refusing to overwrite an
+/// existing key file. Used by [`generate_key`] with the resolved key location.
+///
+/// # Returns
+///
+/// The generated key bytes (also written to disk).
+///
+/// # Errors
+///
+/// Returns an error when the file already exists or cannot be written.
+///
+/// # Side Effects
+///
+/// Creates or writes the key file. Losing this file makes encrypted data
+/// unrecoverable, so it must be backed up.
 fn generate_key_to_path(path: &Path) -> Result<Vec<u8>, String> {
     if path.exists() {
         return Err("encryption key already exists".to_string());

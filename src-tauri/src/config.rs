@@ -4,12 +4,17 @@
 //! 1. `<project-root>/config/civic.json` (operator-editable, isolated inside project)
 //! 2. Built-in defaults below.
 //! Frontend mirrors these via `settings` (barangayName/cityName/provinceName/punongName)
-//! persisted in localStorage; backend remains source of truth for PDF rendering.
+//! persisted in localStorage; the backend remains the source of truth for the
+//! card template and the QR payload.
 
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+/// Operator-editable civic text used on the ID card, plus the photo-GC toggle.
+///
+/// Built-in [`Default`] values match Barangay Balud; `config/civic.json` may
+/// override any text field.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CivicConfig {
     pub republic: String,
@@ -28,6 +33,7 @@ pub struct CivicConfig {
     pub photo_gc_dry_run: bool,
 }
 
+/// Placeholder emergency-contact values shown when a record leaves them blank.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmergencyDefaults {
     pub name: String,
@@ -36,6 +42,8 @@ pub struct EmergencyDefaults {
 }
 
 impl Default for CivicConfig {
+    /// Built-in Barangay Balud values; used when `config/civic.json` is absent,
+    /// unreadable, oversized, or carries only some fields.
     fn default() -> Self {
         Self {
             republic: "Republic of the Philippines".to_string(),
@@ -56,6 +64,8 @@ impl Default for CivicConfig {
     }
 }
 
+/// Absolute path of `config/civic.json`, or `None` when no project root resolves.
+/// Never creates anything; callers handle a missing file as "use defaults".
 fn config_file_path() -> Option<PathBuf> {
     crate::db::get_project_root().map(|r| r.join("config").join("civic.json"))
 }
@@ -217,6 +227,12 @@ pub fn short_barangay(barangay: &str, cfg: &CivicConfig) -> String {
     }
 }
 
+/// Return the effective civic configuration (file overrides merged over defaults).
+///
+/// # Errors
+///
+/// Never. An unreadable or invalid `config/civic.json` is logged and the
+/// built-in defaults are returned, so the card can always be rendered.
 #[tauri::command]
 pub async fn get_civic_config() -> Result<CivicConfig, String> {
     Ok(load_civic_config())
@@ -295,6 +311,27 @@ pub async fn set_civic_config(partial: serde_json::Value) -> Result<CivicConfig,
     Ok(cfg)
 }
 
+/// Reveal a path in the host file manager (`explorer /select`, Finder `-R`,
+/// `xdg-open` on the parent directory).
+///
+/// # Arguments
+///
+/// * `path` — An existing path inside the project tree.
+///
+/// # Returns
+///
+/// `true` once the file-manager process was spawned. Spawning is fire-and-forget:
+/// the command reports process start, not that the window opened.
+///
+/// # Errors
+///
+/// * The path resolves outside the project tree (isolation gate).
+/// * The path does not exist.
+/// * The file-manager binary cannot be spawned.
+///
+/// # Side Effects
+///
+/// Launches an external process that opens a window on the operator's desktop.
 #[tauri::command]
 pub async fn open_path(path: String) -> Result<bool, String> {
     use std::process::Command;
