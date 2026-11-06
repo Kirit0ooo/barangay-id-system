@@ -189,8 +189,9 @@ npm run check:css
 - If you change `index.html` or any `src/js/*.js` markup/classes, run `npm run stamp:css` to update `tools/css-fingerprint.txt` (only if you intentionally changed CSS-relevant markup; zero new CSS classes → just restamp).
 
 ### Rust backend (CI-only locally)
-- `cargo test`, `cargo clippy`, `cargo fmt --check` **cannot run on this host** (no libsoup-2.4/GTK; documented env limit). Rust verification is CI-only via `.github/workflows/ci.yml` (`cargo test --manifest-path src-tauri/Cargo.toml`).
-- `cargo fmt --check` is red on 5 pre-existing files you did not touch (`backup.rs`, `config.rs`, `id_card.rs`, `logger.rs`, `scheduled.rs`). Leave alone to avoid an unrelated bulk reformat.
+- `cargo check`, `cargo test`, `cargo clippy` and `cargo doc` **cannot run on this host** (documented env limit, re-verified 2026-11-06). Host target: `soup2-sys` build script fails on missing `libsoup-2.4` (and `webkit2gtk-4.0` is also absent, though `gtk+-3.0` 3.24.52 and `glib-2.0` 2.88.4 are present). `--target x86_64-pc-windows-msvc`: `libsqlite3-sys` fails looking for the MSVC librarian `lib.exe`. Rust compilation and tests stay CI-only via `.github/workflows/ci.yml` (`cargo test --manifest-path src-tauri/Cargo.toml`) or a Windows-side `build.bat`.
+- `cargo fmt --all -- --check` **does** run on this host (rustfmt needs no native libraries) and is **clean** as of 2026-11-06: exit 0 with zero output, all 11 files passing individually. This supersedes the earlier note that 5 files were fmt-red. Keep it clean, and never bulk-reformat unrelated files.
+- `cargo metadata --locked` **does** run and pass on this host (manifest and lockfile integrity). Use it when the compiler cannot run.
 - `npm audit` → must be **0 vulnerabilities**.
 
 ### When you move any project file
@@ -322,11 +323,44 @@ Applied robustness fixes to the Windows PowerShell/batch launchers, zero logic c
 | Inline fallbacks | `run.ps1`, `build.ps1` | When `tools/launcher-common.ps1` is missing, define stub `Set-PortableEnvPins`/`Restore-EnvPins`/`Invoke-SafeNative` so unconditional calls never hard-crash under `Set-StrictMode -Version Latest` |
 | Flag docs | `build.bat` | Added `-EnableVerboseLogging` to the documented forwarded-flags header and `:NOPS` echo line (build.ps1 already accepts it via `%*`) |
 | MSVC gate | `build.ps1` | vswhere.exe existence alone no longer passes — now verifies VC.Tools.x86.x64 toolset is actually installed, matching run.ps1's strict check |
-| WiX gate | `build.ps1` | Checks `WiX Toolset v3.11\bin\candle.exe` path first; `candle.exe` on PATH is accepted only if `-version` reports v3.11 (v4+ rejected, Tauri v1 incompatible) |
+| WiX gate | `build.ps1` | ~~Checked `WiX Toolset v3.11\bin\candle.exe` path first; `candle.exe` on PATH accepted only if `-version` reported v3.11~~ **superseded 2026-11-05** - WiX/NSIS are now warn-only because Tauri v1 provisions its own toolset (see "Installer toolchain provisioning" below) |
 | Stale comment | `tools/launcher-common.ps1` | `Ensure-DataDir` comment corrected: both run.ps1 and build.ps1 call it (was "run.ps1 only") |
 | -Logs narrative | `run.ps1` | `.SYNOPSIS` reworded from "replaces view-logs.bat" to "supersedes view-logs.bat logic; wrapper remains" since view-logs.bat still exists as a live Explorer wrapper |
 
 Validation: `npm test` 57/0/12, `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
+
+## Installer toolchain provisioning (2026-11-05)
+
+`build.bat` refused to build on a machine with no system-wide WiX/NSIS. Root cause: Tauri v1 **never uses a system WiX/NSIS install** - it downloads and verifies its own copies - so the prereq gate was stricter than the build actually needs.
+
+| Change | File | Detail |
+|--------|------|--------|
+| Tool cache moved in-project | `src-tauri/tauri.conf.json` | Added `"useLocalToolsDir": true` under `tauri.bundle`, so Tauri caches WiX + NSIS in `src-tauri/target/.tauri/` (`WixTools314/`, `NSIS/`) instead of `%LOCALAPPDATA%` - keeps the portable/confinement contract |
+| Gate relaxed | `build.ps1` | WiX and NSIS `$Prereqs` rows changed `Level = 'required'` to `'warn'`; each test now checks Tauri's in-project cache first, then a system install (`candle.exe` / `makensis.exe` are still detected when present) |
+| Warn line wording | `build.ps1` | Warn branch prints `optional: <name> not found - <fix>` (was `missing (warn-only):`), so an auto-provisioned tool no longer reads as a hard failure |
+| `-Help` prereq line | `build.ps1` | Now lists only the hard requirements and marks WiX/NSIS/rustup as optional/auto-downloaded |
+| MSI target deferred | `src-tauri/tauri.conf.json` | `tauri.bundle.targets` is now `["nsis"]` (was `["msi","nsis"]`), because the per-user WiX template cannot link (ICE38/ICE64 - see the block below) |
+| MSI assertion repointed | `tests/regression.test.js` | The old `bundle ships MSI` check asserted `targets.includes('msi')`; it now asserts NSIS-only, so a bare re-add of `"msi"` fails loudly instead of shipping an unlinkable target |
+| Launcher help text | `build.ps1` | `.SYNOPSIS`, `.DESCRIPTION` and the closing summary lines now read `nsis` instead of `msi/ + nsis/` |
+
+Facts verified against the shipped CLI (`node_modules/@tauri-apps/cli-win32-x64-msvc/cli.win32-x64-msvc.node`, v1.6.3):
+
+- WiX: downloads `wix3141rtm/wix314-binaries.zip` (sha256 `6ac824e1...`) and expects `candle.exe`, `light.exe`, `darice.cub`, `wix.dll`, `WixUIExtension.dll`, `WixUtilExtension.dll`.
+- NSIS: downloads `nsis-3.zip` (sha1 `057e83c7...`) plus `nsis_tauri_utils.dll` v0.4.1, then runs `<tools>\NSIS\makensis.exe`.
+- Cache base with `useLocalToolsDir: true` is `src-tauri\target\.tauri\` (`WixTools314\`, `NSIS\`); the default per-user cache is `%LOCALAPPDATA%\tauri\`. There is **no PATH/system fallback for `makensis.exe`** on Windows.
+- Network is still needed on the first bundle (WiX + NSIS ~40 MB) and for the WebView2 offline installer (~150 MB).
+
+### MSI leg blocked: per-user WiX template fails ICE validation (2026-11-05)
+
+Running the fixed build end to end (not just the gate) surfaced three further blockers. `build.bat` / `build.ps1` now complete for the NSIS leg; the MSI target is deferred.
+
+| Blocker | File | Detail |
+|---------|------|--------|
+| Stale high-integrity artifact | `src-tauri/target/x86_64-pc-windows-msvc/release/wix/x64/output.msi` | A 225 MB `output.msi` written by an **elevated** build on 2026-09-17 carries `Mandatory Label\High Mandatory Level:(I)(NW)`, so a normal (medium-integrity) build can neither overwrite, rename nor delete it. Tauri's MSI leg then dies with a bare `Access is denied. (os error 5)` immediately after `Info Target: x64`. Non-elevated workaround used: rename the containing folder to `wix\x64-stale-20260917`. Deleting the file itself needs an Administrator shell; nothing else under `target/` is affected |
+| WiX template was a broken stub | `src-tauri/wix/main.wxs` | Commit `ae3aff9` (2026-10-16) replaced the project's 321-line per-user template with a 23-line stub missing the `<Product>` element, so `candle.exe` failed with 5x `CNDL0005`. Restored the `bff82ac` (2026-09-16) version: per-user install into `LocalAppDataFolder`, automatic desktop shortcut, HKCU registry keys |
+| MSI link fails ICE38/ICE64 | `src-tauri/wix/main.wxs` | With the template restored `candle.exe` compiles, but `light.exe` exits 204: `ICE38` (component `Path`, plus the auto-generated resource component `Ib0654e57...`, use a *file* KeyPath while installing to the user profile) and `ICE64` (profile directory `I561cff89...`, created by `resources: ["../barangay.ico"]`, is absent from the RemoveFile table). Tauri's stock template installs per-machine into `$(var.PlatformProgramFilesFolder)`, so these ICEs never fire there. Patching the template alone cannot clear the resource ICEs because Tauri generates those components - the `resources` entry must also go |
+
+To re-enable the MSI later: give the `Path` component an HKCU `RegistryValue` KeyPath, add `RemoveFolder`/`RemoveFile` entries for every profile directory, drop the duplicate `../barangay.ico` from `bundle.resources`, then set `tauri.bundle.targets` back to `["msi","nsis"]`.
 
 ## Settings page card redesign (2026-10-17)
 
@@ -382,3 +416,21 @@ Zero logic changes — accessibility hardening only:
 | Nav orientation chip | `src/index.html` + `src/js/app.core.js` + `src/css/style.css` | Added `.nav-page` chip beside the brand block showing the current view (`.nav-page__dot` gold dot + `.nav-page__label`). Driven by `navPageTitle()` in app.core.js (edit mode narrows Register → "Edit Resident"); `aria-live="polite"` announces view changes. Tab strip stays hidden in kiosk mode. |
 
 Validation: `npm test` 57/0/12, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
+
+## Rust codebase quality pass (2026-11-06)
+
+Documentation, error-handling and test work across `src-tauri/src/` plus `tests/regression.test.js`. Frontend source, database, photos and configuration untouched. Full evidence, including blocked checks: `RUST_CODEBASE_QUALITY_REPORT.md`.
+
+| Change | File | Detail |
+|--------|------|--------|
+| Guarded WAL checkpoint | `db.rs`, `backup.rs`, `encryption.rs`, `scheduled.rs` | New `pub async fn checkpoint_wal_truncate(pool: &SqlitePool) -> Result<i64, String>` (`db.rs:786`) replaces 5 sites that ran `PRAGMA wal_checkpoint(TRUNCATE)` under `let _ = ...`. That pragma always succeeds and reports busy in its result row, so the old code could copy or encrypt a `residents.db` missing every transaction still held in the WAL, and report success. The helper reads the `busy` column and returns an error; `backup_database:46` (x1), `restore_database:173` (x2), `encryption_encrypt_database` and `scheduled_backup:83` now propagate with `?`. `scheduled_backup` records `checkpointed N frame(s)`. Deliberate behaviour change: a busy checkpoint now fails the operation with a retry message instead of writing a possibly-incomplete file |
+| Export header guard | `export.rs:234` | `assert_eq!(headers.len(), widths.len())` (M-2) is now a returned `anyhow` error, so a header/width desync cannot abort the app during an operator's export |
+| Char-safe log truncation | `logger.rs` | `clean_msg.truncate(8000)` panicked when a multi-byte character straddled byte 8000. Extracted `sanitize_log_message` (walks back to `is_char_boundary` before truncating) and `sanitize_log_level`; constants `MAX_LOG_MESSAGE_BYTES = 8000`, `MAX_LOG_LEVEL_CHARS = 16` |
+| Date parse panic removed | `residents.rs:263` | `parse_any_date` returns `Result<chrono::NaiveDate, String>`; `normalize_birth_date:298` and `normalize_valid_until:285` use the typed value instead of re-parsing with `.expect("helper emits ISO")`. The helper was briefly named `parse_any_date_to_iso`; renamed during the post-implementation review because the return type is a `NaiveDate`, not an ISO string |
+| Dead code deleted | `residents.rs` | Removed `check_emergency_fk_pool` (pool-based emergency-contact FK check with zero callers; the live guard is the `AppState`-based check in `delete_resident`). Verified no remaining reference in `src/` |
+| `allow(dead_code)` corrected | `crypto.rs:136` | Removed from `decrypt_or_plaintext`; its live caller is `residents::resolve_photo_bytes` (`residents.rs:1782`). Four documented `#[allow(dead_code)]` items remain: `db.rs:306,314` (asserted by `tests/regression.test.js:147-148`) and `crypto.rs:233,241` (reserved encrypted-backup path) |
+| Rustdoc | 10 modules | 1,041 `///` lines; `residents.rs` 87 to 349. Purpose, arguments, returns, `# Errors`, `# Side Effects`, and `# Panics` on the only 3 production `expect()` calls (`crypto.rs:70,76,115`), each naming the invariant that keeps it unreachable. No runnable `# Examples` blocks: the functions worth demonstrating need a live database or photo directory |
+| Tests | `db.rs` +2, `export.rs` +4, `logger.rs` +3, `residents.rs` +2 | 43 to 54 `#[test]`. New coverage: unique-path never overwrites a prior export (P2-8), local-date backup stem, char-boundary-safe log truncation (the panic regression), `escape_like` wildcard neutralisation (F2), legacy contact pass-through, export column/blank-cell mapping, address join order |
+| Regression guard | `tests/regression.test.js` | New check fails if `PRAGMA wal_checkpoint(TRUNCATE)` appears without a `busy != 0` inspection; the `bundle ships MSI` check now asserts NSIS-only to match `tauri.conf.json`. Two unused variables removed and three template literals converted to backticks |
+
+Validation (2026-11-06): `cargo fmt --all -- --check` clean (exit 0, zero output, all 11 files); `cargo metadata --locked` exit 0; `npm test` 57 pass / 0 fail / 12 suites; `npm run check:css` CSS fresh; `npm audit` 0 vulnerabilities. Rust compile, test, clippy and doc remain **BLOCKED on this host** for the reasons in the workflow section above, so the Rust changes in this pass are statically reviewed and parse-verified but not compiler-verified. Nothing was committed, so this work stays separable from the pre-existing uncommitted installer work in the tree.
