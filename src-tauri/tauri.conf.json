@@ -8,7 +8,7 @@
   },
   "package": {
     "productName": "Barangay-ID-Registration-System",
-    "version": "1.0.1"
+    "version": "1.0.4"
   },
   "tauri": {
     "allowlist": {
@@ -47,7 +47,8 @@
       "active": true,
       "useLocalToolsDir": true,
       "targets": [
-        "nsis"
+        "nsis",
+        "msi"
       ],
       "identifier": "com.barangay.idsystem",
       "icon": [
@@ -55,11 +56,9 @@
         "icons/128x128.png",
         "icons/128x128@2x.png",
         "icons/icon.icns",
-        "../barangay.ico"
+        "icons/icon.ico"
       ],
-      "resources": [
-        "../barangay.ico"
-      ],
+      "resources": [],
       "windows": {
         "certificateThumbprint": null,
         "digestAlgorithm": "sha256",
@@ -69,6 +68,9 @@
         },
         "webviewInstallMode": {
           "type": "offlineInstaller"
+        },
+        "nsis": {
+          "installerIcon": "../barangay.ico"
         }
       }
     },
