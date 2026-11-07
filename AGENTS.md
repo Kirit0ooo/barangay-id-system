@@ -339,8 +339,8 @@ Validation: `npm test` 57/0/12, `npm run check:css` CSS fresh, `npm audit` 0 vul
 | Gate relaxed | `build.ps1` | WiX and NSIS `$Prereqs` rows changed `Level = 'required'` to `'warn'`; each test now checks Tauri's in-project cache first, then a system install (`candle.exe` / `makensis.exe` are still detected when present) |
 | Warn line wording | `build.ps1` | Warn branch prints `optional: <name> not found - <fix>` (was `missing (warn-only):`), so an auto-provisioned tool no longer reads as a hard failure |
 | `-Help` prereq line | `build.ps1` | Now lists only the hard requirements and marks WiX/NSIS/rustup as optional/auto-downloaded |
-| MSI target deferred | `src-tauri/tauri.conf.json` | `tauri.bundle.targets` is now `["nsis"]` (was `["msi","nsis"]`), because the per-user WiX template cannot link (ICE38/ICE64 - see the block below) |
-| MSI assertion repointed | `tests/regression.test.js` | The old `bundle ships MSI` check asserted `targets.includes('msi')`; it now asserts NSIS-only, so a bare re-add of `"msi"` fails loudly instead of shipping an unlinkable target |
+| MSI target deferred | `src-tauri/tauri.conf.json` | ~~`tauri.bundle.targets` set to `["nsis"]` (from `["msi","nsis"]`) because the per-user WiX template could not link (ICE38/ICE64)~~ **SUPERSEDED 2026-11-07** - the MSI links again; `targets` is back to `["nsis","msi"]` (see "MSI leg re-enabled" below) |
+| MSI assertion repointed | `tests/regression.test.js` | ~~asserted NSIS-only, so a bare re-add of `"msi"` would fail loudly~~ **SUPERSEDED 2026-11-07** - the check now requires both legs (`tests/regression.test.js:287`) and forbids any `.ico` in `bundle.resources` (`:289`) |
 | Launcher help text | `build.ps1` | `.SYNOPSIS`, `.DESCRIPTION` and the closing summary lines now read `nsis` instead of `msi/ + nsis/` |
 
 Facts verified against the shipped CLI (`node_modules/@tauri-apps/cli-win32-x64-msvc/cli.win32-x64-msvc.node`, v1.6.3):
@@ -350,11 +350,13 @@ Facts verified against the shipped CLI (`node_modules/@tauri-apps/cli-win32-x64-
 - Cache base with `useLocalToolsDir: true` is `src-tauri\target\.tauri\` (`WixTools314\`, `NSIS\`); the default per-user cache is `%LOCALAPPDATA%\tauri\`. There is **no PATH/system fallback for `makensis.exe`** on Windows.
 - Network is still needed on the first bundle (WiX + NSIS ~40 MB) and for the WebView2 offline installer (~150 MB).
 
-**Known blocker - auto-version aborts before the build (2026-11-06):** both `build.ps1` runs that day stopped at the version bump with `ERROR: Auto-version: package-lock.json still pins <old> (pattern drift) - update build.ps1 bump stages` (`logs/build-20261106-002742.log`, `logs/build-20261106-091239.log`), so `tauri build` never starts. The aborted runs left the manifests split: `package.json` at `1.0.3` while `package-lock.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml` still pin `1.0.1`. `run.ps1` is unaffected because it does not bump. Next safe action: repair the `package-lock.json` stages in `build.ps1` (`$bumpStages`, lines 207-208) so the guard stops throwing, then run one bump to bring all four manifests to the same version.
+**RESOLVED 2026-11-07 - auto-version aborted before the build (2026-11-06):** both `build.ps1` runs that day stopped at the version bump with `ERROR: Auto-version: package-lock.json still pins <old> (pattern drift) - update build.ps1 bump stages` (`logs/build-20261106-002742.log:33-34` = `1.0.1 -> 1.0.2`, `logs/build-20261106-091239.log:33-34` = `1.0.2 -> 1.0.3`), so `tauri build` never started. Cause: the `$bumpStages` pattern for the lockfile root line was anchored `"$`, but that line ends `"version": "1.0.1",` - the trailing comma meant it never matched; the per-stage guard then threw on stage 2 of 6, so stages 3-6 (`package-lock.json` packages entry, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`) never ran. Two runs bumped `package.json` only, leaving `package.json` at `1.0.3` while the other four pinned `1.0.1`. `run.ps1` was unaffected because it does not bump.
 
-### MSI leg blocked: per-user WiX template fails ICE validation (2026-11-05)
+**Launcher restructure (2026-11-07) - see "Build launcher rework" below.** The next real `build.bat` run picks the highest version it finds (`1.0.3`) as the base, syncs every manifest to it and bumps once, landing all five slots on **`1.0.4`**. Do not hand-edit the split manifests: that would burn a version number and the script repairs them itself.
 
-Running the fixed build end to end (not just the gate) surfaced three further blockers. `build.bat` / `build.ps1` now complete for the NSIS leg; the MSI target is deferred.
+### MSI leg: per-user WiX template failed ICE validation (2026-11-05) - RESOLVED 2026-11-07
+
+Running the fixed build end to end (not just the gate) surfaced three blockers. The MSI target was deferred from 2026-11-05 until 2026-11-07, when both ICE failures were fixed and `light.exe` produced a clean MSI (see "MSI leg re-enabled" below). Kept as the failure record:
 
 | Blocker | File | Detail |
 |---------|------|--------|
@@ -362,7 +364,66 @@ Running the fixed build end to end (not just the gate) surfaced three further bl
 | WiX template was a broken stub | `src-tauri/wix/main.wxs` | Commit `ae3aff9` (2026-10-16) replaced the project's 321-line per-user template with a 23-line stub missing the `<Product>` element, so `candle.exe` failed with 5x `CNDL0005`. Restored the `bff82ac` (2026-09-16) version: per-user install into `LocalAppDataFolder`, automatic desktop shortcut, HKCU registry keys |
 | MSI link fails ICE38/ICE64 | `src-tauri/wix/main.wxs` | With the template restored `candle.exe` compiles, but `light.exe` exits 204: `ICE38` (component `Path`, plus the auto-generated resource component `Ib0654e57...`, use a *file* KeyPath while installing to the user profile) and `ICE64` (profile directory `I561cff89...`, created by `resources: ["../barangay.ico"]`, is absent from the RemoveFile table). Tauri's stock template installs per-machine into `$(var.PlatformProgramFilesFolder)`, so these ICEs never fire there. Patching the template alone cannot clear the resource ICEs because Tauri generates those components - the `resources` entry must also go |
 
-To re-enable the MSI later: give the `Path` component an HKCU `RegistryValue` KeyPath, add `RemoveFolder`/`RemoveFile` entries for every profile directory, drop the duplicate `../barangay.ico` from `bundle.resources`, then set `tauri.bundle.targets` back to `["msi","nsis"]`.
+What actually re-enabled the MSI (2026-11-07): the `Path` component got an HKCU `RegistryValue` KeyPath and its `<File>` was demoted to `KeyPath="no"` (clears ICE38), and `../barangay.ico` was dropped from `bundle.resources` (clears the ICE64 profile-directory component), then `tauri.bundle.targets` went back to `["nsis","msi"]`. The earlier plan to add `RemoveFolder`/`RemoveFile` entries was NOT needed once the resource entry was gone.
+
+## MSI leg re-enabled + installer icon verification (2026-11-07)
+
+The MSI target was re-enabled; both installers now carry the project icon. No frontend, backend, database or config-value change.
+
+| Change | File | Detail |
+|--------|------|--------|
+| ICE38 fix | `src-tauri/wix/main.wxs` | `Path` component: `<File ... KeyPath="no">` (was `KeyPath="yes"`) plus a new HKCU `RegistryValue` (`Software\\{{manufacturer}}\\{{product_name}}`, `Name="PathComponent"`, `Value=1`, `KeyPath="yes"`). A component installing under the user profile must key off HKCU, not the file it drops there, or `light.exe` exits 204 and no MSI is produced. The `\\` matches the template's own stock style (`main.wxs:104,118`) - not a typo |
+| ICE64 fix | `src-tauri/tauri.conf.json` | `bundle.resources` emptied (`[]`); the `../barangay.ico` entry created a profile-directory component absent from the RemoveFile table. The icon is still shipped through `bundle.icon`, so nothing is lost |
+| MSI target re-added | `src-tauri/tauri.conf.json` | `tauri.bundle.targets` `["nsis"]` -> `["nsis","msi"]` |
+| Bundle icon source | `src-tauri/tauri.conf.json` | `bundle.icon` now lists `icons/icon.ico` instead of the out-of-tree `../barangay.ico`; added `windows.nsis.installerIcon: "../barangay.ico"` so the NSIS installer carries the seal too |
+| Regression guard | `tests/regression.test.js` | `:287` requires both installer legs; `:289` forbids any `.ico` in `bundle.resources`, so the ICE64 component cannot come back |
+
+Verified 2026-11-07 on the Windows side (`npx tauri build --bundles msi`): `light.exe` passes ICE validation and `src-tauri/target/release/bundle/msi/Barangay-ID-Registration-System_1.0.4_x64_en-US.msi` is produced (229,191,680 bytes, dominated by the ~150 MB offline WebView2 installer).
+
+**Icon evidence (measured, not inferred):**
+
+- MSI: WiX `dark.exe -x` (`src-tauri/target/.tauri/WixTools314/dark.exe`) unpacks the Icon-table stream to `Icon/ProductIcon`; md5 `7cb36f5cdd473bbf45dabf40ed2db23c`, byte-identical to `barangay.ico` (170,472 bytes). The decompiled source shows `<Icon Id="ProductIcon" SourceFile="...target/release/resources/icon.ico"/>` and `<Property Id="ARPPRODUCTICON" Value="ProductIcon"/>`, so Add/Remove Programs carries the barangay seal.
+- EXE: the binary embeds 5 `RT_ICON` resources (1017 / 3290 / 6870 / 11649 / 147560 bytes); all 5 are md5-identical to the 16/32/48/64/256 images inside `barangay.ico`.
+- `src-tauri/icons/icon.ico` and the Tauri-staged `target/release/resources/icon.ico` are both byte-identical to `barangay.ico`.
+
+**Method traps that cost time here - do not repeat:**
+
+- Scanning the MSI for a raw contiguous 170,472-byte ICO run finds nothing and proves nothing: the icon lives in a compound-file stream. Decompile with `dark.exe -x` and hash the extracted stream instead.
+- `[System.Drawing.Icon]::ExtractAssociatedIcon()` does NOT return embedded pixels; it renders/scales, so its hash will not match the `.ico`'s own entry hash even when the icon is correct. Read the PE `RT_ICON` resources directly.
+- In an `IMAGE_RESOURCE_DATA_ENTRY`, `OffsetToData` is an **RVA**, not a file offset. Adding it to the section file offset yields an empty slice and every hash comes out `d41d8cd98f00b204e9800998ecf8427e` (the empty-string md5) - a silent false negative.
+- ICE91 `<Condition>(ALLUSERS = "1")</Condition>` shortcut wrappers are WRONG for this package: it is deliberately `perUser` (`tests/regression.test.js:276`) with a required desktop shortcut (`:278`), and that condition suppresses the shortcuts precisely in a per-user install. ICE91 is not raised; `light.exe` emits no ICE line at all on the successful link.
+- `build.ps1:290-297` runs `npm ci` / `npm install`, so do not run `npm test` while a build is in flight - it races the dependency install.
+
+## Build launcher rework (2026-11-07)
+
+`build.ps1` and `build.bat` only. No frontend, backend, database or config change.
+
+| Fix | File | Detail |
+|-----|------|--------|
+| Auto-version rewritten | `build.ps1` | `$bumpStages` (old-version-anchored patterns + a write-then-verify loop) replaced by a `$manifests` table of `File`/`Label`/`Read`/`Write` patterns. Each version slot is matched by **shape**, never by the previous number, so a drifted file is repaired instead of silently skipped; the lockfile's trailing comma no longer matters. `Cargo.toml` is anchored `(?m)^version = ` (column 0) so a dependency pin can never be rewritten. Three phases: resolve all six slots (highest version is the base), verify every slot is writable, then write and re-read. A failure therefore cannot leave a half-bumped tree - the old code wrote `package.json` and threw on `package-lock.json`. Failure messages now name the file and the version actually found (the old message reported the *expected* version, so `logs/build-20261106-091239.log:34` said "still pins 1.0.2" while the file really pinned `1.0.1`) |
+| Version work extracted | `build.ps1` | The six-slot table and its three phases live in `function Invoke-PatchVersionBump [-Root]`, defined above the `-Audit` block, so the main `try` reads as a sequence (clean -> bump -> npm -> tauri build) instead of carrying ~70 lines inline. The `-NoBump` test and the `$PSCmdlet.ShouldProcess` gate deliberately stayed at the call site: `$PSCmdlet` in script scope is what makes `-WhatIf` keep working, and an advanced helper would have changed that `$WhatIfPreference` plumbing. One definition, one call site |
+| False WiX/NSIS warnings | `build.ps1` | The two warn-only `$Prereqs` probes looked in `src-tauri\target\.tauri-tools\tauriWixTools314\candle.exe` and `...\.tauri-tools\NSIS\makensis.exe`. Tauri's real cache (from `useLocalToolsDir: true`) is `src-tauri\target\.tauri\WixTools314\candle.exe` and `...\.tauri\NSIS\makensis.exe`, both present on disk, so every build printed two bogus `optional: ... not found` lines. Paths corrected, system-install fallbacks kept, same wrong path fixed in the `-Help` text |
+| `-Help` crashed | `build.ps1` | The help here-string was double-quoted and mentioned `$Prereqs`, which is not defined until later, so under `Set-StrictMode -Version Latest` `build.ps1 -Help` (and `build.bat -Help`) died with `ERROR: terminating error in build.ps1 - The variable '$Prereqs' cannot be retrieved because it has not been set`. Switched to a single-quoted here-string, so the text is literal |
+| Single exit path | `build.bat` | Every branch now sets `RC` and goes to `:DONE`: the console code page the script changes (65001) is put back on the way out, and the real exit code always propagates. Added a `build.ps1` existence check. Dropped `EnableDelayedExpansion` (a `!` in the path or in forwarded arguments was being eaten). Both hard stops pause, because they are only reachable when the build cannot start and a double-clicked window would close before the reason showed |
+| Batch gotcha | `build.bat` | Do not put a literal `)` inside an `if (...)` block: `Flags (-Help/-Audit/...)` closed the block early and the wrapper died with `need was unexpected at this time.` The flag list is now comma-separated |
+
+Verified on 2026-11-07 with Windows PowerShell (`powershell.exe` interop) by slicing `Invoke-PatchVersionBump` and the `$Prereqs` table verbatim out of `build.ps1` into a throwaway harness under `tmp/` (deleted after the run - `tmp/` is gitignored), so the tests exercised the shipped code, not a retyped copy:
+
+- split tree (the real current state: `package.json` 1.0.3, other four 1.0.1) -> `Auto-version: 1.0.3 -> 1.0.4`, and a line-level diff shows **exactly 6 changed lines**, one per declared slot (`package.json:4`, `package-lock.json:3`, `package-lock.json:9`, `src-tauri/tauri.conf.json:11`, `src-tauri/Cargo.toml:3`, `src-tauri/Cargo.lock:154`), each moving to `1.0.4`. No dependency pin line changed
+- synced tree (a copy of the case-1 result: all six slots 1.0.4) -> `1.0.4 -> 1.0.5`, all six slots `1.0.5`, and no `disagreed` warning
+- unfindable slot (`tauri.conf.json` mangled to `ver-sion`) -> throws `no version slot in src-tauri/tauri.conf.json - pattern drift`, exit 1, **all five files byte-identical**
+- slot that resolves but cannot be rewritten (`tauri.conf.json` write pattern perturbed to be unmatchable) -> throws `cannot rewrite these slots`, exit 1, **all five files byte-identical**, so a half-bumped tree is unreachable even if only the read pattern were broken
+- real repo manifests and `build.ps1` byte-identical after every test above
+- `$Prereqs` probe now reports `ok` for WiX Toolset v3 and NSIS makensis (was `optional: ... not found`)
+- `build.ps1 -Help` exit 0 with no error text; `build.bat -Help` exit 0 with output identical to the direct call; code page 437 restored after the wrapper exits; a bad flag exits 1 through the wrapper, matching a direct `build.ps1` call
+- `build.ps1` parses with 0 errors (`[System.Management.Automation.Language.Parser]::ParseFile`), with exactly one definition and one call site of `Invoke-PatchVersionBump`, definition first
+- `npm test` 57 pass / 0 fail / 12 suites. `npm run check:css` was not re-run after the `build.ps1` edit: its fingerprint covers `index.html` and `src/js/*.js`, none of which were touched
+
+Correction to an earlier revision of this section: it claimed `"version": "1.6.3"` appeared 11 times in `Cargo.lock` and survived the bump. That number came from a compression summary and is wrong - `Cargo.lock` contains no `1.6.3` at all. The precision claim is now the line-level diff above, which is measured rather than recalled.
+
+The MSI leg is no longer deferred: as of 2026-11-07 `tauri.bundle.targets` is `["nsis","msi"]`, so a build produces the MSI, the NSIS `.exe` installer and the portable `.exe` (see "MSI leg re-enabled" above). Rust compile/test/clippy/doc remain BLOCKED on this host (no `libsoup-2.4`, no MSVC `lib.exe`); CI is the compiler gate.
+
+Also note `src-tauri/target/.tauri-tools/probe/a.exe`, a leftover toolchain probe from an earlier session. Nothing reads it any more. Left in place because it sits under the gitignored build output tree.
 
 ## Settings page card redesign (2026-10-17)
 
@@ -433,6 +494,6 @@ Documentation, error-handling and test work across `src-tauri/src/` plus `tests/
 | `allow(dead_code)` corrected | `crypto.rs:136` | Removed from `decrypt_or_plaintext`; its live caller is `residents::resolve_photo_bytes` (`residents.rs:1782`). Four documented `#[allow(dead_code)]` items remain: `db.rs:306,314` (asserted by `tests/regression.test.js:147-148`) and `crypto.rs:233,241` (reserved encrypted-backup path) |
 | Rustdoc | 10 modules | 1,041 `///` lines; `residents.rs` 87 to 349. Purpose, arguments, returns, `# Errors`, `# Side Effects`, and `# Panics` on the only 3 production `expect()` calls (`crypto.rs:70,76,115`), each naming the invariant that keeps it unreachable. No runnable `# Examples` blocks: the functions worth demonstrating need a live database or photo directory |
 | Tests | `db.rs` +2, `export.rs` +4, `logger.rs` +3, `residents.rs` +2 | 43 to 54 `#[test]`. New coverage: unique-path never overwrites a prior export (P2-8), local-date backup stem, char-boundary-safe log truncation (the panic regression), `escape_like` wildcard neutralisation (F2), legacy contact pass-through, export column/blank-cell mapping, address join order |
-| Regression guard | `tests/regression.test.js` | New check fails if `PRAGMA wal_checkpoint(TRUNCATE)` appears without a `busy != 0` inspection; the `bundle ships MSI` check now asserts NSIS-only to match `tauri.conf.json`. Two unused variables removed and three template literals converted to backticks |
+| Regression guard | `tests/regression.test.js` | New check fails if `PRAGMA wal_checkpoint(TRUNCATE)` appears without a `busy != 0` inspection; the `bundle ships MSI` check asserted NSIS-only at the time (since 2026-11-07 it requires both `nsis` and `msi`). Two unused variables removed and three template literals converted to backticks |
 
 Validation (2026-11-06): `cargo fmt --all -- --check` clean (exit 0, zero output, all 11 files); `cargo metadata --locked` exit 0; `npm test` 57 pass / 0 fail / 12 suites; `npm run check:css` CSS fresh; `npm audit` 0 vulnerabilities. Rust compile, test, clippy and doc remain **BLOCKED on this host** for the reasons in the workflow section above, so the Rust changes in this pass are statically reviewed and parse-verified but not compiler-verified. Committed locally on 2026-11-06 as `cde73d0` (this Rust pass), alongside the installer work in `836daa8` and this document's own update in `f9dcbd7`; nothing has been pushed.
