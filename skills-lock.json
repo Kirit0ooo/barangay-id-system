@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "desktop-packaging-tauri": {
+      "source": "agents-inc/skills",
+      "sourceType": "github",
+      "skillPath": "src/skills/desktop-packaging-tauri/SKILL.md",
+      "computedHash": "66e7c4f20e9161f4259abcd55a4627b62a4f2833842902505123d94d9ee6788c"
+    },
+    "distributing-tauri-for-windows": {
+      "source": "dchuk/claude-code-tauri-skills",
+      "sourceType": "github",
+      "skillPath": "tauri/tauri-windows-distribution/SKILL.md",
+      "computedHash": "45673645d000496e86f0bbd7cf0735feba0a9bc13b918d35e78693c47fed2c66"
+    }
+  }
+}
