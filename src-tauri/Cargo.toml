@@ -1,6 +1,6 @@
 [package]
 name = "barangay-id-system"
-version = "1.0.1"
+version = "1.0.4"
 description = "Barangay Resident ID Card Registration System"
 authors = ["Barangay IT"]
 edition = "2021"
