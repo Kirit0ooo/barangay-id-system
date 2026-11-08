@@ -41,7 +41,7 @@ This is an offline-first Tauri v1 desktop application for barangay ID registrati
 
 ### Data flow
 ```
-Frontend (Alpine SPA, src/index.html → src/js/app.js)
+Frontend (Alpine SPA, src/js/app.core.js → view modules → src/js/app.js)
       → src/js/api.js (Tauri invoke wrappers)
       → Tauri commands (src-tauri/src/*.rs)
       → sqlx SQLite (data/residents.db)
@@ -93,10 +93,16 @@ File-level AES-256-GCM encryption for `data/residents.db` and `data/photos/*`:
 | File | Role |
 |------|------|
 | `src/index.html` | Hub-and-spoke welcome dashboard (service tiles) + register/search/settings/detail views; `barangay.ico` favicon + `barangay.png` nav logo |
-| `src/js/app.js` | Alpine SPA: hub dashboard with big service tiles; register/search/settings/detail/bulk-print/import/backup/restore; auto-returns to hub after save/delete/renew/cancel; single `applyTheme()` writer |
+| `src/js/app.core.js` | `window.appState` shared state + core methods (init, theme, civic config, settings, toast); loaded first |
+| `src/js/app.register.js` | Register view: ID generation, photo upload, save/update, clear form, edit mode |
+| `src/js/app.search.js` | Search view: searchResidents, applySearchCategory, pager, fetchAllResidentsPaged |
+| `src/js/app.settings.js` | Settings view: backup, restore, export, import, photo GC, optimize |
+| `src/js/app.detail.js` | Detail view: view/close, delete, renew, card payload, print, preview, bulk print |
+| `src/js/app.dashboard.js` | Dashboard view: status label, gauge arcs, expiry countdown |
+| `src/js/app.js` | Entry point (~20 lines): returns `window.appState`; SPA logic is distributed across the six view modules loaded before it |
 | `src/js/helpers.js` | Pure helpers (dates, contacts, purok options, `residentStatus`, `parseValidUntil`, `todayISO`); dependency-free so tests can load it |
 | `src/js/api.js` | Tauri invoke wrappers for all commands |
-| `src/js/logger.js` / `verbose.js` | Frontend logging to localStorage buffer + backend `log_frontend` invoke |
+| `src/js/logger.js` / `verbose.js` | Frontend logging to localStorage buffer + backend `log_frontend` invoke; `verbose.js` bootstraps `BARANGAY_VERBOSE` before `logger.js` |
 | `src/css/style.css` | Scoped components; kiosk dashboard styles (`.kiosk-head`, `.kiosk-stats`, `.kiosk-stat`, `.kiosk-tiles`, `.kiosk-tile`, `.kiosk-status-group`); design tokens + semantic aliases in `:root` (see repo-root `DESIGN.md`) |
 | `src/css/tailwind.css` | Prebuilt static utilities; freshness-guarded by `tools/check-css.mjs` (fingerprint over index.html + all src/js/*.js except vendored libs, derived at runtime) |
 | `src/card-template.html` | CR100 print template; `textContent` for text + image allowlist (`SAFE_IMG` drops `javascript:`) |
@@ -152,7 +158,7 @@ Remodeled the Welcome dashboard into a kiosk layout (`src/index.html` + `src/css
 | Icons | `src/index.html` | PNG glyphs under `src/icons/` referenced via `<img src="icons/*.png" />` (person, users, calendar, check, refresh, badge, alert, document, search, settings). Sizes via `width`/`height` CSS (24px stat, 32px tile) — fixed-color PNGs, no `currentColor` theming. |
 | CSS | `src/css/style.css` | `.kiosk-stat__icon img` and `.kiosk-tile__icon img` use `width`/`height`/`object-fit:contain` for fixed sizing — no `font-size`/`line-height` Unicode scaling. |
 
-Validation: `npm test` 57/0/12, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
+Validation: `npm test` 57/0/6, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
 
 ## UI/UX consistency pass (2026-10-19)
 
@@ -168,7 +174,7 @@ Visual-consistency polish across all five views — CSS only, zero logic changes
 | `:root` tidy | `src/css/style.css` | Fixed `--font-display`/`--text-xs` indentation; `.kiosk-head__title` double `letter-spacing` deduped |
 | Kiosk tile arrows | `src/index.html` + `src/css/style.css` | Replaced the `→` text char with `src/icons/arrow.svg` `<img>` (20px); hover flips glyph white via `filter:brightness(0) invert(1)` since `currentColor` inside an `<img>` can't inherit page color |
 
-Validation: `npm test` 57/0/12, `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
+Validation: `npm test` 57/0/6, `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
 
 ## Standard project coding workflows
 
@@ -253,7 +259,7 @@ Applied visual polish to the "Register New Resident" view (`src/index.html` + `s
 | Actions bar | `src/index.html:273-279` | Added `register-actions__note` hint + `register-actions__btns` wrapper for sticky mobile actions |
 | CSS | `src/css/style.css` | Added `.register-section__icon` rule; added `.register-photo__preview`, `.register-photo__hint`, `.register-remove` photo-area rules; wired up existing `.register-head`, `.register-section`, `.register-idrow`, `.register-actions__btns`, `.register-photo__cta` rules so animations, sticky actions, photo states, and remove button all render |
 
-Validation: `npm test` 57/0/12, `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
+Validation: `npm test` 57/0/6, `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
 
 ## Welcome dashboard polish (2026-10-16)
 
@@ -278,7 +284,7 @@ Applied frontend-create principles to stat cards, stat hero, and gauge (`src/ind
 | Stat card hover | `src/css/style.css` | Added `filter:brightness(1.15)` on icon hover for all four status card variants |
 | CSS | `src/css/style.css` | Added `.stat-card-group` and `.stat-card-group__label` rules |
 
-Validation: `npm test` 57/0/12, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
+Validation: `npm test` 57/0/6, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
 
 ## Section header uniformity (all pages) (2026-10-16)
 
@@ -290,7 +296,7 @@ Made all four page section headers structurally uniform (`src/index.html:41-66,1
 | Redundant class removed | `src/index.html:167` | Register page: removed misused `register-clear` class from edit-mode Back button (was not a Clear button) |
 | Consistent classes | All pages | All headers now use `hub-back` button class + `view-title` h2 class + hub-back on left |
 
-Validation: `npm test` 57/0/12, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
+Validation: `npm test` 57/0/6, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
 
 ## Frontend modularization (2026-10-16)
 
@@ -312,7 +318,7 @@ Split monolithic `src/js/app.js` (1262 lines) into 6 focused classic-script modu
 - Load order matters: `app.core.js` first, then view modules, then `app.js` entry point
 - Tests updated to concatenate all app modules for path-based string checks (tests/bulk-progress.test.js, tests/golden-card.test.js, tests/regression.test.js, tests/structure.test.js)
 
-Validation: `npm test` 57/0/12, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities, `node --check` clean on all 7 JS files.
+Validation: `npm test` 57/0/6, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities, `node --check` clean on all 7 JS files.
 
 ## Launcher alignment fixes (2026-10-17)
 
@@ -327,7 +333,7 @@ Applied robustness fixes to the Windows PowerShell/batch launchers, zero logic c
 | Stale comment | `tools/launcher-common.ps1` | `Ensure-DataDir` comment corrected: both run.ps1 and build.ps1 call it (was "run.ps1 only") |
 | -Logs narrative | `run.ps1` | `.SYNOPSIS` reworded from "replaces view-logs.bat" to "supersedes view-logs.bat logic; wrapper remains" since view-logs.bat still exists as a live Explorer wrapper |
 
-Validation: `npm test` 57/0/12, `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
+Validation: `npm test` 57/0/6, `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
 
 ## Installer toolchain provisioning (2026-11-05)
 
@@ -417,7 +423,7 @@ Verified on 2026-11-07 with Windows PowerShell (`powershell.exe` interop) by sli
 - `$Prereqs` probe now reports `ok` for WiX Toolset v3 and NSIS makensis (was `optional: ... not found`)
 - `build.ps1 -Help` exit 0 with no error text; `build.bat -Help` exit 0 with output identical to the direct call; code page 437 restored after the wrapper exits; a bad flag exits 1 through the wrapper, matching a direct `build.ps1` call
 - `build.ps1` parses with 0 errors (`[System.Management.Automation.Language.Parser]::ParseFile`), with exactly one definition and one call site of `Invoke-PatchVersionBump`, definition first
-- `npm test` 57 pass / 0 fail / 12 suites. `npm run check:css` was not re-run after the `build.ps1` edit: its fingerprint covers `index.html` and `src/js/*.js`, none of which were touched
+- `npm test` 57 pass / 0 fail / 6 suites. `npm run check:css` was not re-run after the `build.ps1` edit: its fingerprint covers `index.html` and `src/js/*.js`, none of which were touched
 
 Correction to an earlier revision of this section: it claimed `"version": "1.6.3"` appeared 11 times in `Cargo.lock` and survived the bump. That number came from a compression summary and is wrong - `Cargo.lock` contains no `1.6.3` at all. The precision claim is now the line-level diff above, which is measured rather than recalled.
 
@@ -440,7 +446,7 @@ Applied visual polish to the Settings page cards (`src/index.html` + `src/css/st
 | Photo grid | `src/index.html:447` | Fixed bare `grid-cols-3` → `sm:grid-cols-3` so 3 columns render at ≥640px (1 column below) — bare `grid-cols-3` was inert since it is not in the hand-built tailwind.css subset |
 | CSS | `src/css/style.css` | Added `.card--section`, `.card--about`, `.settings-grid`, `.settings-grid--log`, `.settings-chip`, `.settings-actions`, `.settings-progress__track`, `.settings-progress__fill`, `.settings-checkbox`, `.about-grid`, `.about-kv__key`, `.about-kv__value`, `.about-note`, `.section-head__icon`, `.settings-chip svg`, `.log-info`, `.log-info__label`, `.log-info__text` |
 
-Validation: `npm test` 57/0/12, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
+Validation: `npm test` 57/0/6, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
 
 ## Fonts & bundled type (2026-10-17)
 
@@ -458,13 +464,13 @@ All typefaces are bundled locally — no CDN, no external fonts:
 - Replaced `"Work Sans"` with `"Inter"` in card-template.html header comment and README.md body-font line.
 - CSP: `tauri.conf.json` has no `font-src`, so bundled fonts load under `default-src 'self'` (no CSP change needed).
 
-Validation: `npm test` 57/0/12, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
+Validation: `npm test` 57/0/6, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
 
 ## Icons (2026-10-17)
 
 Dashboard glyphs are PNG files under `src/icons/` referenced via `<img src="icons/*.png" />` in `src/index.html` (person, users, calendar, check, refresh, badge, alert, document, search, settings) plus `src/icons/arrow.svg` for the three kiosk-tile arrows (`→` text char retired; fixed-color glyph, hover inverts it white via CSS `filter`). These are static image assets — they do not respond to `currentColor` theming but keep theming consistent across the navy/gold token system since each PNG is a fixed-color render. Five inline `<svg>` section-head icons on the Settings cards were replaced with PNG `<img>` tags on 2026-10-18; PNG icons are the intended source for all dashboard glyphs.
 
-Validation: `npm test` 57/0/12, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
+Validation: `npm test` 57/0/6, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
 
 ## Accessibility & focus polish (2026-10-18)
 
@@ -478,7 +484,7 @@ Zero logic changes — accessibility hardening only:
 | Focus management | `src/js/app.core.js` | Added `focusView()` method that scopes to the visible view container (offsetParent !== null, since all views coexist under x-show) and focuses the first focusable element: dashboard→.kiosk-tile, register→#resident-id, search→#search-input, settings→.hub-back, detail→.hub-back. Wired via `this.$watch('currentView', () => this.focusView())` in `init()`. |
 | Nav orientation chip | `src/index.html` + `src/js/app.core.js` + `src/css/style.css` | Added `.nav-page` chip beside the brand block showing the current view (`.nav-page__dot` gold dot + `.nav-page__label`). Driven by `navPageTitle()` in app.core.js (edit mode narrows Register → "Edit Resident"); `aria-live="polite"` announces view changes. Tab strip stays hidden in kiosk mode. |
 
-Validation: `npm test` 57/0/12, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
+Validation: `npm test` 57/0/6, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
 
 ## Rust codebase quality pass (2026-11-06)
 
@@ -496,4 +502,4 @@ Documentation, error-handling and test work across `src-tauri/src/` plus `tests/
 | Tests | `db.rs` +2, `export.rs` +4, `logger.rs` +3, `residents.rs` +2 | 43 to 54 `#[test]`. New coverage: unique-path never overwrites a prior export (P2-8), local-date backup stem, char-boundary-safe log truncation (the panic regression), `escape_like` wildcard neutralisation (F2), legacy contact pass-through, export column/blank-cell mapping, address join order |
 | Regression guard | `tests/regression.test.js` | New check fails if `PRAGMA wal_checkpoint(TRUNCATE)` appears without a `busy != 0` inspection; the `bundle ships MSI` check asserted NSIS-only at the time (since 2026-11-07 it requires both `nsis` and `msi`). Two unused variables removed and three template literals converted to backticks |
 
-Validation (2026-11-06): `cargo fmt --all -- --check` clean (exit 0, zero output, all 11 files); `cargo metadata --locked` exit 0; `npm test` 57 pass / 0 fail / 12 suites; `npm run check:css` CSS fresh; `npm audit` 0 vulnerabilities. Rust compile, test, clippy and doc remain **BLOCKED on this host** for the reasons in the workflow section above, so the Rust changes in this pass are statically reviewed and parse-verified but not compiler-verified. Committed locally on 2026-11-06 as `cde73d0` (this Rust pass), alongside the installer work in `836daa8` and this document's own update in `f9dcbd7`; nothing has been pushed.
+Validation (2026-11-06): `cargo fmt --all -- --check` clean (exit 0, zero output, all 11 files); `cargo metadata --locked` exit 0; `npm test` 57 pass / 0 fail / 6 suites; `npm run check:css` CSS fresh; `npm audit` 0 vulnerabilities. Rust compile, test, clippy and doc remain **BLOCKED on this host** for the reasons in the workflow section above, so the Rust changes in this pass are statically reviewed and parse-verified but not compiler-verified. Committed locally on 2026-11-06 as `cde73d0` (this Rust pass), alongside the installer work in `836daa8` and this document's own update in `f9dcbd7`; nothing has been pushed.

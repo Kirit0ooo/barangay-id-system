@@ -113,9 +113,9 @@ window.appState = {
     
     // Settings (F15: civic strings centralized; backend config/ is source of truth for QR/civic)
     settings: {
-        barangayName: 'Barangay (Nouvelas Occidental) Balud',
+        barangayName: 'BARANGAY (NOUVELAS OCCIDENTAL) BALUD',
         cityName: 'Basey, Samar',
-        provinceName: 'Province of Samar',
+        provinceName: 'Province of Samar • Municipality of Basey',
         punongName: 'RAYMUND ROSILLER R. DE VEYRA'
     },
     // Theme (red-gradient backdrop opt-in, default off / paper).

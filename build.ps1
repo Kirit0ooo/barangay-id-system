@@ -75,8 +75,7 @@ disagree repairs itself instead of aborting the build.
 Output: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/ and bundle/msi/ + portable exe
 Transcript: logs/build-YYYYMMDD-HHmmss.log (isolated)
 Prereqs (fail-fast gate): Node 20+, npm, Rust MSVC, MSVC linker. Optional (warn-only, no action
-needed): WiX v3 + NSIS 3 (Tauri downloads both into src-tauri\target\.tauri on first build) and
-rustup.
+needed): NSIS 3 (Tauri downloads it into src-tauri\target\.tauri on first build) and rustup.
 Future deps = one row in the $Prereqs table (Name/Level/Test/Fix). The MSI leg also downloads the WebView2 offline installer at build time (network needed).
 Portable pins BEFORE any npm/cargo: NPM_CONFIG_CACHE=./.npm-cache CARGO_TARGET_DIR=./src-tauri/target TMP/TEMP/TMPDIR=./tmp
 Build includes get_cards_batch (bulk print) + optimize_database (E2) - no extra flags needed.
@@ -195,6 +194,7 @@ try {
     # (tauri.bundle.useLocalToolsDir) and never uses a system install.
     $Prereqs = @(
         @{ Name = 'Node.js 20+'; Level = 'required'; Fix = 'https://nodejs.org (LTS 20+; CI pins 20, npm test needs import.meta.dirname)';
+
            Test = { [bool](Get-Command 'node' -ErrorAction SilentlyContinue) } },
         @{ Name = 'npm (ships with Node.js)'; Level = 'required'; Fix = 'reinstall Node.js from https://nodejs.org';
            Test = { [bool](Get-Command 'npm' -ErrorAction SilentlyContinue) } },
@@ -209,15 +209,7 @@ try {
                         if ($vsPath -and (Test-Path (Join-Path $vsPath 'VC\Tools\MSVC'))) { return $true }
                     }
                     return (Test-Path (Join-Path ${env:ProgramFiles} 'Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC')) } },
-        @{ Name = 'WiX Toolset v3 (MSI leg)'; Level = 'warn'; Fix = 'Tauri provisions this itself on the first build - no manual install needed';
-           Test = { if (Test-Path (Join-Path $Root 'src-tauri\target\.tauri\WixTools314\candle.exe')) { return $true }
-                    if (Test-Path (Join-Path ${env:ProgramFiles(x86)} 'WiX Toolset v3.11\bin\candle.exe')) { return $true }
-                    if (Get-Command 'candle.exe' -ErrorAction SilentlyContinue) {
-                        $ver = (& candle.exe -version 2>$null | Out-String).Trim()
-                        return ($ver -match 'v3\.11')
-                    }
-                    return $false } },
-        @{ Name = 'NSIS makensis (nsis leg)'; Level = 'warn'; Fix = 'Tauri provisions this itself on the first build - no manual install needed';
+        @{ Name = 'NSIS makensis (installer leg)'; Level = 'warn'; Fix = 'Tauri provisions this itself on the first build - no manual install needed';
            Test = { if (Test-Path (Join-Path $Root 'src-tauri\target\.tauri\NSIS\makensis.exe')) { return $true }
                     if (Get-Command 'makensis.exe' -ErrorAction SilentlyContinue) { return $true }
                     return (Test-Path 'C:\Program Files (x86)\NSIS\makensis.exe') } },
@@ -256,6 +248,7 @@ try {
     # Stale-output clean: drop previous bundle/ installers so an outdated
     # .msi/.nsis can never be mistaken for the fresh build. -NoClean skips.
     # Only bundle/ is removed (never release/ - that would force a full recompile).
+    # NSIS-only now: stale .msi references gone with the MSI target removal above.
     if (-not $NoClean) {
         if ($PSCmdlet.ShouldProcess('bundle/', 'Remove stale bundle outputs before build')) {
             $bundleDir = Join-Path $Root 'src-tauri\target\x86_64-pc-windows-msvc\release\bundle'
@@ -319,13 +312,17 @@ try {
     } finally { $ErrorActionPreference=$prevEap }
     if ($LASTEXITCODE -ne 0) { throw "tauri build (x86_64-pc-windows-msvc) failed (exit $LASTEXITCODE)" }
 
-    Write-Host "`n[Barangay ID] x64 release outputs (portable exe + nsis + msi bundles):" -ForegroundColor Green
-    Get-ChildItem (Join-Path $Root 'src-tauri\target\x86_64-pc-windows-msvc\release') -File -ErrorAction SilentlyContinue |
-        Where-Object { $_.Extension -in @('.exe', '.msi') } | Select-Object Name, Length, LastWriteTime | Format-Table -AutoSize
+    # NSIS-only output: drop the standalone portable EXE so the only
+    # deliverable artifact is the NSIS installer EXE under bundle/nsis/.
+    $portableExe = Join-Path $Root 'src-tauri\target\x86_64-pc-windows-msvc\release\barangay-id-system.exe'
+    if (Test-Path $portableExe) {
+        Remove-Item $portableExe -Force -ErrorAction Stop
+        Write-Host '[Barangay ID] Removed portable EXE (NSIS-only output).' -ForegroundColor Green
+    }
 
-    Write-Host "`n[Barangay ID] Bundles at: src-tauri\target\x86_64-pc-windows-msvc\release\bundle\ (nsis + msi)" -ForegroundColor Green
+    Write-Host "`n[Barangay ID] NSIS installer EXE output (bundle/nsis/):" -ForegroundColor Green
     Get-ChildItem (Join-Path $Root 'src-tauri\target\x86_64-pc-windows-msvc\release\bundle') -Recurse -File -ErrorAction SilentlyContinue |
-        Select-Object FullName, Length, LastWriteTime | Format-Table -AutoSize
+        Where-Object { $_.Extension -eq '.exe' } | Select-Object FullName, Length, LastWriteTime | Format-Table -AutoSize
 } catch [System.Management.Automation.PipelineStoppedException] {
     Write-Host 'Stopped by user (Ctrl+C) - normal exit.' -ForegroundColor Yellow
     Restore-EnvPins

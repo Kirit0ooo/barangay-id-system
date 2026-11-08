@@ -3,7 +3,7 @@
 **Offline-first desktop app for registering Barangay residents, printing CR100 ID cards, and exporting Excel — built with Rust + Tauri + SQLite + Alpine.js.**  
 Target: **5,000–10,000 residents**, **Windows 10/11 primary** (Linux/WSL secondary), **100% offline**, portable on any local folder with zero cloud dependencies.
 
-> **Version:** 1.0.0 · **Identifier:** `com.barangay.idsystem` · **Edition:** Tauri 1.5
+> **Version:** 1.0.5 · **Identifier:** `com.barangay.idsystem` · **Edition:** Tauri 1.5
 
 ---
 
@@ -167,7 +167,7 @@ npx tauri build
 
 Output (isolated, never in `%TEMP%`):
 ```
-src-tauri/target/release/bundle/msi/Barangay ID Registration System_1.0.1_x64_en-US.msi
+src-tauri/target/release/bundle/msi/Barangay ID Registration System_1.0.4_x64_en-US.msi
 src-tauri/target/release/bundle/nsis/...
 ```
 Install on Win10/11 (per-user MSI — no admin rights needed). The installer creates a **desktop shortcut automatically** (stock Tauri WiX behavior) and installs beside your data:
@@ -341,7 +341,7 @@ Isolated to `tests\` — must stay inside project.
 node tests/smoke.test.js       :: isolation checks: manifest, data/, tmp/, .npmrc
 node tests/regression.test.js  :: regression checks: modal x-if, purok, scope tight, ID MAX, validation, orphan cleanup, wal_checkpoint, QR fallback (+ §33 P0 pins)
 node tests/golden-card.test.js :: field-map parity for the single HTML render path + QR/date helpers (fixtures: normal, long-name edge, legacy DD-MM-YYYY valid_until)
-npm test                        :: runs all three via node --test
+npm test                        :: runs all six suites via node --test (smoke, regression, golden-card, bulk-progress, logic, structure)
 ```
 
 * `cargo test --manifest-path src-tauri/Cargo.toml` — WSL without GTK `glib` will fail (expected Windows-primary); `cargo metadata` still verifies manifest.
