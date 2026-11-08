@@ -220,6 +220,8 @@ check('optimize sentinel tracks 7-day cadence', dbRs.includes('.last_optimize') 
 check('api.js wraps optimizeDatabase', apiJs.includes('optimizeDatabase'), 'frontend wrapper missing');
 check('photo ingest has 10s timeout budget', residentsRs.includes('process_photo_bounded') && residentsRs.includes('from_secs(10)') && residentsRs.includes('timed out'), 'photo timeout missing');
 check('helpers.js extracted + logic tests exist', existsSync(join(root, 'src/js/helpers.js')) && existsSync(join(root, 'tests/logic.test.js')) && indexHtml.includes('js/helpers.js'), 'helpers/logic tests missing');
+check('verbose.js loaded before app.core.js (early BARANGAY_VERBOSE bootstrap)', indexHtml.includes('js/verbose.js') && indexHtml.indexOf('js/verbose.js') < indexHtml.indexOf('js/app.core.js'), 'verbose.js missing or loaded after app.core.js');
+check('app.core.js settings defaults match civic.json (barangay_full uppercase + province with municipality)', appJs.includes("barangayName: 'BARANGAY (NOUVELAS OCCIDENTAL) BALUD'") && appJs.includes("provinceName: 'Province of Samar • Municipality of Basey'") && !appJs.includes("barangayName: 'Barangay (Nouvelas Occidental) Balud'"), 'settings defaults diverge from config/civic.json');
 
 // 26. barangay-fix-short-barangay-001 — paren-first shortBarangay + card favicon
 check('frontend shortBarangay extracts parens first', appJs.includes('match(/\\(([^)]*)\\)/)') && appJs.includes("if (!tokens.length) return 'BALUD'"), 'paren-first extract missing in app.js');
@@ -271,12 +273,8 @@ check('detail hero shows ID expiry below pills', indexHtml.includes('detail-view
 check('donut layers retired', !indexHtml.includes('pieGradMale') && !indexHtml.includes('url(#pieSoft)') && !indexHtml.includes('opacity="0.65"'), 'donut remnants still present');
 check('donut helpers retired', !appJs.includes('pieSpan()') && !appJs.includes('pieOff()') && !appJs.includes('pieBoth()'), 'donut helpers still present');
 
-// 32. per-user MSI (writable one-folder install + automatic desktop shortcut)
-const wixTmpl = readFileSync(join(root, 'src-tauri/wix/main.wxs'), 'utf8');
-check('MSI installs per-user (no admin, writable dir)', wixTmpl.includes('InstallScope="perUser"') && wixTmpl.includes('InstallPrivileges="limited"') && !wixTmpl.includes('InstallScope="perMachine"'), 'MSI still perMachine');
-check('MSI data dir is per-user LocalAppData (not Program Files)', wixTmpl.includes('LocalAppDataFolder') && !wixTmpl.includes('$(var.PlatformProgramFilesFolder)" Name="PFiles"'), 'install dir still Program Files');
-check('MSI creates desktop shortcut automatically', wixTmpl.includes('<Directory Id="DesktopFolder"') && wixTmpl.includes('Id="ApplicationShortcutDesktop"') && wixTmpl.includes('<ComponentRef Id="ApplicationShortcutDesktop"'), 'desktop shortcut missing');
-check('tauri.conf wires custom WiX template', tauriConf.tauri.bundle.windows.wix.template === './wix/main.wxs', 'wix.template not wired');
+// 32. NSIS installer (EXE only)
+check('bundle targets NSIS only (installer EXE only)', tauriConf.tauri.bundle.targets.includes('nsis') && !tauriConf.tauri.bundle.targets.includes('msi'), 'NSIS target missing or MSI still present');
 check('WebView2 embedded offline (no runtime download)', tauriConf.tauri.bundle.windows.webviewInstallMode.type === 'offlineInstaller', 'still bootstrapper/download mode');
 
 // 33. P0 fixes: single backupDB, truthful search-cap toast, shippable MSI, verify removed
@@ -284,8 +282,6 @@ const searchCap = Number((residentsRs.match(/pub const SEARCH_RESULT_LIMIT:\s*i6
 check('backupDB defined once (scheduled-aware wins)', (appJs.match(/async backupDB\(\)/g) || []).length === 1, 'duplicate backupDB still present');
 check('search cap centralized and matches backend', (() => { const m = appJs.match(/const SEARCH_RESULT_CAP\s*=\s*(\d+)/); const feCap = m ? Number(m[1]) : 0; return searchCap > 0 && feCap === searchCap && (appJs.match(/SEARCH_RESULT_CAP/g) || []).length >= 3; })(), 'frontend cap missing, duplicated, or != SEARCH_RESULT_LIMIT');
 check('frontend contact gate mirrors backend (PH-strict + legacy-charset +63)', appJs.includes('+63') && appJs.includes('7') && appJs.includes('mirrors backend'), 'frontend still blanket-rejects legacy numbers the backend accepts');
-check('bundle targets NSIS + MSI (per-user WiX template is ICE-clean at link)', tauriConf.tauri.bundle.targets.includes('nsis') && tauriConf.tauri.bundle.targets.includes('msi'), 'an installer leg is missing');
-check('WiX Path component keys off HKCU (ICE38: a per-user component may not key off a file)', wixTmpl.includes('<File Id="Path" Source="{{app_exe_source}}" KeyPath="no" Checksum="yes"/>') && wixTmpl.includes('Name="PathComponent" Type="integer" Value="1" KeyPath="yes"/>'), 'light.exe exits 204 again');
 check('no .ico in bundle.resources (a root icon resource re-adds the ICE38/ICE64 component)', !JSON.stringify(tauriConf.tauri.bundle.resources || []).includes('.ico'), 'light.exe exits 204 again');
 check('verify module removed', !mainRs.includes('mod verify;'), 'mod verify still present');
 check('verify commands unregistered', !mainRs.includes('verify::get_verify_qr_data_url') && !mainRs.includes('verify::get_verify_cards_batch') && !mainRs.includes('verify::export_verify_registry') && !mainRs.includes('publish_verify_trust'), 'verify commands still in invoke_handler');
@@ -327,6 +323,7 @@ check('card batch uses single WHERE IN query (no N+1 loop)', /WHERE\s+.*IN\s*\(/
 const civicJson = readFileSync(join(root, 'config/civic.json'), 'utf8');
 const civic = JSON.parse(civicJson);
 check('civic.json carries no verify_base_url (offline-only)', !('verify_base_url' in civic), 'stale netlify verify URL still present');
+check('civic.json carries no emergency_defaults dummy data', !('emergency_defaults' in civic), 'dummy emergency_defaults still present');
 check('QR unsigned-by-design documented', qrReadme.includes('unsigned'), 'QR doc does not state unsigned status');
 
 // 42. Task6: M-suite hardening (no unwrap panics, log injection, case orphans, img scheme, revoke timing)
