@@ -107,7 +107,8 @@ pub async fn scheduled_backup(
         let p = parent.to_path_buf();
         tokio::task::spawn_blocking(move || std::fs::create_dir_all(&p).map_err(|e| e.to_string()))
             .await
-            .map_err(|e| format!("Backup task failed: {}", e))??;
+            .map_err(|e| format!("Backup task failed (join): {}", e))?
+            .map_err(|e| format!("Backup task failed: {}", e))?;
     }
     // Windows hot-backup: the live DB can be briefly locked by the pool /
     // AV indexer (os error 32 seen in run logs). Retry the plain copy, then
@@ -207,7 +208,8 @@ pub async fn scheduled_backup(
             std::fs::rename(&tmp_rename, &dst_rename).map_err(|e| e.to_string())
         })
         .await
-        .map_err(|e| format!("Scheduled backup rename failed: {}", e))??;
+        .map_err(|e| format!("Scheduled backup rename failed (join): {}", e))?
+        .map_err(|e| format!("Scheduled backup rename failed: {}", e))?;
         tracing::info!(
             "scheduled_backup used VACUUM INTO fallback after copy retries: {}",
             dest.display()
@@ -326,7 +328,8 @@ pub async fn photo_gc(
             Ok((total, orphans))
         })
         .await
-        .map_err(|e| format!("photo_gc task failed: {}", e))??
+        .map_err(|e| format!("photo_gc task failed (join): {}", e))?
+        .map_err(|e| format!("photo_gc task failed: {}", e))?
     };
     let orphan_count = orphans.len();
     let referenced_count = total.saturating_sub(orphan_count);

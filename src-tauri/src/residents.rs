@@ -1,4 +1,4 @@
-use crate::crypto::load_key;
+use crate::crypto::{load_key, CryptoKey};
 use crate::db::AppState;
 use anyhow::Result;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
+use tracing;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, FromRow, Clone, PartialEq)]
@@ -301,8 +302,8 @@ pub fn normalize_birth_date(raw: &str) -> Result<String, String> {
         return Err("Birth date cannot be in the future".into());
     }
     // P2-8: sanity cap — a living person cannot be more than 120 years old
-    // at time of registration.
-    let oldest_allowed = today - chrono::Duration::days(365 * 120);
+    // at time of registration. Add 31 days for leap years (~30 leap days in 120 years).
+    let oldest_allowed = today - chrono::Duration::days(365 * 120 + 31);
     if parsed < oldest_allowed {
         return Err("Birth date is too old — person would be over 120 years".into());
     }
@@ -1234,7 +1235,7 @@ pub async fn delete_resident(
             .flatten();
     if let Some(rid) = resident_id {
         let ref_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM residents WHERE emergency_contact_resident_id = ? AND is_active = 1 AND id != ?",
+            "SELECT COUNT(*) FROM residents WHERE emergency_contact_resident_id = ? AND id != ?",
         )
         .bind(&rid)
         .bind(id)
@@ -1243,13 +1244,13 @@ pub async fn delete_resident(
         .map_err(|e| e.to_string())?;
         if ref_count > 0 {
             return Err(format!(
-                "Cannot deactivate {}: still referenced as emergency contact by {} active resident(s). Update those records first.",
+                "Cannot deactivate {}: still referenced as emergency contact by {} resident(s). Update those records first.",
                 rid, ref_count
             ));
         }
         // Legacy path where operator stored BRGY- ID in emergency_contact_number
         let legacy_ref: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM residents WHERE UPPER(TRIM(emergency_contact_number)) = UPPER(TRIM(?)) AND is_active = 1 AND id != ?",
+            "SELECT COUNT(*) FROM residents WHERE UPPER(TRIM(emergency_contact_number)) = UPPER(TRIM(?)) AND id != ?",
         )
         .bind(&rid)
         .bind(id)
@@ -1258,7 +1259,7 @@ pub async fn delete_resident(
         .map_err(|e| e.to_string())?;
         if legacy_ref > 0 {
             return Err(format!(
-                "Cannot deactivate {}: still referenced (legacy emergency_contact_number) by {} active resident(s). Update those records first.",
+                "Cannot deactivate {}: still referenced (legacy emergency_contact_number) by {} resident(s). Update those records first.",
                 rid, legacy_ref
             ));
         }
@@ -1775,12 +1776,25 @@ pub(crate) fn resolve_photo_bytes(stored: &str, app_data_dir: &PathBuf) -> Optio
     if t.is_empty() {
         return None;
     }
-    // Load the at-rest key if present; falls back to raw bytes when missing
-    // (e.g. tests, or before first encryption_generate_key).
+    // Load the at-rest key if present; when missing (e.g. tests, or before
+    // first encryption_generate_key), serve plaintext photos raw.
+    // When a key exists but decryption fails (wrong key / corrupted),
+    // return None and log a warning rather than falling back to ciphertext.
     let key = load_key().ok();
-    let decrypt = |b: Vec<u8>| match &key {
-        Some(k) => k.decrypt_or_plaintext(&b),
-        None => b,
+    let decrypt = |b: Vec<u8>| -> Option<Vec<u8>> {
+        match &key {
+            Some(k) => {
+                let decrypted = k.decrypt_or_plaintext(&b);
+                // If the result is still encrypted, decryption failed (wrong key/corrupted).
+                // Return None instead of serving ciphertext as a broken image.
+                if CryptoKey::is_encrypted(&decrypted) {
+                    tracing::warn!("Photo decryption failed (wrong key or corrupted)");
+                    return None;
+                }
+                Some(decrypted)
+            }
+            None => Some(b),
+        }
     };
     // (1) Absolute path inside the project tree.
     let raw = PathBuf::from(t);
@@ -1788,7 +1802,7 @@ pub(crate) fn resolve_photo_bytes(stored: &str, app_data_dir: &PathBuf) -> Optio
         if let Ok(ok) = crate::db::validate_isolated_write_path(&raw) {
             if ok.is_file() {
                 if let Ok(b) = fs::read(&ok) {
-                    return Some(decrypt(b));
+                    return decrypt(b);
                 }
             }
         }
@@ -1802,7 +1816,7 @@ pub(crate) fn resolve_photo_bytes(stored: &str, app_data_dir: &PathBuf) -> Optio
     for p in candidates {
         if p.is_file() {
             if let Ok(b) = fs::read(&p) {
-                return Some(decrypt(b));
+                return decrypt(b);
             }
         }
     }
@@ -2145,7 +2159,8 @@ mod validity_tests {
     #[test]
     fn normalize_birth_date_rejects_120_plus_and_future() {
         let today = chrono::Local::now().date_naive();
-        let oldest_allowed = today - chrono::Duration::days(365 * 120);
+        // Add 29 days for leap years (~30 leap days in 120 years).
+        let oldest_allowed = today - chrono::Duration::days(365 * 120 + 29);
         // 120 years ago exactly — allowed (edge).
         assert!(normalize_birth_date(&oldest_allowed.format("%Y-%m-%d").to_string()).is_ok());
         // 120 years and 1 day ago — rejected.

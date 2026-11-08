@@ -62,7 +62,8 @@ pub async fn backup_database(
         std::fs::create_dir_all(&dir_clone).map_err(|e| e.to_string())
     })
     .await
-    .map_err(|e| format!("Backup task failed: {}", e))??;
+    .map_err(|e| format!("Backup task failed (join): {}", e))?
+    .map_err(|e| format!("Backup task failed: {}", e))?;
 
     let destination = if let Some(path) = backup_path {
         let raw = PathBuf::from(path);
@@ -115,7 +116,8 @@ pub async fn backup_database(
         Ok(())
     })
     .await
-    .map_err(|e| format!("Backup task failed: {}", e))??;
+    .map_err(|e| format!("Backup task failed (join): {}", e))?
+    .map_err(|e| format!("Backup task failed: {}", e))?;
 
     let photos_dir = app_data_dir.join("photos");
     if photos_dir.exists() {
@@ -128,12 +130,10 @@ pub async fn backup_database(
         ));
         let src_photos = photos_dir.clone();
         let dst_photos = photos_backup.clone();
-        let photo_res = tokio::task::spawn_blocking(move || copy_dir_all(&src_photos, &dst_photos))
+        tokio::task::spawn_blocking(move || copy_dir_all(&src_photos, &dst_photos))
             .await
+            .map_err(|e| format!("Photo backup task failed (join): {}", e))?
             .map_err(|e| format!("Photo backup task failed: {}", e))?;
-        if let Err(e) = photo_res {
-            eprintln!("Warning: Could not backup photos: {}", e);
-        }
     }
 
     // P2-6: retention — keep 30 newest backups (regular + scheduled share the

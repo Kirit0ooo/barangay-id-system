@@ -57,8 +57,13 @@ pub async fn encryption_status(state: State<'_, Arc<Mutex<AppState>>>) -> Result
             let entry = entry.map_err(|e| e.to_string())?;
             let path = entry.path();
             if path.is_file() {
-                let data = std::fs::read(&path).map_err(|e| e.to_string())?;
-                if crate::crypto::CryptoKey::is_encrypted(&data) {
+                // Read only the header (magic + version + nonce = 9 + 12 = 21 bytes, plus tag = 16 bytes = 37 total)
+                // to check encryption status without loading the entire file.
+                let mut file = std::fs::File::open(&path).map_err(|e| e.to_string())?;
+                let mut header = [0u8; 37];
+                use std::io::Read;
+                let bytes_read = file.read(&mut header).map_err(|e| e.to_string())?;
+                if bytes_read >= 37 && crate::crypto::CryptoKey::is_encrypted(&header) {
                     photo_enc += 1;
                 } else {
                     photo_plain += 1;
@@ -112,7 +117,9 @@ pub async fn encryption_encrypt_database(
     fs::rename(&enc_tmp, &db_enc_path).map_err(|e| format!("rename tmp→db.enc: {e}"))?;
     let _ = std::fs::remove_file(&db_path);
     // Exit so next launch decrypts before init_db.
-    std::process::exit(0);
+    // Return success message instead of killing the process mid-IPC.
+    // The frontend will show this message and the operator should restart the app.
+    Ok("Database encrypted successfully. Please restart the application.".to_string())
 }
 
 /// Decrypt `data/residents.db.enc` back to `data/residents.db`.

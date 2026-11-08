@@ -427,4 +427,20 @@ mod tests {
         assert!(!CryptoKey::is_encrypted(&ct));
         assert!(key.decrypt(&ct).is_err());
     }
+
+    #[test]
+    fn decrypt_or_plaintext_returns_ciphertext_when_wrong_key() {
+        // Test that decrypt_or_plaintext returns the ciphertext unchanged
+        // when the wrong key is used (it fails GCM auth but doesn't error).
+        let key1 = CryptoKey(Zeroizing::new([1u8; 32]));
+        let key2 = CryptoKey(Zeroizing::new([2u8; 32]));
+        let plaintext = b"secret data";
+        let ciphertext = key1.encrypt(plaintext);
+        assert!(CryptoKey::is_encrypted(&ciphertext));
+        // Wrong key: decrypt_or_plaintext should return ciphertext unchanged
+        // because GCM auth fails and it falls back to raw bytes
+        let result = key2.decrypt_or_plaintext(&ciphertext);
+        assert_eq!(result, ciphertext); // falls back to raw ciphertext
+        assert!(CryptoKey::is_encrypted(&result));
+    }
 }
