@@ -1,11 +1,11 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Barangay ID System - portable release build (Tauri NSIS + MSI).
+    Barangay ID System - portable release build (Tauri NSIS).
 .DESCRIPTION
     Run:
       powershell -ExecutionPolicy Bypass -File .\build.ps1
-    Output stays isolated: src-tauri\target\x86_64-pc-windows-msvc\release\bundle\nsis\ and bundle\msi\ + portable exe
+    Output stays isolated: src-tauri\target\x86_64-pc-windows-msvc\release\bundle\nsis\ + portable exe
     Transcript: logs\build-YYYYMMDD-HHmmss.log
     Portable pins (same as run.ps1) before any npm/cargo:
       NPM_CONFIG_CACHE=./.npm-cache CARGO_TARGET_DIR=./src-tauri/target TMP/TEMP/TMPDIR=./tmp
@@ -115,7 +115,10 @@ function Invoke-PatchVersionBump {
            Write = '(?m)^(version = ")[^"]+(")' },
         @{ File = 'src-tauri\Cargo.lock'; Label = 'src-tauri/Cargo.lock'
            Read = 'name = "barangay-id-system"\r?\nversion = "([^"]+)"'
-           Write = '(name = "barangay-id-system"\r?\nversion = ")[^"]+(")' }
+           Write = '(name = "barangay-id-system"\r?\nversion = ")[^"]+(")' },
+        @{ File = 'src\index.html'; Label = 'src/index.html (About Version)'
+           Read = 'Version</div><div class="about-kv__value font-mono">([^<]+)</div>'
+           Write = '(Version</div><div class="about-kv__value font-mono">)[^<]+(</div>)' }
     )
 
     # 1. Resolve every slot. Highest version found is the base, so a tree whose
@@ -272,6 +275,10 @@ try {
     if (-not $NoBump) {
         if ($PSCmdlet.ShouldProcess('manifests', 'Auto-bump patch version x.y.z -> x.y.z+1 across all manifests')) {
             Invoke-PatchVersionBump -Root $Root
+            # index.html changed (About Version), so restamp the CSS fingerprint
+            # to keep `npm run check:css` green after every build.
+            Write-Host '[Barangay ID] Restamping CSS fingerprint (index.html version changed)...' -ForegroundColor Cyan
+            & node tools/check-css.mjs --update | Out-Host
         }
     }
 

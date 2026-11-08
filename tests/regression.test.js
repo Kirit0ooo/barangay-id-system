@@ -275,7 +275,7 @@ check('donut helpers retired', !appJs.includes('pieSpan()') && !appJs.includes('
 
 // 32. NSIS installer (EXE only)
 check('bundle targets NSIS only (installer EXE only)', tauriConf.tauri.bundle.targets.includes('nsis') && !tauriConf.tauri.bundle.targets.includes('msi'), 'NSIS target missing or MSI still present');
-check('WebView2 embedded offline (no runtime download)', tauriConf.tauri.bundle.windows.webviewInstallMode.type === 'offlineInstaller', 'still bootstrapper/download mode');
+check('WebView2 bootstrapper embedded (small installer)', tauriConf.tauri.bundle.windows.webviewInstallMode.type === 'embedBootstrapper', 'bootstrapper not embedded');
 
 // 33. P0 fixes: single backupDB, truthful search-cap toast, shippable MSI, verify removed
 const searchCap = Number((residentsRs.match(/pub const SEARCH_RESULT_LIMIT:\s*i64\s*=\s*(\d+)/) || [])[1] || 0);
