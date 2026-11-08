@@ -1002,7 +1002,7 @@ html[data-theme="red-gradient"] .help {
 .kiosk-section__title{ font-family:var(--font-display); font-size:clamp(18px,3vw,22px); font-weight:800; letter-spacing:.01em; color:var(--color-text); margin:0; }
 
 /* Kiosk stat row — big numbers, always visible */
-.kiosk-stats{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:10px; }
+.kiosk-stats{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); }
 .kiosk-stat{ display:flex; flex-direction:column; gap:4px; padding:22px 20px; border:2px solid var(--color-border); border-radius:16px; background:var(--color-surface); min-width:0; }
 .kiosk-stat:hover{ border-color:var(--color-border-strong); transform:translateY(-2px); box-shadow:var(--shadow-card); }
 .kiosk-stat:hover .kiosk-stat__icon{ filter:brightness(1.15); }

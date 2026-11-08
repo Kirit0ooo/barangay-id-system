@@ -31,12 +31,6 @@
  <span class="nav-page__dot" aria-hidden="true"></span>
  <span class="nav-page__label" x-text="navPageTitle()">Dashboard</span>
  </div>
- <div hidden>
- <button role="tab" :aria-selected="currentView === 'dashboard'" @click="currentView = 'dashboard'" :class="currentView === 'dashboard' ? 'bg-white text-[#0F2B5E] shadow-sm ring-2 ring-[#C79C14]' : 'bg-white/10 text-white hover:bg-white/20'" class="px-3.5 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 whitespace-nowrap">Dashboard</button>
- <button role="tab" :aria-selected="currentView === 'register'" @click="clearForm(); currentView = 'register'" :class="currentView === 'register' ? 'bg-white text-[#0F2B5E] shadow-sm ring-2 ring-[#C79C14]' : 'bg-white/10 text-white hover:bg-white/20'" class="px-3.5 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 whitespace-nowrap">Register</button>
- <button role="tab" :aria-selected="currentView === 'search'" @click="await searchResidents(); currentView='search'" :class="currentView === 'search' ? 'bg-white text-[#0F2B5E] shadow-sm ring-2 ring-[#C79C14]' : 'bg-white/10 text-white hover:bg-white/20'" class="px-3.5 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 whitespace-nowrap">Search</button>
- <button role="tab" :aria-selected="currentView === 'settings'" @click="await loadCivicConfig(); currentView = 'settings'" :class="currentView === 'settings' ? 'bg-white text-[#0F2B5E] shadow-sm ring-2 ring-[#C79C14]' : 'bg-white/10 text-white hover:bg-white/20'" class="px-3 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 whitespace-nowrap">Settings</button>
- </div>
  </div>
  <div class="h-[3px] bg-[#C79C14]" aria-hidden="true"></div>
  </nav>
