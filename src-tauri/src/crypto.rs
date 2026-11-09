@@ -32,10 +32,9 @@
 //! All file writes use tmp-then-rename (crash-safe, restartable).
 
 use aes_gcm::{
-    aead::{Aead, KeyInit, OsRng},
+    aead::{rand_core::RngCore, Aead, KeyInit, OsRng},
     Aes256Gcm, Nonce,
 };
-use rand::RngCore;
 use std::fs;
 use std::path::{Path, PathBuf};
 use zeroize::Zeroizing;
