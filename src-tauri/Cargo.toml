@@ -12,7 +12,7 @@ tauri-build = { version = "1.5", features = [] }
 tauri = { version = "1.5", features = [ "dialog-save", "dialog-open", "fs-write-file", "fs-read-dir", "fs-remove-file", "fs-remove-dir", "fs-read-file", "fs-create-dir", "fs-copy-file", "fs-rename-file", "fs-exists", "shell-open", "window-all"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite", "macros", "chrono"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "macros", "chrono"] }
 tokio = { version = "1", features = ["full"] }
 anyhow = "1"
 tracing = "0.1"
@@ -28,7 +28,7 @@ base64 = "0.21"
 qrcode = { version = "0.13", features = ["image"] } # preview QR data-URL (get_qr_data_url); kept, PDF-independent
 # Encryption at rest for SQLite database file (AES-256-GCM).
 aes-gcm = "0.10"
-rand = "0.8"
+rand = "0.10"
 zeroize = "1.6"
 
 [features]
