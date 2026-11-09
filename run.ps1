@@ -343,6 +343,9 @@ try {
     Write-Host '[Barangay ID] Starting Tauri dev... (RUST_LOG=$env:RUST_LOG; verbose: $env:RUST_LOG="debug" .\run.ps1)' -ForegroundColor Cyan
     Write-Host '[Barangay ID] R5 scheduled backup/photo GC run inside app (24h interval) - no launcher flag needed.' -ForegroundColor DarkGray
     # NOTE: Excel uses pure-Rust rust_xlsxwriter - no libclang/LLVM needed.
+    # Tauri CLI must run from backend/src (where tauri.conf.json lives); devPath/distDir are
+    # relative to that config (../../frontend/src), so run tauri there and return.
+    Push-Location (Join-Path $Root 'backend\src') | Out-Null
     $prevEap=$ErrorActionPreference; $ErrorActionPreference='Continue'
     try {
         Invoke-SafeNative npx tauri dev | Out-Host
@@ -358,7 +361,10 @@ try {
             exit 0
         }
         throw
-    } finally { $ErrorActionPreference=$prevEap }
+    } finally {
+        $ErrorActionPreference=$prevEap
+        Pop-Location | Out-Null # always return to project root
+    }
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Tauri dev exited with $LASTEXITCODE. Logs: logs/app.log.*, logs/frontend.log, $logFile" -ForegroundColor Red
         Write-Host 'Try: npx tauri info  or  .\run.ps1 -Fix  (clean reinstall)' -ForegroundColor Yellow
