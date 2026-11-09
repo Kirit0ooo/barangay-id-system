@@ -16,20 +16,34 @@ const jsDir = join(root, 'frontend', 'src', 'js');
 const vendorName = 'vendor';
 
 // Collect JS sources: everything under frontend/src/js except vendored libs,
-// plus index.html (the class consumer).
-const sources = ['frontend/src/index.html'];
-try {
-  for (const name of readdirSync(jsDir).sort()) {
-    if (name === vendorName || name.endsWith('.min.js')) {
-      continue;
-    }
-    if (name.endsWith('.js')) {
-      sources.push(join('frontend', 'src', 'js', name));
+// plus index.html (the class consumer). Recurse so nested feature folders
+// (app/, services/, shared/, bootstrap/) are included.
+const collectJs = (dir, rel) => {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const relPath = rel ? join(rel, entry.name) : entry.name;
+    if (entry.isDirectory()) {
+      if (entry.name === vendorName) {
+        continue;
+      }
+      collectJs(join(dir, entry.name), relPath);
+    } else if (entry.name.endsWith('.js') && !entry.name.endsWith('.min.js')) {
+      sources.push(join('frontend', 'src', 'js', relPath));
     }
   }
-} catch {
+};
+
+const sources = ['frontend/src/index.html'];
+collectJs(jsDir, '');
+sources.sort();
+if (sources.length === 1) {
   // fall back to the original pair if frontend/src/js is unavailable
-  sources.push('frontend/src/js/app.js');
+  sources.push('frontend/src/js/app/app.js');
 }
 
 const hash = createHash('sha256');

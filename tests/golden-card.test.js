@@ -207,11 +207,11 @@ check('truncate mirror: widths 12/9/62/48/30/20 hold', [12, 9, 62, 48, 30, 20].e
 // Backend is QR + date helpers only (PDF render deleted); the template +
 // frontend payload is the single render path for preview/print/bulk.
 const idCardRs = readFileSync(join(root, 'backend/src/src/id_card.rs'), 'utf8');
-// App modules are split across app.core/app.register/app.search/app.settings/app.detail/app.dashboard/app.js.
+// App modules are split across app/app.core, app/residents/{register,search,detail}, app/settings/app.settings, app/dashboard/app.dashboard, app/app.js.
 // Concatenate them so path-based string checks still cover all view logic.
-const appModuleFiles = ['app.core','app.register','app.search','app.settings','app.detail','app.dashboard','app'];
-const appJs = appModuleFiles.map(f => readFileSync(join(root, 'frontend/src/js/' + f + '.js'), 'utf8')).join('\n');
-const helpersJs = readFileSync(join(root, 'frontend/src/js/helpers.js'), 'utf8');
+const appModuleFiles = ['app/app.core.js','app/residents/app.register.js','app/residents/app.search.js','app/settings/app.settings.js','app/residents/app.detail.js','app/dashboard/app.dashboard.js','app/app.js'];
+const appJs = appModuleFiles.map(f => readFileSync(join(root, 'frontend/src/js', f), 'utf8')).join('\n');
+const helpersJs = readFileSync(join(root, 'frontend/src/js/shared/helpers.js'), 'utf8');
 const configRs = readFileSync(join(root, 'backend/src/src/config.rs'), 'utf8');
 const cargoToml = readFileSync(join(root, 'backend/src/Cargo.toml'), 'utf8');
 const mainRs = readFileSync(join(root, 'backend/src/src/main.rs'), 'utf8');

@@ -49,8 +49,8 @@ This is an offline-first Tauri v1 desktop application for barangay ID registrati
 
 ### Data flow
 ```
-Frontend (Alpine SPA, frontend/src/js/app.core.js → view modules → frontend/src/js/app.js)
-      → frontend/src/js/api.js (Tauri invoke wrappers)
+Frontend (Alpine SPA, frontend/src/js/app/app.core.js → view modules → frontend/src/js/app/app.js)
+      → frontend/src/js/services/api.js (Tauri invoke wrappers)
       → Tauri commands (backend/src/src/*.rs)
       → sqlx SQLite (data/residents.db)
       → JSON response back to frontend
@@ -89,8 +89,8 @@ File-level AES-256-GCM encryption for `data/residents.db` and `data/photos/*`:
 | Tauri commands | `backend/src/src/encryption.rs` | 6 commands: generate key, status, encrypt/decrypt DB, encrypt/decrypt photos |
 | Key storage | `.crypto-key/key.bin` | 32-byte random key, created on first `encryption_generate_key`, never rotated |
 | File format | `[magic(8) "BRGYENC1"][version(1)][nonce(12)][ciphertext+GCM tag]` | 9-byte header + nonce + ciphertext+GCM tag, random nonce per file |
-| API wrappers | `frontend/src/js/api.js` | `encryptionGenerateKey`, `encryptionStatus`, `encryptionEncryptDatabase`, `encryptionDecryptDatabase`, `encryptionEncryptPhotos`, `encryptionDecryptPhotos` |
-| Settings methods | `frontend/src/js/app.settings.js` | UI methods calling each API wrapper with toast feedback |
+| API wrappers | `frontend/src/js/services/api.js` | `encryptionGenerateKey`, `encryptionStatus`, `encryptionEncryptDatabase`, `encryptionDecryptDatabase`, `encryptionEncryptPhotos`, `encryptionDecryptPhotos` |
+| Settings methods | `frontend/src/js/app/settings/app.settings.js` | UI methods calling each API wrapper with toast feedback |
 | Photo decrypt-on-read | `backend/src/src/residents.rs` `resolve_photo_bytes` | Wired `crate::crypto::load_key` + `CryptoKey::decrypt_or_plaintext` (was `#[allow(dead_code)]`, zero callers) so `get_photo_base64`/`get_resident_photo`/`id_card` print decrypted photos instead of broken images after `encryption_encrypt_photos`. Falls back to raw bytes when no key exists. |
 
 **Threat model:** Protects data from being read by anyone who copies files without also copying `.crypto-key/`. Does NOT protect against an attacker who has both the key file and the data (key sits beside data by design per operator request).
@@ -101,16 +101,16 @@ File-level AES-256-GCM encryption for `data/residents.db` and `data/photos/*`:
 | File | Role |
 |------|------|
 | `frontend/src/index.html` | Hub-and-spoke welcome dashboard (service tiles) + register/search/settings/detail views; `barangay.ico` favicon + `barangay.png` nav logo |
-| `frontend/src/js/app.core.js` | `window.appState` shared state + core methods (init, theme, civic config, settings, toast); loaded first |
-| `frontend/src/js/app.register.js` | Register view: ID generation, photo upload, save/update, clear form, edit mode |
-| `frontend/src/js/app.search.js` | Search view: searchResidents, applySearchCategory, pager, fetchAllResidentsPaged |
-| `frontend/src/js/app.settings.js` | Settings view: backup, restore, export, import, photo GC, optimize |
-| `frontend/src/js/app.detail.js` | Detail view: view/close, delete, renew, card payload, print, preview, bulk print |
-| `frontend/src/js/app.dashboard.js` | Dashboard view: status label, gauge arcs, expiry countdown |
-| `frontend/src/js/app.js` | Entry point (~20 lines): returns `window.appState`; SPA logic is distributed across the six view modules loaded before it |
-| `frontend/src/js/helpers.js` | Pure helpers (dates, contacts, purok options, `residentStatus`, `parseValidUntil`, `todayISO`); dependency-free so tests can load it |
-| `frontend/src/js/api.js` | Tauri invoke wrappers for all commands |
-| `frontend/src/js/logger.js` / `verbose.js` | Frontend logging to localStorage buffer + backend `log_frontend` invoke; `verbose.js` bootstraps `BARANGAY_VERBOSE` before `logger.js` |
+| `frontend/src/js/app/app.core.js` | `window.appState` shared state + core methods (init, theme, civic config, settings, toast); loaded first |
+| `frontend/src/js/app/residents/app.register.js` | Register view: ID generation, photo upload, save/update, clear form, edit mode |
+| `frontend/src/js/app/residents/app.search.js` | Search view: searchResidents, applySearchCategory, pager, fetchAllResidentsPaged |
+| `frontend/src/js/app/settings/app.settings.js` | Settings view: backup, restore, export, import, photo GC, optimize |
+| `frontend/src/js/app/residents/app.detail.js` | Detail view: view/close, delete, renew, card payload, print, preview, bulk print |
+| `frontend/src/js/app/dashboard/app.dashboard.js` | Dashboard view: status label, gauge arcs, expiry countdown |
+| `frontend/src/js/app/app.js` | Entry point (~20 lines): returns `window.appState`; SPA logic is distributed across the six view modules loaded before it |
+| `frontend/src/js/shared/helpers.js` | Pure helpers (dates, contacts, purok options, `residentStatus`, `parseValidUntil`, `todayISO`); dependency-free so tests can load it |
+| `frontend/src/js/services/api.js` | Tauri invoke wrappers for all commands |
+| `frontend/src/js/services/logger.js` / `bootstrap/verbose.js` | Frontend logging to localStorage buffer + backend `log_frontend` invoke; `verbose.js` bootstraps `BARANGAY_VERBOSE` before `logger.js` |
 | `frontend/src/css/style.css` | Scoped components; kiosk dashboard styles (`.kiosk-head`, `.kiosk-stats`, `.kiosk-stat`, `.kiosk-tiles`, `.kiosk-tile`, `.kiosk-status-group`); design tokens + semantic aliases in `:root` (see repo-root `DESIGN.md`) |
 | `frontend/src/css/tailwind.css` | Prebuilt static utilities; freshness-guarded by `tools/check-css.mjs` (fingerprint over index.html + all frontend/src/js/*.js except vendored libs, derived at runtime) |
 | `frontend/src/card-template.html` | CR100 print template; `textContent` for text + image allowlist (`SAFE_IMG` drops `javascript:`) |
@@ -192,7 +192,7 @@ npm test
 ```
 - 6 suites: smoke, regression, golden-card, bulk-progress, logic, structure
 - Must be **57 pass / 0 fail** before declaring any change complete.
-- `tests/logic.test.js` evaluates `frontend/src/js/helpers.js` in a Function scope (real source, not a copy).
+- `tests/logic.test.js` evaluates `frontend/src/js/shared/helpers.js` in a Function scope (real source, not a copy).
 - `tests/regression.test.js` reads project files by path — if you move a markdown/doc file, update the reference there too.
 
 ### CSS freshness check
@@ -312,13 +312,13 @@ Split monolithic `frontend/src/js/app.js` (1262 lines) into 6 focused classic-sc
 
 | File | Lines | Role |
 |------|-------|------|
-| `frontend/src/js/app.core.js` | ~190 | `window.appState` shared state + core methods (init, theme, civic config, settings, toast) |
-| `frontend/src/js/app.register.js` | ~130 | Register view: ID generation, photo upload, save/update, clear form, edit mode |
-| `frontend/src/js/app.search.js` | ~80 | Search view: searchResidents, applySearchCategory, pager, fetchAllResidentsPaged |
-| `frontend/src/js/app.settings.js` | ~100 | Settings view: backup, restore, export, import, photo GC, optimize |
-| `frontend/src/js/app.detail.js` | ~260 | Detail view: view/close, delete, renew, card payload, print, preview, bulk print |
-| `frontend/src/js/app.dashboard.js` | ~70 | Dashboard view: status label, gauge arcs, expiry countdown |
-| `frontend/src/js/app.js` | ~20 | Entry point: `function app() { return window.appState; }` + Alpine bootstrap |
+| `frontend/src/js/app/app.core.js` | ~190 | `window.appState` shared state + core methods (init, theme, civic config, settings, toast) |
+| `frontend/src/js/app/residents/app.register.js` | ~130 | Register view: ID generation, photo upload, save/update, clear form, edit mode |
+| `frontend/src/js/app/residents/app.search.js` | ~80 | Search view: searchResidents, applySearchCategory, pager, fetchAllResidentsPaged |
+| `frontend/src/js/app/settings/app.settings.js` | ~100 | Settings view: backup, restore, export, import, photo GC, optimize |
+| `frontend/src/js/app/residents/app.detail.js` | ~260 | Detail view: view/close, delete, renew, card payload, print, preview, bulk print |
+| `frontend/src/js/app/dashboard/app.dashboard.js` | ~70 | Dashboard view: status label, gauge arcs, expiry countdown |
+| `frontend/src/js/app/app.js` | ~20 | Entry point: `function app() { return window.appState; }` + Alpine bootstrap |
 
 **Design decisions:**
 - `window.appState` (not `window.app`) — avoids collision where `function app()` would overwrite the state object at script load time
@@ -469,8 +469,8 @@ Zero logic changes — accessibility hardening only:
 | Birth date aria pairing | `frontend/src/index.html:202` | `aria-describedby="bdate-help"` on input + matching `id="bdate-help"` on help paragraph |
 | Valid until aria pairing | `frontend/src/index.html:475` | `aria-describedby="valid-until-help"` on input + matching `id="valid-until-help"` on help paragraph |
 | Resident ID aria pairing | `frontend/src/index.html:179` | Pre-existing `aria-describedby="resident-id-help"` — verified pairing with help paragraph |
-| Focus management | `frontend/src/js/app.core.js` | Added `focusView()` method that scopes to the visible view container (offsetParent !== null, since all views coexist under x-show) and focuses the first focusable element: dashboard→.kiosk-tile, register→#resident-id, search→#search-input, settings→.hub-back, detail→.hub-back. Wired via `this.$watch('currentView', () => this.focusView())` in `init()`. |
-| Nav orientation chip | `frontend/src/index.html` + `frontend/src/js/app.core.js` + `frontend/src/css/style.css` | Added `.nav-page` chip beside the brand block showing the current view (`.nav-page__dot` gold dot + `.nav-page__label`). Driven by `navPageTitle()` in app.core.js (edit mode narrows Register → "Edit Resident"); `aria-live="polite"` announces view changes. Tab strip stays hidden in kiosk mode. |
+| Focus management | `frontend/src/js/app/app.core.js` | Added `focusView()` method that scopes to the visible view container (offsetParent !== null, since all views coexist under x-show) and focuses the first focusable element: dashboard→.kiosk-tile, register→#resident-id, search→#search-input, settings→.hub-back, detail→.hub-back. Wired via `this.$watch('currentView', () => this.focusView())` in `init()`. |
+| Nav orientation chip | `frontend/src/index.html` + `frontend/src/js/app/app.core.js` + `frontend/src/css/style.css` | Added `.nav-page` chip beside the brand block showing the current view (`.nav-page__dot` gold dot + `.nav-page__label`). Driven by `navPageTitle()` in app.core.js (edit mode narrows Register → "Edit Resident"); `aria-live="polite"` announces view changes. Tab strip stays hidden in kiosk mode. |
 
 Validation: `npm test` 57/0/6, `npm run stamp:css` + `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
 

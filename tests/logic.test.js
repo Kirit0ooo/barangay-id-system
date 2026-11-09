@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 
 // helpers.js is a classic browser <script> (no exports) — evaluate it in a
 // Function scope so tests run against the real source, not a copy.
-const src = readFileSync(new URL('../frontend/src/js/helpers.js', import.meta.url), 'utf8');
+const src = readFileSync(new URL('../frontend/src/js/shared/helpers.js', import.meta.url), 'utf8');
 const H = new Function(`${src}; return { formatDateDDMMYYYY, normalizeBirthDateForSubmit, truncateCard, formatContactPH, maskContactPH, todayISO, computeAge, parseValidUntil, PUROK_OPTIONS, joinPath, backupBaseName, PHOTO_MAX_FILE_BYTES, residentStatus };`)();
 
 describe('formatDateDDMMYYYY', () => {
