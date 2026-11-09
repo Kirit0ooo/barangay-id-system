@@ -798,11 +798,11 @@ nav[aria-label="Primary"] [role="tab"]{ min-height:40px; padding-top:8px; paddin
 .register-submit{ min-width:160px; }
 
 /* Responsive hardening — register auto-fits 320px → 1920px+ (mobile-first).
-   Photo scales 128 → 140 → 160; grids collapse gracefully; flex rows
+   Photo scales 128 → 140 → 180; grids collapse gracefully; flex rows
    stack on narrow screens. All overrides live here, never tailwind.css. */
 .register-photo{ width:128px; }
 @media (min-width:640px){ .register-photo{ width:140px; } }
-@media (min-width:1024px){ .register-photo{ width:160px; } }
+@media (min-width:1024px){ .register-photo{ width:180px; } }
 
 /* Emergency grid: missing variant — 1 col → 2 col (sm) → 3 col (lg) */
 .form-grid--3{ display:grid; gap:16px; grid-template-columns:minmax(0,1fr); }
@@ -903,7 +903,7 @@ input[type="date"].form-field__input{ min-width:0; }
 .register-hero__row > .flex-shrink-0{ max-width:100%; }
 .register-photo{ width:128px; max-width:100%; }
 @media (min-width:640px){ .register-photo{ width:140px; } }
-@media (min-width:1024px){ .register-photo{ width:160px; } }
+@media (min-width:1024px){ .register-photo{ width:180px; } }
 .register-photo img{ max-width:100%; }
 .register-idhead{ min-width:0; }
 .register-idhead__note{ min-width:0; overflow-wrap:anywhere; }
