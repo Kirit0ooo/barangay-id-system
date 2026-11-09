@@ -1049,6 +1049,15 @@ html[data-theme="red-gradient"] .help {
 .kiosk-stat--year:hover{ border-color:var(--color-success); }
 .kiosk-stat--year:hover .kiosk-stat__icon{ border-color:var(--color-success); background:rgba(5,150,105,.12); }
 
+/* Kiosk stat accent borders — visible at rest, per variant (civic tokens) */
+.kiosk-stat--total{ border-top:4px solid var(--color-primary); }
+.kiosk-stat--gender{ border-top:4px solid var(--color-accent); }
+.kiosk-stat--year{ border-top:4px solid var(--color-success); }
+.kiosk-stat--active{ border-top:4px solid var(--color-success); }
+.kiosk-stat--renew{ border-top:4px solid var(--color-primary); }
+.kiosk-stat--lost{ border-top:4px solid var(--color-error); }
+.kiosk-stat--damage{ border-top:4px solid var(--color-damage); }
+
 /* Kiosk gauge — always visible, no collapsible wrapper */
 
 /* Kiosk service tiles — touch-friendly */
