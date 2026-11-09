@@ -56,6 +56,7 @@ if (-not (Test-Path $CommonModule)) {
     function Set-PortableEnvPins { param([string]$Root) Write-Host '[fallback] Set-PortableEnvPins stub (launcher-common.ps1 missing)' -ForegroundColor Yellow }
     function Restore-EnvPins { Write-Host '[fallback] Restore-EnvPins stub (launcher-common.ps1 missing)' -ForegroundColor Yellow }
     function Invoke-SafeNative { param([string]$Exe, [Parameter(ValueFromRemainingArguments=$true)][string[]]$Arguments) & $Exe @Arguments }
+    function Ensure-DataDir { param([string]$Root) $d = Join-Path $Root 'data'; if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null } }
 } else {
     . $CommonModule
 }
