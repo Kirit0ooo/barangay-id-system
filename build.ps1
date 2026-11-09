@@ -304,6 +304,8 @@ try {
     if (-not (Test-Path $tauriCmd)) { throw 'tauri.cmd still missing after install. Try: .\run.ps1 -Fix' }
 
     $prevEap=$ErrorActionPreference; $ErrorActionPreference='Continue'
+    # Tauri CLI must run from backend/src (where tauri.conf.json lives).
+    Push-Location (Join-Path $Root 'backend\src') | Out-Null
     try {
         Invoke-SafeNative npx tauri build --target x86_64-pc-windows-msvc | Out-Host
     } catch [System.Management.Automation.PipelineStoppedException] {
@@ -317,7 +319,10 @@ try {
             exit 0
         }
         throw
-    } finally { $ErrorActionPreference=$prevEap }
+    } finally {
+        $ErrorActionPreference=$prevEap
+        Pop-Location | Out-Null # always return to project root
+    }
     if ($LASTEXITCODE -ne 0) { throw "tauri build (x86_64-pc-windows-msvc) failed (exit $LASTEXITCODE)" }
 
     # NSIS-only output: drop the standalone portable EXE so the only
