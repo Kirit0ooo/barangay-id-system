@@ -17,6 +17,14 @@ Applies to all sessions in this workspace.
 ## Communication
 - Ask a clarifying question when a requirement is ambiguous instead of guessing.
 
+## Git & branching
+- Branch before every change. Never commit directly to `master`.
+  - Name format: `<type>/<short-slug>` — `fix/launcher-ensure-datadir`, `feat/kiosk-stat-card`, `docs/agents-md-branching`.
+  - `fix` for bug fixes, `feat` for new behavior, `docs` for documentation only, `chore` for tooling/infra.
+- Branch from `master`, keep it short-lived, and delete it after merge.
+- Do not rebase or force-push shared branches. Merge completed feature branches into `master` with `--no-ff`.
+- Before merging, run `npm test` and `npm run check:css`; both must be green.
+- If a change spans multiple files, one branch per logical change. Do not bundle unrelated tweaks into a single branch.
 
 This file instructs every AI agent working in this project. Read it before making any change.
 
