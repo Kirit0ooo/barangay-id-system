@@ -5,7 +5,7 @@ REM Source of truth: build.ps1 (canonical). This batch only sets env pins + forw
 REM Flags forwarded: -Help | -Audit | -NoBump | -NoClean | -EnableVerboseLogging
 REM =============================================================================
 REM Portable contract: all artifacts stay inside this folder (no %APPDATA%/%TEMP% writes).
-REM   NPM_CONFIG_CACHE=.npm-cache   CARGO_TARGET_DIR=src-tauri\target
+REM   NPM_CONFIG_CACHE=.npm-cache   CARGO_TARGET_DIR=backend/src\target
 REM   TMP/TEMP/TMPDIR=tmp           WEBVIEW2_USER_DATA_FOLDER=tmp\webview2
 REM =============================================================================
 REM Single exit path: every branch sets RC and goes to :DONE, so the console code
@@ -28,7 +28,7 @@ chcp 65001 >nul
 
 REM ---- Portable env pins (mirrors build.ps1) ----
 set "NPM_CONFIG_CACHE=%CD%\.npm-cache"
-set "CARGO_TARGET_DIR=%CD%\src-tauri\target"
+set "CARGO_TARGET_DIR=%CD%\backend/src\target"
 set "TMP=%CD%\tmp"
 set "TEMP=%CD%\tmp"
 set "TMPDIR=%CD%\tmp"

@@ -1,7 +1,7 @@
 // Golden card test — field-map parity for the single HTML render path
 // (card-template.html + buildCardPayload) plus the backend QR/date helpers.
 // String-level only: offline, no network, no image rendering.
-// Path (a) mirrors src-tauri/src/id_card.rs: fmt_ddmmyyyy, valid_until_display.
+// Path (a) mirrors backend/src/src/id_card.rs: fmt_ddmmyyyy, valid_until_display.
 // Path (b) mirrors src/js/app.js: formatDateDDMMYYYY, shortBarangay, validity bar, address.
 // Path (c) is the drift guard: the real sources must still contain the formulas
 // these mirrors were copied from (grep pins), so a backend/frontend edit that
@@ -206,15 +206,15 @@ check('truncate mirror: widths 12/9/62/48/30/20 hold', [12, 9, 62, 48, 30, 20].e
 // ---------- Path (c): drift guards on the real sources ----------
 // Backend is QR + date helpers only (PDF render deleted); the template +
 // frontend payload is the single render path for preview/print/bulk.
-const idCardRs = readFileSync(join(root, 'src-tauri/src/id_card.rs'), 'utf8');
+const idCardRs = readFileSync(join(root, 'backend/src/src/id_card.rs'), 'utf8');
 // App modules are split across app.core/app.register/app.search/app.settings/app.detail/app.dashboard/app.js.
 // Concatenate them so path-based string checks still cover all view logic.
 const appModuleFiles = ['app.core','app.register','app.search','app.settings','app.detail','app.dashboard','app'];
-const appJs = appModuleFiles.map(f => readFileSync(join(root, 'src/js/' + f + '.js'), 'utf8')).join('\n');
-const helpersJs = readFileSync(join(root, 'src/js/helpers.js'), 'utf8');
-const configRs = readFileSync(join(root, 'src-tauri/src/config.rs'), 'utf8');
-const cargoToml = readFileSync(join(root, 'src-tauri/Cargo.toml'), 'utf8');
-const mainRs = readFileSync(join(root, 'src-tauri/src/main.rs'), 'utf8');
+const appJs = appModuleFiles.map(f => readFileSync(join(root, 'frontend/src/js/' + f + '.js'), 'utf8')).join('\n');
+const helpersJs = readFileSync(join(root, 'frontend/src/js/helpers.js'), 'utf8');
+const configRs = readFileSync(join(root, 'backend/src/src/config.rs'), 'utf8');
+const cargoToml = readFileSync(join(root, 'backend/src/Cargo.toml'), 'utf8');
+const mainRs = readFileSync(join(root, 'backend/src/src/main.rs'), 'utf8');
 // Comment-stripped copies: historical notes may name deleted PDF items (allowed).
 const idCardCode = idCardRs.replace(/^\s*\/\/.*$/gm, '');
 const cargoCode = cargoToml.replace(/^\s*#.*$/gm, '');
@@ -241,7 +241,7 @@ check('preview path funnels through cardHtmlForResident (CR100 single template)'
 check('no hardcoded card markup in app.js (template file is single source)', !appJs.includes('front-hdr') && !appJs.includes('qr-box') && !appJs.includes('valid-bar') && !appJs.includes('back-bleed') && !appJs.includes('sigbox'));
 check('bulk print loops with page breaks + counter', appJs.includes('printAllCards') && appJs.includes('page-break-after') && appJs.includes('bulkProgress.current'));
 check('no stale navy #050D78 anywhere', !idCardRs.includes('050D78') && !appJs.includes('050D78'));
-const cardTpl = readFileSync(join(root, 'src/card-template.html'), 'utf8');
+const cardTpl = readFileSync(join(root, 'frontend/src/card-template.html'), 'utf8');
 check('template card is 98.6x66.8mm, print is A4 portrait stacked', cardTpl.includes('width:98.6mm') && cardTpl.includes('height:66.8mm') && cardTpl.includes('@page{size:A4 portrait; margin:25.4mm 0 0;}'));
 check('print stacks front over back like preview (block sheet, no forced break)', cardTpl.includes('.sheet{max-width:none; transform:none !important; display:block;}') && cardTpl.includes('.back-bleed{page-break-before:auto;'));
 check('print cut line is a real dashed border (always fully painted)', cardTpl.includes('width:101.7mm; border:.35mm dashed #4b5563;'));

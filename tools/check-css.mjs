@@ -12,20 +12,24 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const stamp = 'tools/css-fingerprint.txt';
-const jsDir = join(root, 'src', 'js');
+const jsDir = join(root, 'frontend', 'src', 'js');
 const vendorName = 'vendor';
 
-// Collect JS sources: everything under src/js except vendored libs,
+// Collect JS sources: everything under frontend/src/js except vendored libs,
 // plus index.html (the class consumer).
-const sources = ['src/index.html'];
+const sources = ['frontend/src/index.html'];
 try {
   for (const name of readdirSync(jsDir).sort()) {
-    if (name === vendorName || name.endsWith('.min.js')) continue;
-    if (name.endsWith('.js')) sources.push(join('src', 'js', name));
+    if (name === vendorName || name.endsWith('.min.js')) {
+      continue;
+    }
+    if (name.endsWith('.js')) {
+      sources.push(join('frontend', 'src', 'js', name));
+    }
   }
 } catch {
-  // fall back to the original pair if src/js is unavailable
-  sources.push('src/js/app.js');
+  // fall back to the original pair if frontend/src/js is unavailable
+  sources.push('frontend/src/js/app.js');
 }
 
 const hash = createHash('sha256');

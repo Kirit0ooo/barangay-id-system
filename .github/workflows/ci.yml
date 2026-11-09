@@ -36,13 +36,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
-      - run: cargo test --manifest-path src-tauri/Cargo.toml
+      - run: cargo test --manifest-path backend/src/Cargo.toml
         env:
-          CARGO_TARGET_DIR: ./src-tauri/target
-      - run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+          CARGO_TARGET_DIR: ./backend/src/target
+      - run: cargo clippy --manifest-path backend/src/Cargo.toml -- -D warnings
         env:
-          CARGO_TARGET_DIR: ./src-tauri/target
-      - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+          CARGO_TARGET_DIR: ./backend/src/target
+      - run: cargo fmt --manifest-path backend/src/Cargo.toml -- --check
   audit-rust:
     runs-on: windows-latest
     steps:
@@ -50,4 +50,4 @@ jobs:
       - uses: rustsec/audit-check@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          working-directory: ./src-tauri
+          working-directory: ./backend/src

@@ -72,7 +72,7 @@ npx tauri dev
       │    ├── css/tailwind.css           # prebuilt static utilities (hand-maintained; guard: npm run check:css)
       │    ├── assets/BALUD.png, bagong-pilipinas.png (logos), Boy.jpg, Girl.jpg (placeholder art, unreferenced — kept per test L3 pin)
       │    ├── card-template.html          # single render path: CR100 98.6×66.8 print template
-      ├── src-tauri\                     # Rust backend
+      ├── backend/src\                     # Rust backend
       │    ├── Cargo.toml / Cargo.lock
       │    ├── tauri.conf.json           # scope $APP/photos|documents|config|backups + $RESOURCE only
       │    ├── build.rs                  # tauri_build
@@ -104,12 +104,12 @@ npx tauri dev
       │    └── regression.test.js        # HIGH-fix + P0 regression checks (growing; see §33 for P0 pins)
       ├── run.ps1                        # CANONICAL dev launcher (PowerShell 5.1+, -Logs/-Fix/-NoInstall/-Help/-Audit; transcript to logs/run-*.log)
       ├── run.bat                        # thin wrapper -> run.ps1 %* (pins same env; minimal :NOPS hint+pause only if PowerShell absent)
-      ├── build.ps1 / build.bat          # release build -> src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/ + logs/build-*.log
+      ├── build.ps1 / build.bat          # release build -> backend/src/target/x86_64-pc-windows-msvc/release/bundle/msi/ + logs/build-*.log
       ├── view-logs.bat                  # thin wrapper -> run.ps1 -Logs + explorer logs\ (Explorer open is the double-click value; tail logic lives in run.ps1)
       └── README.md
 ```
 
-**How isolation works:** `src-tauri/src/db.rs:get_project_root()` walks the drive root → exe parent → cwd looking for marker `barangay.ico` or `src-tauri/`; `get_app_data_dir()` only returns inside that root; `logger::get_logs_dir()` returns `Result` (OS-temp fallback + error log, never `panic!`) (no `ProjectDirs` AppData fallback). Every write path (`backup`, `export`, `id_card`) calls `validate_isolated_write_path()` which asserts `parent.starts_with(root)`. `main.rs` pins `TMP/TEMP/TMPDIR/WEBVIEW2_USER_DATA_FOLDER` to `tmp/` at startup. `.npmrc` `cache=./.npm-cache` + Tauri `fs.scope` tight to `$APP/photos|documents|config|backups` + `$RESOURCE` prevents escape.
+**How isolation works:** `backend/src/src/db.rs:get_project_root()` walks the drive root → exe parent → cwd looking for marker `barangay.ico` or `backend/src/`; `get_app_data_dir()` only returns inside that root; `logger::get_logs_dir()` returns `Result` (OS-temp fallback + error log, never `panic!`) (no `ProjectDirs` AppData fallback). Every write path (`backup`, `export`, `id_card`) calls `validate_isolated_write_path()` which asserts `parent.starts_with(root)`. `main.rs` pins `TMP/TEMP/TMPDIR/WEBVIEW2_USER_DATA_FOLDER` to `tmp/` at startup. `.npmrc` `cache=./.npm-cache` + Tauri `fs.scope` tight to `$APP/photos|documents|config|backups` + `$RESOURCE` prevents escape.
 
 ---
 
@@ -133,7 +133,7 @@ GTK needed for `cargo check`: `libglib2.0-dev libgtk-3-dev pkg-config`. Build no
 ```bat
 cd <project-root>
 
-:: 1. deps (isolated cache .\.npm-cache, target inside src-tauri\target)
+:: 1. deps (isolated cache .\.npm-cache, target inside backend/src\target)
 npm install
 
 :: 2. dev (auto-detects free 127.0.0.1:14xx via TAURI_CONFIG env — see logs)
@@ -167,8 +167,8 @@ npx tauri build
 
 Output (isolated, never in `%TEMP%`):
 ```
-src-tauri/target/release/bundle/msi/Barangay ID Registration System_1.0.4_x64_en-US.msi
-src-tauri/target/release/bundle/nsis/...
+backend/src/target/release/bundle/msi/Barangay ID Registration System_1.0.4_x64_en-US.msi
+backend/src/target/release/bundle/nsis/...
 ```
 Install on Win10/11 (per-user MSI — no admin rights needed). The installer creates a **desktop shortcut automatically** (stock Tauri WiX behavior) and installs beside your data:
 
@@ -179,7 +179,7 @@ Install on Win10/11 (per-user MSI — no admin rights needed). The installer cre
  ├── Documents\  logs\  tmp\  config\
 ```
 
-One folder, exe + data together. Details: `src-tauri/wix/main.wxs` is the official Tauri v1.6 WiX template with two surgical changes — `InstallScope perUser` (+`limited` privileges) and `INSTALLDIR` under `LocalAppDataFolder` instead of Program Files (read-only; the app refuses to start there by design). If a `<project-root>\data` folder already exists, the app keeps using it (portable/USB workflow unchanged).
+One folder, exe + data together. Details: `backend/src/wix/main.wxs` is the official Tauri v1.6 WiX template with two surgical changes — `InstallScope perUser` (+`limited` privileges) and `INSTALLDIR` under `LocalAppDataFolder` instead of Program Files (read-only; the app refuses to start there by design). If a `<project-root>\data` folder already exists, the app keeps using it (portable/USB workflow unchanged).
 
 > **Migrating from an old perMachine install:** uninstall the old MSI first (Windows can't upgrade perMachine → perUser in place), back up via Settings → Backup, then install the new MSI and restore.
 > **Uninstall wipes the install folder including `data\`** (stock WiX `RemoveFolder` behavior) — always take a Backup first.
@@ -191,7 +191,7 @@ One folder, exe + data together. Details: `src-tauri/wix/main.wxs` is the offici
 
 * **Dashboard** — stats `Total` / `Active This Year` / `Male` / `Female` + 10 most recent (client-sorted `date_registered`).
 * **Register/Edit** — fields: name (last/first/middle/suffix), `birth_date*` (DD-MM-YYYY, stored as entered), `gender*` (Male/Female), civil_status, citizenship (default Filipino), occupation, religion, blood_type, height/weight, contact_number, email, address (house/street/**purok**/barangay/city/province), Gov IDs (PhilHealth/SSS/TIN/voter's), emergency contact (name/relation/number), remarks toggle `ACTIVE/RENEW/LOST/DAMAGE`, `valid_until` auto +1 year (no UI), photo (base64 8MB limit → decoded 6MB → resized 600×800 JPEG `{uuid}.jpg`).
-* **Photo slot** — `data/photos/{uuid}.jpg` only; no runtime fallback (P2-11: `src/assets/Boy.jpg`/`Girl.jpg` are unreferenced by code — kept as canonical placeholder art per regression-test L3 pin, not rendered). Without an upload the slot stays empty and the template hides it.
+* **Photo slot** — `data/photos/{uuid}.jpg` only; no runtime fallback (P2-11: `frontend/src/assets/Boy.jpg`/`Girl.jpg` are unreferenced by code — kept as canonical placeholder art per regression-test L3 pin, not rendered). Without an upload the slot stays empty and the template hides it.
 * **ID generation** — `BRGY-YYYY-00001` via `MAX(CAST(substr(resident_id,-5) AS INTEGER))` per year (avoids COUNT reuse after soft-delete), orphan photo cleanup on duplicate.
 * **Search** — `last_name LIKE ? OR first_name LIKE ? OR resident_id LIKE ? OR contact_number LIKE ?` + digit-stripped contact match (so `09171234567` finds stored `0917-123-4567`) + optional `address_purok = ?` + `is_active` toggle, `LIMIT 2000`, ordered `last_name,first_name`.
 * **Soft delete** — `UPDATE is_active=0`, no hard delete; search can include inactive.
@@ -232,8 +232,8 @@ index.html (Alpine) —api.js—> Tauri invoke —main.rs—> Rust commands
 | Legacy PDF | printpdf / genpdf | removed | PDF generation deleted; print is HTML-only |
 | UUID | uuid | 1 v4 | photo filenames |
 | Time | chrono | 0.4 serde | |
-| Frontend | Alpine.js | vendor 3.x | `src/vendor/alpine.min.js` |
-| CSS | Tailwind | prebuilt static | `src/css/tailwind.css` hand-maintained; freshness guard `npm run check:css` (offline, no CDN) |
+| Frontend | Alpine.js | vendor 3.x | `frontend/src/vendor/alpine.min.js` |
+| CSS | Tailwind | prebuilt static | `frontend/src/css/tailwind.css` hand-maintained; freshness guard `npm run check:css` (offline, no CDN) |
 | Node | @tauri-apps/cli | 1.6.3 | dev only |
 | Logs | tracing + appender | 0.1/0.2/0.3 | rolling daily |
 | OS | WebView2 | Edge bundled | Win11 built-in |
@@ -290,7 +290,7 @@ last_pdf_path TEXT, last_pdf_generated_at TEXT, -- legacy PDF audit trail: DORMA
 
 ## Print Output (HTML-only)
 
-No PDFs are generated. The single render path is `src/card-template.html` filled by `src/js/app.js:buildCardPayload` (photo + `get_qr_data_url` + civic config), printed on CR100 98.6×66.8mm:
+No PDFs are generated. The single render path is `frontend/src/card-template.html` filled by `frontend/src/js/app.js:buildCardPayload` (photo + `get_qr_data_url` + civic config), printed on CR100 98.6×66.8mm:
 
 * **Preview** — detail modal `Preview Card` opens the filled template (100% / Fit-width toggle) — WYSIWYG with print.
 * **Print** — detail modal `Print Card (CR100)` prints front then back via hidden iframe (`@page { size: 98.6mm 66.8mm; margin: 0 }`).
@@ -301,11 +301,11 @@ No PDFs are generated. The single render path is `src/card-template.html` filled
 
 ## Configuration
 
-* `src-tauri/tauri.conf.json` — `build.devPath: "../src"`, `distDir: "../src"`, `withGlobalTauri: true`, `allowlist.fs.scope: ["$APP/photos/**","$APP/documents/**","$APP/config/**","$APP/backups/**","$RESOURCE/**"]` (tight), `csp: default-src 'self'; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost` (no `unsafe-eval`; prebuilt CSS needs only `unsafe-inline` for `<style>` blocks).
+* `backend/src/tauri.conf.json` — `build.devPath: "../../frontend/src"`, `distDir: "../../frontend/src"`, `withGlobalTauri: true`, `allowlist.fs.scope: ["$APP/photos/**","$APP/documents/**","$APP/config/**","$APP/backups/**","$RESOURCE/**"]` (tight), `csp: default-src 'self'; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost` (no `unsafe-eval`; prebuilt CSS needs only `unsafe-inline` for `<style>` blocks).
 * `.npmrc` — `cache=./.npm-cache` (isolated).
 * Settings (Barangay/City/Province) — `localStorage barangaySettings` (frontend only, not DB).
-* `.gitignore` — ignores `data/residents.db*`, `data/photos/*`, `data/backups/*`, `tmp/`, `logs/*.log`, `src-tauri/target/`, `node_modules/`, `.npm-cache/`; keeps `.gitkeep` files. PDF-era `data/id_cards/` + `Documents/PDF/` entries removed (P2-11 — dirs the app never creates). `tmp/.gitignore` ignores `*` (keeps `.gitkeep`) — never `node_modules/target` (those live elsewhere).
-* **Card artwork ground truth** — canonical: `src/assets/BALUD.png` + `src/assets/bagong-pilipinas.png` (logos), P2-11: `src/assets/Boy.jpg`/`Girl.jpg` are unreferenced by code (no runtime fallback renders them) but kept as canonical placeholder art — pinned by `tests/regression.test.js` L3, mirrored in `src-tauri/assets/fallback/`. Removed: `src/barangay.ico` (byte-identical dup of root). Root `barangay.ico` is canonical: project-root marker + bundled resource (`tauri.conf.json` resources). `Barangay-ID.pub` + `Barangay-ID.jpg` at root are legacy MS Publisher/design sources, unused by the app, kept for reference only.
+* `.gitignore` — ignores `data/residents.db*`, `data/photos/*`, `data/backups/*`, `tmp/`, `logs/*.log`, `backend/src/target/`, `node_modules/`, `.npm-cache/`; keeps `.gitkeep` files. PDF-era `data/id_cards/` + `Documents/PDF/` entries removed (P2-11 — dirs the app never creates). `tmp/.gitignore` ignores `*` (keeps `.gitkeep`) — never `node_modules/target` (those live elsewhere).
+* **Card artwork ground truth** — canonical: `frontend/src/assets/BALUD.png` + `frontend/src/assets/bagong-pilipinas.png` (logos), P2-11: `frontend/src/assets/Boy.jpg`/`Girl.jpg` are unreferenced by code (no runtime fallback renders them) but kept as canonical placeholder art — pinned by `tests/regression.test.js` L3, mirrored in `backend/src/assets/fallback/`. Removed: `src/barangay.ico` (byte-identical dup of root). Root `barangay.ico` is canonical: project-root marker + bundled resource (`tauri.conf.json` resources). `Barangay-ID.pub` + `Barangay-ID.jpg` at root are legacy MS Publisher/design sources, unused by the app, kept for reference only.
 * **`valid_until` storage** — canonical ISO `YYYY-MM-DD` in DB (legacy `DD-MM-YYYY` rows auto-migrated on startup); DOB/QR `valid` display converts to `DD-MM-YYYY` at every edge (card template, Excel column). The black validity bar is `THIS ID IS VALID UNTIL {MONTH} {YYYY}` built by frontend `buildCardPayload` — never raw `DD-MM-YYYY`. The QR payload is shared via backend `get_qr_data_url`. Photo seat 20.9×26.9 and QR pad 14.6 are fixed in the template.
 
 ---
@@ -317,7 +317,7 @@ All logs stay inside `logs\` (isolated, never `%TEMP%`/`%APPDATA%` outside tree)
 | File | Source | Rotate |
 |---|---|---|
 | `app.log.YYYY-MM-DD` | Rust `tracing` daily rolling | `tracing_appender::rolling::daily(logs,"app.log")` |
-| `frontend.log` | `src/js/logger.js → log_frontend` invoke | append `frontend [level] msg` + `tracing::info!` |
+| `frontend.log` | `frontend/src/js/logger.js → log_frontend` invoke | append `frontend [level] msg` + `tracing::info!` |
 | `run-YYYYMMDD-HHMMSS.log` | `run.bat` tee / `run.ps1` transcript | per launch |
 | `localStorage barangay_log_buffer` | frontend 500-entry ring | downloadable JSON via Settings → Download Frontend Logs |
 
@@ -344,7 +344,7 @@ node tests/golden-card.test.js :: field-map parity for the single HTML render pa
 npm test                        :: runs all six suites via node --test (smoke, regression, golden-card, bulk-progress, logic, structure)
 ```
 
-* `cargo test --manifest-path src-tauri/Cargo.toml` — WSL without GTK `glib` will fail (expected Windows-primary); `cargo metadata` still verifies manifest.
+* `cargo test --manifest-path backend/src/Cargo.toml` — WSL without GTK `glib` will fail (expected Windows-primary); `cargo metadata` still verifies manifest.
 * Dependency audit (warn-only, isolated caches): `powershell -ExecutionPolicy Bypass -File .\build.ps1 -Audit` → `cargo audit` (install hint if missing) + `npm audit --audit-level=moderate`. CI runs `npm audit --audit-level=high` and `rustsec/audit-check` on Windows.
 
 ---
@@ -352,7 +352,7 @@ npm test                        :: runs all six suites via node --test (smoke, r
 ## Scripts Reference
 
 **Portable standard (2026-09-10 → updated 2026-09-10 R5/R6):** every launcher pins `NPM_CONFIG_CACHE=./.npm-cache`,
-`CARGO_TARGET_DIR=./src-tauri/target`, `TMP/TEMP/TMPDIR=./tmp`,
+`CARGO_TARGET_DIR=./backend/src/target`, `TMP/TEMP/TMPDIR=./tmp`,
 `WEBVIEW2_USER_DATA_FOLDER=./tmp/webview2` **before** any npm/cargo call, so no
 writes escape to `%APPDATA%`/`%TEMP%`. `run.ps1`/`build.ps1` require PowerShell 5.1+;
 `.bat` files are thin wrappers (`powershell -ExecutionPolicy Bypass -File .\*.ps1 %*`)
@@ -362,7 +362,7 @@ with a legacy cmd fallback. `run.ps1` is canonical — `.bat` wrappers only forw
 |---|---|---|
 | `run.ps1` *(canonical)* | prereq check (node/npm/rustc with clear msgs) → auto `npm ci`→`install` if `tauri.cmd` missing (reproducible via `package-lock.json`, covers R5 `scheduled.rs`/`photo_gc`/DOB helpers) → `npx tauri dev`; flags `-Logs` (tails `app.log.*`+`frontend.log`+latest `run/build-*.log` and exits) `-Fix` (deep clean `node_modules`+`.npm-cache` then `npm ci`→`install`) `-NoInstall` `-Help` `-Audit` (warn-only cargo audit + npm audit, parity with `build.ps1 -Audit`); `Start-Transcript` to `logs/run-*.log` | `logs/run-*.log` + env pins above |
 | `run.bat` | **thin wrapper** → `run.ps1 %*` (same env pins before `powershell`); minimal `:NOPS` hint+pause only if PowerShell absent; forwards all flags | same pins, `logs/run-*.log` |
-| `build.ps1` *(canonical)* | prereq check → `npm ci`→`install` if needed → `rustup target add` → `npx tauri build --target x86_64-pc-windows-msvc` → `bundle/msi/`+`bundle/nsis/`; transcript | `logs/build-*.log` + `src-tauri/target` |
+| `build.ps1` *(canonical)* | prereq check → `npm ci`→`install` if needed → `rustup target add` → `npx tauri build --target x86_64-pc-windows-msvc` → `bundle/msi/`+`bundle/nsis/`; transcript | `logs/build-*.log` + `backend/src/target` |
 | `build.bat` | **thin wrapper** → `build.ps1 %*` (same env pins); legacy `:NOPS` fallback only if PowerShell absent | same pins |
 | `view-logs.bat` | **thin wrapper** → `run.ps1 -Logs` + `explorer logs\` (Explorer open is the double-click value; tail logic lives in `run.ps1`) | read-only, no env writes |
 
@@ -380,7 +380,7 @@ with a legacy cmd fallback. `run.ps1` is canonical — `.bat` wrappers only forw
 * All `sqlx` queries use `bind()` (no injection); backup no longer interpolates SQL.
 * ID `MAX(substr(...,-5))` per year avoids `COUNT` reuse; R2 retries `MAX→INSERT` once on UNIQUE `resident_id` violation (`BEGIN IMMEDIATE` + re-query MAX) and cleans orphan photo on each failure.
 * R4 Excel import guards: header/width desync asserted (`37` cols), header count mismatch warns & rejects severely malformed sheets, row `len()>headers` truncated, missing columns padded as empty, logged via `tracing::warn!`.
-* R5 Scheduled maintenance: `src-tauri/src/scheduled.rs` — `scheduled_backup` (`wal_checkpoint(TRUNCATE)` → `data/backups/scheduled_*.db`, isolated) and `photo_gc` (orphan scan under `data/photos`, logs count, deletes only with flag) wired via `main.rs` + frontend 24h `setInterval` + Settings Scan/Clean buttons. 100% offline.
+* R5 Scheduled maintenance: `backend/src/src/scheduled.rs` — `scheduled_backup` (`wal_checkpoint(TRUNCATE)` → `data/backups/scheduled_*.db`, isolated) and `photo_gc` (orphan scan under `data/photos`, logs count, deletes only with flag) wired via `main.rs` + frontend 24h `setInterval` + Settings Scan/Clean buttons. 100% offline.
 
 ---
 
@@ -395,7 +395,7 @@ with a legacy cmd fallback. `run.ps1` is canonical — `.bat` wrappers only forw
 | `http://127.0.0.1:1430` in `logs/app.log` | Normal `tauri dev` dev-server (injected `TAURI_CONFIG devPath http://127.0.0.1:1430`); production uses `tauri://localhost`, no http. |
 | `cargo check` on WSL fails `glib-2.0` | Expected — Windows MSI build needs Windows; WSL only for JS tests. |
 | Restore not visible | Restart app — pool holds old WAL handles. |
-| Installer not in `%TEMP%` | By design isolated in `src-tauri/target/release/bundle/`. |
+| Installer not in `%TEMP%` | By design isolated in `backend/src/target/release/bundle/`. |
 
 ---
 
@@ -403,7 +403,7 @@ with a legacy cmd fallback. `run.ps1` is canonical — `.bat` wrappers only forw
 
 * Copy the project folder to USB — data travels with it (portable).
 * MSI installs per-user to LocalAppData (no admin; see wix/main.wxs) but data check still prefers `<project-root>\data` if mounted (via `get_project_root()`), else install-adjacent `data\`.
-* For air-gapped: vendored `src/vendor/alpine.min.js` + prebuilt `src/css/tailwind.css` — no CDN needed.
+* For air-gapped: vendored `frontend/src/vendor/alpine.min.js` + prebuilt `frontend/src/css/tailwind.css` — no CDN needed.
 
 ---
 
