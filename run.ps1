@@ -17,7 +17,7 @@
     WebView2 data, logs, SQLite) stays inside this project folder.
     No writes to %APPDATA%, %TEMP%, drive root, or home.
     Env pins are set BEFORE any npm/cargo/node call:
-      NPM_CONFIG_CACHE=./.npm-cache  CARGO_TARGET_DIR=./src-tauri/target
+      NPM_CONFIG_CACHE=./.npm-cache  CARGO_TARGET_DIR=./backend/src/target
       TMP/TEMP/TMPDIR=./tmp  WEBVIEW2_USER_DATA_FOLDER=./tmp/webview2
     R5 awareness: scheduled backup (wal_checkpoint -> data/backups/scheduled_*) + photo GC
     (orphan scan under data/photos) run at Rust runtime via scheduled.rs + frontend 24h interval
@@ -95,7 +95,7 @@ Usage:
   run.bat [flags]        # thin wrapper -> run.ps1 %* (same env pins); build.bat -> build.ps1; view-logs.bat -> run.ps1 -Logs
 
 Portable contract: all artifacts stay inside this folder (no writes to %APPDATA%/%TEMP%).
-Env pins BEFORE any npm/cargo: NPM_CONFIG_CACHE=./.npm-cache CARGO_TARGET_DIR=./src-tauri/target TMP/TEMP/TMPDIR=./tmp WEBVIEW2_USER_DATA_FOLDER=./tmp/webview2
+Env pins BEFORE any npm/cargo: NPM_CONFIG_CACHE=./.npm-cache CARGO_TARGET_DIR=./backend/src/target TMP/TEMP/TMPDIR=./tmp WEBVIEW2_USER_DATA_FOLDER=./tmp/webview2
 R5: scheduled backup (wal_checkpoint -> data/backups/scheduled_*) + photo GC run inside app (Rust runtime, 24h interval) - launcher just ensures deps via package-lock.json.
 Runtime features (no launcher flags needed): get_cards_batch (P1 bulk print), duplicate-person check (E1),
 optimize_database (E2, 7-day cadence), 10s photo processing budget (E4).
@@ -174,7 +174,7 @@ if ($Audit) {
     $prevEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     try {
         if (Get-Command 'cargo' -ErrorAction SilentlyContinue) {
-            try { Invoke-SafeNative cargo audit --file (Join-Path $Root 'src-tauri\Cargo.lock') | Out-Host }
+            try { Invoke-SafeNative cargo audit --file (Join-Path $Root 'backend/src\Cargo.lock') | Out-Host }
             catch { Write-Host '[audit] cargo-audit not installed - run: cargo install cargo-audit' -ForegroundColor Yellow }
         } else { Write-Host '[audit] cargo not found - skipping Rust audit' -ForegroundColor Yellow }
         Invoke-SafeNative npm audit --audit-level=moderate | Out-Host

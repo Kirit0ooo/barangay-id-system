@@ -5,10 +5,10 @@
 .DESCRIPTION
     Run:
       powershell -ExecutionPolicy Bypass -File .\build.ps1
-    Output stays isolated: src-tauri\target\x86_64-pc-windows-msvc\release\bundle\nsis\ + portable exe
+    Output stays isolated: backend/src/target/x86_64-pc-windows-msvc/release/bundle/nsis\ + portable exe
     Transcript: logs\build-YYYYMMDD-HHmmss.log
     Portable pins (same as run.ps1) before any npm/cargo:
-      NPM_CONFIG_CACHE=./.npm-cache CARGO_TARGET_DIR=./src-tauri/target TMP/TEMP/TMPDIR=./tmp
+      NPM_CONFIG_CACHE=./.npm-cache CARGO_TARGET_DIR=./backend/src/target TMP/TEMP/TMPDIR=./tmp
     Build includes recent runtime commands: get_cards_batch (bulk print) + optimize_database
     (DB optimize, 7-day cadence) - plus E1 duplicate-person check and E4 10s photo budget.
 #>
@@ -73,12 +73,12 @@ x.y.z -> x.y.z+1 across package.json / package-lock.json / tauri.conf.json / Car
 Cargo.lock (see -NoBump) so the compiled binary and installers carry the new version. The highest
 version found in those files is the base and the others are synced to it, so a tree whose manifests
 disagree repairs itself instead of aborting the build.
-Output: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/ and bundle/msi/ + portable exe
+Output: backend/src/target/x86_64-pc-windows-msvc/release/bundle/nsis/ and bundle/msi/ + portable exe
 Transcript: logs/build-YYYYMMDD-HHmmss.log (isolated)
 Prereqs (fail-fast gate): Node 20+, npm, Rust MSVC, MSVC linker. Optional (warn-only, no action
-needed): NSIS 3 (Tauri downloads it into src-tauri\target\.tauri on first build) and rustup.
+needed): NSIS 3 (Tauri downloads it into backend/src\target\.tauri on first build) and rustup.
 Future deps = one row in the $Prereqs table (Name/Level/Test/Fix). The MSI leg also downloads the WebView2 offline installer at build time (network needed).
-Portable pins BEFORE any npm/cargo: NPM_CONFIG_CACHE=./.npm-cache CARGO_TARGET_DIR=./src-tauri/target TMP/TEMP/TMPDIR=./tmp
+Portable pins BEFORE any npm/cargo: NPM_CONFIG_CACHE=./.npm-cache CARGO_TARGET_DIR=./backend/src/target TMP/TEMP/TMPDIR=./tmp
 Build includes get_cards_batch (bulk print) + optimize_database (E2) - no extra flags needed.
 For comment-based help: Get-Help .\build.ps1 -Detailed
 '@
@@ -108,16 +108,16 @@ function Invoke-PatchVersionBump {
         @{ File = 'package-lock.json'; Label = 'package-lock.json (packages entry)'
            Read = '"name": "barangay-id-system",[ \t]*\r?\n[ \t]*"version": "([^"]+)"'
            Write = '("name": "barangay-id-system",[ \t]*\r?\n[ \t]*"version": ")[^"]+(")' },
-        @{ File = 'src-tauri\tauri.conf.json'; Label = 'src-tauri/tauri.conf.json'
+        @{ File = 'backend/src/tauri.conf.json'; Label = 'backend/src/tauri.conf.json'
            Read = '"version": "([^"]+)"'
            Write = '("version": ")[^"]+(")' },
-        @{ File = 'src-tauri\Cargo.toml'; Label = 'src-tauri/Cargo.toml'
+        @{ File = 'backend/src/Cargo.toml'; Label = 'backend/src/Cargo.toml'
            Read = '(?m)^version = "([^"]+)"'
            Write = '(?m)^(version = ")[^"]+(")' },
-        @{ File = 'src-tauri\Cargo.lock'; Label = 'src-tauri/Cargo.lock'
+        @{ File = 'backend/src/Cargo.lock'; Label = 'backend/src/Cargo.lock'
            Read = 'name = "barangay-id-system"\r?\nversion = "([^"]+)"'
            Write = '(name = "barangay-id-system"\r?\nversion = ")[^"]+(")' },
-        @{ File = 'src\index.html'; Label = 'src/index.html (About Version)'
+        @{ File = 'frontend/src/index.html'; Label = 'frontend/src/index.html (About Version)'
            Read = 'Version</div><div class="about-kv__value font-mono">([^<]+)</div>'
            Write = '(Version</div><div class="about-kv__value font-mono">)[^<]+(</div>)' }
     )
@@ -173,7 +173,7 @@ if ($Audit) {
     $prevEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     try {
         if (Get-Command 'cargo' -ErrorAction SilentlyContinue) {
-            try { Invoke-SafeNative cargo audit --file (Join-Path $Root 'src-tauri\Cargo.lock') | Out-Host }
+            try { Invoke-SafeNative cargo audit --file (Join-Path $Root 'backend/src\Cargo.lock') | Out-Host }
             catch { Write-Host '[audit] cargo-audit not installed - run: cargo install cargo-audit' -ForegroundColor Yellow }
         } else { Write-Host '[audit] cargo not found - skipping Rust audit' -ForegroundColor Yellow }
         Invoke-SafeNative npm audit --audit-level=moderate | Out-Host
@@ -214,7 +214,7 @@ try {
                     }
                     return (Test-Path (Join-Path ${env:ProgramFiles} 'Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC')) } },
         @{ Name = 'NSIS makensis (installer leg)'; Level = 'warn'; Fix = 'Tauri provisions this itself on the first build - no manual install needed';
-           Test = { if (Test-Path (Join-Path $Root 'src-tauri\target\.tauri\NSIS\makensis.exe')) { return $true }
+           Test = { if (Test-Path (Join-Path $Root 'backend/src\target\.tauri\NSIS\makensis.exe')) { return $true }
                     if (Get-Command 'makensis.exe' -ErrorAction SilentlyContinue) { return $true }
                     return (Test-Path 'C:\Program Files (x86)\NSIS\makensis.exe') } },
         @{ Name = 'rustup (auto-adds the x86_64-pc-windows-msvc target below)'; Level = 'warn'; Fix = 'https://rustup.rs';
@@ -255,7 +255,7 @@ try {
     # NSIS-only now: stale .msi references gone with the MSI target removal above.
     if (-not $NoClean) {
         if ($PSCmdlet.ShouldProcess('bundle/', 'Remove stale bundle outputs before build')) {
-            $bundleDir = Join-Path $Root 'src-tauri\target\x86_64-pc-windows-msvc\release\bundle'
+            $bundleDir = Join-Path $Root 'backend/src\target\x86_64-pc-windows-msvc\release\bundle'
             if (Test-Path $bundleDir) {
                 $stale = @(Get-ChildItem $bundleDir -Recurse -File -ErrorAction SilentlyContinue)
                 if ($stale.Count -gt 0) {
@@ -322,14 +322,14 @@ try {
 
     # NSIS-only output: drop the standalone portable EXE so the only
     # deliverable artifact is the NSIS installer EXE under bundle/nsis/.
-    $portableExe = Join-Path $Root 'src-tauri\target\x86_64-pc-windows-msvc\release\barangay-id-system.exe'
+    $portableExe = Join-Path $Root 'backend/src\target\x86_64-pc-windows-msvc\release\barangay-id-system.exe'
     if (Test-Path $portableExe) {
         Remove-Item $portableExe -Force -ErrorAction Stop
         Write-Host '[Barangay ID] Removed portable EXE (NSIS-only output).' -ForegroundColor Green
     }
 
     Write-Host "`n[Barangay ID] NSIS installer EXE output (bundle/nsis/):" -ForegroundColor Green
-    Get-ChildItem (Join-Path $Root 'src-tauri\target\x86_64-pc-windows-msvc\release\bundle') -Recurse -File -ErrorAction SilentlyContinue |
+    Get-ChildItem (Join-Path $Root 'backend/src\target\x86_64-pc-windows-msvc\release\bundle') -Recurse -File -ErrorAction SilentlyContinue |
         Where-Object { $_.Extension -eq '.exe' } | Select-Object FullName, Length, LastWriteTime | Format-Table -AutoSize
 } catch [System.Management.Automation.PipelineStoppedException] {
     Write-Host 'Stopped by user (Ctrl+C) - normal exit.' -ForegroundColor Yellow

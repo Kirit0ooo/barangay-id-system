@@ -7,7 +7,7 @@
 #
 # Portable contract (never writes outside the project folder):
 #   NPM_CONFIG_CACHE      = .\ .npm-cache
-#   CARGO_TARGET_DIR      = .\src-tauri\target
+#   CARGO_TARGET_DIR      = .\backend/src\target
 #   TMP/TEMP/TMPDIR       = .\tmp
 #   WEBVIEW2_USER_DATA_FOLDER = .\tmp\webview2
 # =============================================================================
@@ -87,7 +87,7 @@ function Set-PortableEnvPins {
     $script:ORIG_RUST_LOG            = $env:RUST_LOG
 
     $env:NPM_CONFIG_CACHE          = Join-Path $Root '.npm-cache'
-    $env:CARGO_TARGET_DIR          = Join-Path $Root 'src-tauri\target'
+    $env:CARGO_TARGET_DIR          = Join-Path $Root 'backend/src\target'
     $env:TMP                       = Join-Path $Root 'tmp'
     $env:TEMP                      = Join-Path $Root 'tmp'
     $env:TMPDIR                    = Join-Path $Root 'tmp'

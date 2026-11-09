@@ -5,7 +5,7 @@ REM Source of truth: run.ps1 (canonical). This batch only sets env pins + forwar
 REM Flags forwarded: -Logs | -Fix | -NoInstall | -Help | -Audit | -EnableVerboseLogging
 REM =============================================================================
 REM Portable contract: all artifacts stay inside this folder (no %APPDATA%/%TEMP% writes).
-REM   NPM_CONFIG_CACHE=.npm-cache   CARGO_TARGET_DIR=src-tauri\target
+REM   NPM_CONFIG_CACHE=.npm-cache   CARGO_TARGET_DIR=backend/src\target
 REM   TMP/TEMP/TMPDIR=tmp           WEBVIEW2_USER_DATA_FOLDER=tmp\webview2
 REM =============================================================================
 chcp 65001 >nul
@@ -14,7 +14,7 @@ cd /d "%~dp0"
 
 REM ---- Portable env pins (mirrors run.ps1; apply before any npm call) ----
 set "NPM_CONFIG_CACHE=%CD%\.npm-cache"
-set "CARGO_TARGET_DIR=%CD%\src-tauri\target"
+set "CARGO_TARGET_DIR=%CD%\backend/src\target"
 set "TMP=%CD%\tmp"
 set "TEMP=%CD%\tmp"
 set "TMPDIR=%CD%\tmp"

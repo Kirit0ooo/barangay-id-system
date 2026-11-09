@@ -8,12 +8,12 @@ function assert(cond, msg) { if (!cond) throw new Error(msg); }
 
 const checks = [
   ['package.json exists', existsSync(join(root, 'package.json'))],
-  ['tauri.conf.json exists', existsSync(join(root, 'src-tauri/tauri.conf.json'))],
-  ['src/index.html exists', existsSync(join(root, 'src/index.html'))],
-  ['src/js/app.js exists', existsSync(join(root, 'src/js/app.js'))],
-  ['src/js/api.js exists', existsSync(join(root, 'src/js/api.js'))],
-  ['src-tauri/Cargo.toml exists', existsSync(join(root, 'src-tauri/Cargo.toml'))],
-  ['src-tauri/src/main.rs exists', existsSync(join(root, 'src-tauri/src/main.rs'))],
+  ['tauri.conf.json exists', existsSync(join(root, 'backend/src/tauri.conf.json'))],
+  ['src/index.html exists', existsSync(join(root, 'frontend/src/index.html'))],
+  ['src/js/app.js exists', existsSync(join(root, 'frontend/src/js/app/app.js'))],
+  ['src/js/api.js exists', existsSync(join(root, 'frontend/src/js/services/api.js'))],
+  ['backend/src/Cargo.toml exists', existsSync(join(root, 'backend/src/Cargo.toml'))],
+  ['backend/src/src/main.rs exists', existsSync(join(root, 'backend/src/src/main.rs'))],
   ['data dir isolated', existsSync(join(root, 'data'))],
   ['tmp dir isolated', existsSync(join(root, 'tmp'))],
   ['.npmrc forces local cache', readFileSync(join(root, '.npmrc'), 'utf8').includes('./.npm-cache')],

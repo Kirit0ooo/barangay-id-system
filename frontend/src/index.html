@@ -9,7 +9,7 @@
  
  <link rel="stylesheet" href="css/style.css">
  <link rel="icon" type="image/x-icon" href="../barangay.ico">
- <script src="js/verbose.js"></script>
+ <script src="js/bootstrap/verbose.js"></script>
 </head>
 <body class="min-h-screen text-slate-900 antialiased selection:bg-amber-200 selection:text-slate-900">
  <a href="#main-content" class="skip-link">Skip to content</a>
@@ -651,16 +651,16 @@
  </div>
  </div>
 
- <script src="js/logger.js"></script>
- <script src="js/api.js"></script>
- <script src="js/helpers.js"></script>
+<script src="js/services/logger.js"></script>
+<script src="js/services/api.js"></script>
+<script src="js/shared/helpers.js"></script>
  <!-- Modular app (replaces monolithic app.js) — load order matters: core first, then views -->
- <script src="js/app.core.js"></script>
- <script src="js/app.register.js"></script>
- <script src="js/app.search.js"></script>
- <script src="js/app.settings.js"></script>
- <script src="js/app.detail.js"></script>
- <script src="js/app.dashboard.js"></script>
- <script src="js/app.js"></script>
+<script src="js/app/app.core.js"></script>
+<script src="js/app/residents/app.register.js"></script>
+<script src="js/app/residents/app.search.js"></script>
+<script src="js/app/settings/app.settings.js"></script>
+<script src="js/app/residents/app.detail.js"></script>
+<script src="js/app/dashboard/app.dashboard.js"></script>
+<script src="js/app/app.js"></script>
 </body>
 </html>

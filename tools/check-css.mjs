@@ -12,20 +12,38 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const stamp = 'tools/css-fingerprint.txt';
-const jsDir = join(root, 'src', 'js');
+const jsDir = join(root, 'frontend', 'src', 'js');
 const vendorName = 'vendor';
 
-// Collect JS sources: everything under src/js except vendored libs,
-// plus index.html (the class consumer).
-const sources = ['src/index.html'];
-try {
-  for (const name of readdirSync(jsDir).sort()) {
-    if (name === vendorName || name.endsWith('.min.js')) continue;
-    if (name.endsWith('.js')) sources.push(join('src', 'js', name));
+// Collect JS sources: everything under frontend/src/js except vendored libs,
+// plus index.html (the class consumer). Recurse so nested feature folders
+// (app/, services/, shared/, bootstrap/) are included.
+const collectJs = (dir, rel) => {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
   }
-} catch {
-  // fall back to the original pair if src/js is unavailable
-  sources.push('src/js/app.js');
+  for (const entry of entries) {
+    const relPath = rel ? join(rel, entry.name) : entry.name;
+    if (entry.isDirectory()) {
+      if (entry.name === vendorName) {
+        continue;
+      }
+      collectJs(join(dir, entry.name), relPath);
+    } else if (entry.name.endsWith('.js') && !entry.name.endsWith('.min.js')) {
+      sources.push(join('frontend', 'src', 'js', relPath));
+    }
+  }
+};
+
+const sources = ['frontend/src/index.html'];
+collectJs(jsDir, '');
+sources.sort();
+if (sources.length === 1) {
+  // fall back to the original pair if frontend/src/js is unavailable
+  sources.push('frontend/src/js/app/app.js');
 }
 
 const hash = createHash('sha256');

@@ -3,7 +3,7 @@ node_modules/
 .npm-cache/
 
 # Build outputs
-src-tauri/target/
+backend/src/target/
 dist/
 
 # Local data - kept inside project per isolation requirement
@@ -38,7 +38,7 @@ logs/*.log.*
 Thumbs.db
 
 # Keep installer artifacts isolated
-src-tauri/target/release/bundle/
+backend/src/target/release/bundle/
 data/.last_optimize
 
 # Encryption key (AES-256, must never be committed — sits beside data by design)

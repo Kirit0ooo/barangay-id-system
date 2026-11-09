@@ -10,17 +10,17 @@ function check(name, cond, hint='') {
   if (!ok) failed++;
 }
 
-const indexHtml = readFileSync(join(root, 'src/index.html'), 'utf8');
-const tauriConf = JSON.parse(readFileSync(join(root, 'src-tauri/tauri.conf.json'), 'utf8'));
-const cargoToml = readFileSync(join(root, 'src-tauri/Cargo.toml'), 'utf8');
-const mainRs = readFileSync(join(root, 'src-tauri/src/main.rs'), 'utf8');
-const residentsRs = readFileSync(join(root, 'src-tauri/src/residents.rs'), 'utf8');
-const backupRs = readFileSync(join(root, 'src-tauri/src/backup.rs'), 'utf8');
-const idCardRs = readFileSync(join(root, 'src-tauri/src/id_card.rs'), 'utf8');
-const exportRs = readFileSync(join(root, 'src-tauri/src/export.rs'), 'utf8');
-const configRs = readFileSync(join(root, 'src-tauri/src/config.rs'), 'utf8');
-const scheduledRs = readFileSync(join(root, 'src-tauri/src/scheduled.rs'), 'utf8');
-const loggerRs = readFileSync(join(root, 'src-tauri/src/logger.rs'), 'utf8');
+const indexHtml = readFileSync(join(root, 'frontend/src/index.html'), 'utf8');
+const tauriConf = JSON.parse(readFileSync(join(root, 'backend/src/tauri.conf.json'), 'utf8'));
+const cargoToml = readFileSync(join(root, 'backend/src/Cargo.toml'), 'utf8');
+const mainRs = readFileSync(join(root, 'backend/src/src/main.rs'), 'utf8');
+const residentsRs = readFileSync(join(root, 'backend/src/src/residents.rs'), 'utf8');
+const backupRs = readFileSync(join(root, 'backend/src/src/backup.rs'), 'utf8');
+const idCardRs = readFileSync(join(root, 'backend/src/src/id_card.rs'), 'utf8');
+const exportRs = readFileSync(join(root, 'backend/src/src/export.rs'), 'utf8');
+const configRs = readFileSync(join(root, 'backend/src/src/config.rs'), 'utf8');
+const scheduledRs = readFileSync(join(root, 'backend/src/src/scheduled.rs'), 'utf8');
+const loggerRs = readFileSync(join(root, 'backend/src/src/logger.rs'), 'utf8');
 const pkgJson = readFileSync(join(root, 'package.json'), 'utf8');
 let cssGuard = '';
 try {
@@ -29,7 +29,7 @@ try {
   // guard file moved/renamed — check below will fail gracefully instead of
   // aborting the whole module and masking every check below it.
 }
-const cardTpl = readFileSync(join(root, 'src/card-template.html'), 'utf8');
+const cardTpl = readFileSync(join(root, 'frontend/src/card-template.html'), 'utf8');
 const buildPs1 = readFileSync(join(root, 'build.ps1'), 'utf8');
 const runPs1 = readFileSync(join(root, 'run.ps1'), 'utf8');
 const runBat = readFileSync(join(root, 'run.bat'), 'utf8');
@@ -84,20 +84,20 @@ check('main unregisters PDF commands', !mainRs.includes('generate_id_card_pdf') 
 
 // 7. Smoke test path corrected
 const smoke = readFileSync(join(root, 'tests/smoke.test.js'), 'utf8');
-check('smoke test checks src-tauri/tauri.conf.json', smoke.includes("src-tauri/tauri.conf.json"), 'smoke still checks root path');
+check('smoke test checks backend/src/tauri.conf.json', smoke.includes("backend/src/tauri.conf.json"), 'smoke still checks root path');
 
 // 8. Audit P0 — gender stats case-insensitive, search hides soft-deleted, QR command
 check('dashboard stats use UPPER(gender)', residentsRs.includes("UPPER(gender) = 'MALE'") && residentsRs.includes("UPPER(gender) = 'FEMALE'"), 'stats still query Male/Female literals');
 check('search filters soft-deleted by default', /\? = 1 OR is_active = 1/.test(residentsRs), 'search still leaks is_active=0');
 check('search matches digit-stripped contacts (P1-2)', residentsRs.includes("REPLACE(contact_number, '-', '')") && residentsRs.includes('digits_search'), 'formatted-number search missing');
 check('get_qr_data_url command exists', idCardRs.includes('pub async fn get_qr_data_url'), 'QR still regex-scraped only');
-check('main registers get_qr_data_url', readFileSync(join(root, 'src-tauri/src/main.rs'), 'utf8').includes('id_card::get_qr_data_url'), 'command not registered');
-const apiJs = readFileSync(join(root, 'src/js/api.js'), 'utf8');
+check('main registers get_qr_data_url', readFileSync(join(root, 'backend/src/src/main.rs'), 'utf8').includes('id_card::get_qr_data_url'), 'command not registered');
+const apiJs = readFileSync(join(root, 'frontend/src/js/services/api.js'), 'utf8');
 check('api.js wraps getQrDataUrl', apiJs.includes('getQrDataUrl'), 'frontend still scrapes QR');
-// App modules are split across app.core/app.register/app.search/app.settings/app.detail/app.dashboard/app.js.
+// App modules are split across app/app.core, app/residents/{register,search,detail}, app/settings/app.settings, app/dashboard/app.dashboard, app/app.js.
 // Concatenate them so path-based string checks still cover all view logic.
-const appModuleFiles = ['app.core','app.register','app.search','app.settings','app.detail','app.dashboard','app'];
-const appJs = appModuleFiles.map(f => readFileSync(join(root, `src/js/${f}.js`), 'utf8')).join('\n');
+const appModuleFiles = ['app/app.core.js','app/residents/app.register.js','app/residents/app.search.js','app/settings/app.settings.js','app/residents/app.detail.js','app/dashboard/app.dashboard.js','app/app.js'];
+const appJs = appModuleFiles.map(f => readFileSync(join(root, 'frontend/src/js', f), 'utf8')).join('\n');
 check('buildCardPayload calls getQrDataUrl', appJs.includes('API.getQrDataUrl(residentId)'), 'buildCardPayload still regex-first');
 check('shortBarangay BALUD-substring hack gone', !appJs.includes("if (s.includes('BALUD')) return 'BALUD'"), 'hack still present');
 check('update deletes old photo only after commit', residentsRs.includes('commit won'), 'photo-loss reorder missing');
@@ -106,11 +106,11 @@ check('update reads old photo from DB', residentsRs.includes('SELECT photo_filen
 // 9. Audit P1 — ISO valid_until storage, server short_barangay, bulk dir reuse
 check('valid_until stored ISO', residentsRs.includes('vu.format("%Y-%m-%d")'), 'still stores DD-MM-YYYY');
 check('normalize_valid_until exists', residentsRs.includes('fn normalize_valid_until'), 'no validity normalizer');
-check('db migrates legacy DD-MM-YYYY validity', readFileSync(join(root, 'src-tauri/src/db.rs'), 'utf8').includes("GLOB '??-??-????'"), 'migration missing');
-check('get_short_barangay command exists', readFileSync(join(root, 'src-tauri/src/config.rs'), 'utf8').includes('pub async fn get_short_barangay'), 'no server short_barangay');
+check('db migrates legacy DD-MM-YYYY validity', readFileSync(join(root, 'backend/src/src/db.rs'), 'utf8').includes("GLOB '??-??-????'"), 'migration missing');
+check('get_short_barangay command exists', readFileSync(join(root, 'backend/src/src/config.rs'), 'utf8').includes('pub async fn get_short_barangay'), 'no server short_barangay');
 check('no bulk PDF machinery', !idCardCode.includes('BulkIdResult') && !idCardCode.includes('bulk-progress') && !idCardCode.includes('failures.json') && !idCardCode.includes('BulkProgress'), 'bulk PDF structs/events still present');
 check('bulk print is JS-loop (printAllCards)', appJs.includes('printAllCards') && appJs.includes('page-break-after'), 'no JS bulk-print loop');
-check('no duplicate FRONT/BACK template dupes', !existsSync(join(root, 'FRONT.png')) && !existsSync(join(root, 'src/FRONT.png')) && !existsSync(join(root, 'src/assets/FRONT.png')), 'dupes still present');
+check('no duplicate FRONT/BACK template dupes', !existsSync(join(root, 'FRONT.png')) && !existsSync(join(root, 'frontend/src/FRONT.png')) && !existsSync(join(root, 'frontend/src/assets/FRONT.png')), 'dupes still present');
 check('no _cspNote in tauri.conf.json', !JSON.stringify(tauriConf).includes('_cspNote'), 'custom _cspNote field present');
 check('birthdate input keeps only :max binding', indexHtml.includes(':max="todayISO()"') && !indexHtml.includes('max="9999-12-31"'), 'redundant static max still present');
 check('package.json test script wires smoke+regression', JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).scripts.test.includes('tests/smoke') && JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).scripts.test.includes('tests/regression'), 'npm test not wired');
@@ -122,8 +122,8 @@ check('export write_excel ensures parent dir', exportRs.includes('create_dir_all
 check('civic.json size limit exists', configRs.includes('MAX_CIVIC_JSON'), 'no size guard on civic.json');
 
 // 10. barangay-impl-002 — M1 CSP tightening (prebuilt static CSS, no Play CDN)
-const dbRs = readFileSync(join(root, 'src-tauri/src/db.rs'), 'utf8');
-const tailwindCss = readFileSync(join(root, 'src/css/tailwind.css'), 'utf8');
+const dbRs = readFileSync(join(root, 'backend/src/src/db.rs'), 'utf8');
+const tailwindCss = readFileSync(join(root, 'frontend/src/css/tailwind.css'), 'utf8');
 check('checkpoint helper inspects the busy result', dbRs.includes('PRAGMA wal_checkpoint(TRUNCATE)') && /busy\s*!=\s*0/.test(dbRs), 'a busy checkpoint is a successful query — the result row must be checked or committed WAL data is silently dropped');
 check('Play CDN runtime unlinked', !indexHtml.includes('vendor/tailwindcss.js'), 'tailwindcss.js script still linked');
 check('prebuilt static CSS linked', indexHtml.includes('css/tailwind.css'), 'tailwind.css link missing');
@@ -149,13 +149,13 @@ check('legacy pdf_filename delegates', /pub fn per_resident_pdf_filename[\s\S]*?
 
 // 14. barangay-impl-002 — L3 asset dedupe (canonical src/assets only)
 check('root image dupes removed', !existsSync(join(root, 'BALUD.png')) && !existsSync(join(root, 'bagong_pilipinas.png')) && !existsSync(join(root, 'Boy.jpg')) && !existsSync(join(root, 'Girl.jpg')), 'root dupes still present');
-check('unreferenced logos/ removed', !existsSync(join(root, 'src-tauri/assets/logos')), 'logos/ still present');
-check('canonical src/assets kept', existsSync(join(root, 'src/assets/BALUD.png')) && existsSync(join(root, 'src/assets/bagong-pilipinas.png')) && existsSync(join(root, 'src/assets/Boy.jpg')) && existsSync(join(root, 'src/assets/Girl.jpg')), 'canonical assets missing');
-check('backend fallback assets kept', existsSync(join(root, 'src-tauri/assets/fallback/Boy.jpg')) && existsSync(join(root, 'src-tauri/assets/fallback/Girl.jpg')), 'fallback assets missing');
+check('unreferenced logos/ removed', !existsSync(join(root, 'backend/src/assets/logos')), 'logos/ still present');
+check('canonical src/assets kept', existsSync(join(root, 'frontend/src/assets/BALUD.png')) && existsSync(join(root, 'frontend/src/assets/bagong-pilipinas.png')) && existsSync(join(root, 'frontend/src/assets/Boy.jpg')) && existsSync(join(root, 'frontend/src/assets/Girl.jpg')), 'canonical assets missing');
+check('backend fallback assets kept', existsSync(join(root, 'backend/src/assets/fallback/Boy.jpg')) && existsSync(join(root, 'backend/src/assets/fallback/Girl.jpg')), 'fallback assets missing');
 check('project marker kept', existsSync(join(root, 'barangay.ico')), 'barangay.ico marker removed');
 
 // 15. barangay-impl-002 — L1 validity single-sourced (backend truth)
-check('backend valid_until_display is truth', readFileSync(join(root, 'src-tauri/src/id_card.rs'), 'utf8').includes('L1 single source of truth'), 'no single-source marker');
+check('backend valid_until_display is truth', readFileSync(join(root, 'backend/src/src/id_card.rs'), 'utf8').includes('L1 single source of truth'), 'no single-source marker');
 check('frontend mirrors backend validity', appJs.includes('L1') && appJs.includes('id_card.rs::valid_until_display'), 'frontend not marked as mirror');
 
 // 16. repair — M-1 create path never holds the Mutex across its write txn
@@ -209,7 +209,7 @@ check('CSS freshness check wired (P2-10)', pkgJson.includes('check:css'), 'no st
 // tools/check-css.mjs. A legitimate refactor that renames those locals trips this
 // check as a false red — update the spelling here rather than restoring the old
 // hardcoded sources = ['src/index.html','src/js/app.js'] pair.
-check('check-css derives JS sources at runtime', cssGuard.includes('readdirSync(jsDir)') && cssGuard.includes('name === vendorName') && cssGuard.includes('.min.js'), 'guard missing or reverted to hardcoded sources');
+check('check-css derives JS sources at runtime', cssGuard.includes('readdirSync') && cssGuard.includes('collectJs') && cssGuard.includes('vendorName') && cssGuard.includes('.min.js'), 'guard missing or reverted to hardcoded sources');
 check('update ignores echoed photo filename (P2-12)', residentsRs.includes('never trust the echoed client filename'), 'stale echo can still overwrite photo');
 check('todayISO uses local time (P2-14)', appJs.includes('getFullYear') && !/function todayISO\(\)\s*\{[^}]*toISOString/.test(appJs), 'todayISO still UTC');
 
@@ -219,8 +219,8 @@ check('optimize_database fn exists (PRAGMA optimize + incremental vacuum)', dbRs
 check('optimize sentinel tracks 7-day cadence', dbRs.includes('.last_optimize') && mainRs.includes('db::optimize_database_cmd'), 'sentinel/command not wired');
 check('api.js wraps optimizeDatabase', apiJs.includes('optimizeDatabase'), 'frontend wrapper missing');
 check('photo ingest has 10s timeout budget', residentsRs.includes('process_photo_bounded') && residentsRs.includes('from_secs(10)') && residentsRs.includes('timed out'), 'photo timeout missing');
-check('helpers.js extracted + logic tests exist', existsSync(join(root, 'src/js/helpers.js')) && existsSync(join(root, 'tests/logic.test.js')) && indexHtml.includes('js/helpers.js'), 'helpers/logic tests missing');
-check('verbose.js loaded before app.core.js (early BARANGAY_VERBOSE bootstrap)', indexHtml.includes('js/verbose.js') && indexHtml.indexOf('js/verbose.js') < indexHtml.indexOf('js/app.core.js'), 'verbose.js missing or loaded after app.core.js');
+check('helpers.js extracted + logic tests exist', existsSync(join(root, 'frontend/src/js/shared/helpers.js')) && existsSync(join(root, 'tests/logic.test.js')) && indexHtml.includes('js/shared/helpers.js'), 'helpers/logic tests missing');
+check('verbose.js loaded before app.core.js (early BARANGAY_VERBOSE bootstrap)', indexHtml.includes('js/bootstrap/verbose.js') && indexHtml.indexOf('js/bootstrap/verbose.js') < indexHtml.indexOf('js/app/app.core.js'), 'verbose.js missing or loaded after app.core.js');
 check('app.core.js settings defaults match civic.json (barangay_full uppercase + province with municipality)', appJs.includes("barangayName: 'BARANGAY (NOUVELAS OCCIDENTAL) BALUD'") && appJs.includes("provinceName: 'Province of Samar • Municipality of Basey'") && !appJs.includes("barangayName: 'Barangay (Nouvelas Occidental) Balud'"), 'settings defaults diverge from config/civic.json');
 
 // 26. barangay-fix-short-barangay-001 — paren-first shortBarangay + card favicon
@@ -241,13 +241,13 @@ check('detail Edit goes to register (no closeDetail bounce)', !indexHtml.include
 check('detail dismisses with Esc', indexHtml.includes(`@keydown.escape.window`), 'Esc-to-close missing on app root');
 
 // 29. paper backdrop — titles stay readable, surfaces stay light (C1: red backdrop retired)
-const styleCss = readFileSync(join(root, 'src/css/style.css'), 'utf8');
+const styleCss = readFileSync(join(root, 'frontend/src/css/style.css'), 'utf8');
 check('paper backdrop token in use', styleCss.includes('background:var(--paper);') && !/body\s*\{\s*background:var\(--amber-neon\)/.test(styleCss), 'backdrop must be paper, not amber-neon red');
 check('all five view titles use view-title', (indexHtml.match(/view-title"/g) || []).length >= 5, 'every view h2 needs view-title');
 check('content surfaces stay light', styleCss.includes('.stat-card{\n  background:var(--color-surface);') && styleCss.includes('.form-section{\n  background:var(--color-surface);'), 'cards/stats/forms must stay white surfaces');
 
 // 30. contact auto-dash mask — 11 digits, 0990-123-4567, submit gate
-const helpersJs = readFileSync(join(root, 'src/js/helpers.js'), 'utf8');
+const helpersJs = readFileSync(join(root, 'frontend/src/js/shared/helpers.js'), 'utf8');
 check('maskContactPH helper exists', helpersJs.includes('function maskContactPH('), 'mask helper missing');
 check('contact inputs use mask handler', indexHtml.includes(`onContactInput($event, 'contact_number')`) && indexHtml.includes(`onContactInput($event, 'emergency_contact_number')`), 'inputs not wired to mask');
 check('contact inputs capped by maxlength', indexHtml.includes('id="inp-contact"') && indexHtml.includes('maxlength="13"'), 'maxlength cap missing');
@@ -327,7 +327,7 @@ check('civic.json carries no emergency_defaults dummy data', !('emergency_defaul
 check('QR unsigned-by-design documented', qrReadme.includes('unsigned'), 'QR doc does not state unsigned status');
 
 // 42. Task6: M-suite hardening (no unwrap panics, log injection, case orphans, img scheme, revoke timing)
-const loggerJs = readFileSync(join(root, 'src/js/logger.js'), 'utf8');
+const loggerJs = readFileSync(join(root, 'frontend/src/js/services/logger.js'), 'utf8');
 check('backup tmp-name handles dir-root dest (no file_name().unwrap())', !backupRs.includes('file_name().unwrap()'), 'unwrap panics when dest is a dir root');
 check('frontend log strips newline injection', loggerRs.includes("\\n") && (loggerRs.includes("replace") || loggerRs.includes("' '")), 'log forging via embedded newlines');
 check('frontend log caps single-message size', /8000|truncate|chars\(\)\.take/.test(loggerRs), 'one unbounded message blows past 5MB rotation check');

@@ -12,15 +12,15 @@ function check(name, cond, hint = '') {
   if (!ok) failed++;
 }
 
-const idCardRs = readFileSync(join(root, 'src-tauri/src/id_card.rs'), 'utf8');
-const mainRs = readFileSync(join(root, 'src-tauri/src/main.rs'), 'utf8');
-const apiJs = readFileSync(join(root, 'src/js/api.js'), 'utf8');
-// App modules are split across app.core/app.register/app.search/app.settings/app.detail/app.dashboard/app.js.
+const idCardRs = readFileSync(join(root, 'backend/src/src/id_card.rs'), 'utf8');
+const mainRs = readFileSync(join(root, 'backend/src/src/main.rs'), 'utf8');
+const apiJs = readFileSync(join(root, 'frontend/src/js/services/api.js'), 'utf8');
+// App modules are split across app/app.core, app/residents/{register,search,detail}, app/settings/app.settings, app/dashboard/app.dashboard, app/app.js.
 // Concatenate them so path-based string checks still cover all view logic.
-const appModuleFiles = ['app.core','app.register','app.search','app.settings','app.detail','app.dashboard','app'];
-const appJs = appModuleFiles.map(f => readFileSync(join(root, 'src/js/' + f + '.js'), 'utf8')).join('\n');
-const indexHtml = readFileSync(join(root, 'src/index.html'), 'utf8');
-const cardTpl = readFileSync(join(root, 'src/card-template.html'), 'utf8');
+const appModuleFiles = ['app/app.core.js','app/residents/app.register.js','app/residents/app.search.js','app/settings/app.settings.js','app/residents/app.detail.js','app/dashboard/app.dashboard.js','app/app.js'];
+const appJs = appModuleFiles.map(f => readFileSync(join(root, 'frontend/src/js', f), 'utf8')).join('\n');
+const indexHtml = readFileSync(join(root, 'frontend/src/index.html'), 'utf8');
+const cardTpl = readFileSync(join(root, 'frontend/src/card-template.html'), 'utf8');
 // Comment-stripped copy: historical notes may name deleted PDF items (allowed).
 const idCardCode = idCardRs.replace(/^\s*\/\/.*$/gm, '');
 

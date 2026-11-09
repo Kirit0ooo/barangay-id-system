@@ -11,8 +11,8 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const html = readFileSync(join(root, 'src/index.html'), 'utf8');
-const styleCss = readFileSync(join(root, 'src/css/style.css'), 'utf8');
+const html = readFileSync(join(root, 'frontend/src/index.html'), 'utf8');
+const styleCss = readFileSync(join(root, 'frontend/src/css/style.css'), 'utf8');
 
 const VOID = new Set(['meta', 'img', 'input', 'br', 'hr', 'link', 'source', 'circle', 'path', 'rect', 'use', 'polygon']);
 
@@ -123,18 +123,18 @@ describe('view-root nesting', () => {
 
 describe('theme toggle invariants', () => {
   it('theme has exactly one writer (applyTheme)', () => {
-    // App modules are split across app.core/app.register/app.search/app.settings/app.detail/app.dashboard/app.js.
+    // App modules are split across app/app.core, app/residents/{register,search,detail}, app/settings/app.settings, app/dashboard/app.dashboard, app/app.js.
     // Concatenate them so path-based string checks still cover all view logic.
-    const appModuleFiles = ['app.core','app.register','app.search','app.settings','app.detail','app.dashboard','app'];
-    const appJs = appModuleFiles.map(f => readFileSync(join(root, 'src/js/' + f + '.js'), 'utf8')).join('\n');
+    const appModuleFiles = ['app/app.core.js','app/residents/app.register.js','app/residents/app.search.js','app/settings/app.settings.js','app/residents/app.detail.js','app/dashboard/app.dashboard.js','app/app.js'];
+    const appJs = appModuleFiles.map(f => readFileSync(join(root, 'frontend/src/js', f), 'utf8')).join('\n');
     const writes = appJs.split('this.theme =').length - appJs.split('this.theme ===').length;
     assert.equal(writes, 1, 'this.theme must have exactly one writer (applyTheme)');
   });
 
   it('applyTheme() runs before the backend await in init()', () => {
-    // App modules are split across app.core/app.register/app.search/app.settings/app.detail/app.dashboard/app.js.
-    const appModuleFiles = ['app.core','app.register','app.search','app.settings','app.detail','app.dashboard','app'];
-    const appJs = appModuleFiles.map(f => readFileSync(join(root, 'src/js/' + f + '.js'), 'utf8')).join('\n');
+    // App modules are split across app/app.core, app/residents/{register,search,detail}, app/settings/app.settings, app/dashboard/app.dashboard, app/app.js.
+    const appModuleFiles = ['app/app.core.js','app/residents/app.register.js','app/residents/app.search.js','app/settings/app.settings.js','app/residents/app.detail.js','app/dashboard/app.dashboard.js','app/app.js'];
+    const appJs = appModuleFiles.map(f => readFileSync(join(root, 'frontend/src/js', f), 'utf8')).join('\n');
     const iTheme = appJs.indexOf('this.applyTheme();');
     const iCivic = appJs.indexOf('await this.loadCivicConfig();');
     assert.ok(iTheme !== -1 && iCivic !== -1 && iTheme < iCivic,
@@ -153,9 +153,9 @@ describe('theme toggle invariants', () => {
   });
 
   it('applyTheme clears data-theme so paper stays reachable', () => {
-    // App modules are split across app.core/app.register/app.search/app.settings/app.detail/app.dashboard/app.js.
-    const appModuleFiles = ['app.core','app.register','app.search','app.settings','app.detail','app.dashboard','app'];
-    const appJs = appModuleFiles.map(f => readFileSync(join(root, 'src/js/' + f + '.js'), 'utf8')).join('\n');
+    // App modules are split across app/app.core, app/residents/{register,search,detail}, app/settings/app.settings, app/dashboard/app.dashboard, app/app.js.
+    const appModuleFiles = ['app/app.core.js','app/residents/app.register.js','app/residents/app.search.js','app/settings/app.settings.js','app/residents/app.detail.js','app/dashboard/app.dashboard.js','app/app.js'];
+    const appJs = appModuleFiles.map(f => readFileSync(join(root, 'frontend/src/js', f), 'utf8')).join('\n');
     assert.ok(appJs.includes('delete document.documentElement.dataset.theme'),
       'applyTheme must clear data-theme, otherwise the theme toggle is one-way');
   });
