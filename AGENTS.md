@@ -5,6 +5,7 @@ Applies to all sessions in this workspace.
 ## Planning & tracking
 - Plan non-trivial work with `/plan` before editing; keep `/todos` current as work progresses.
 - Break large efforts into small, reviewable tasks and mark them done only when verified.
+- When every todo/sideroom-board item is done and green, clear the board so no item is left dangling. If any item is not done or any check is not green, return to that todo/sideroom item and execute it properly and robustly before declaring the work complete. Do not mark an item done unless its verification actually passed.
 
 ## Editing discipline
 - Make small, reviewable edits; never reformat unrelated code.
