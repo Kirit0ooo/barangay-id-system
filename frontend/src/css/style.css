@@ -725,8 +725,6 @@ nav[aria-label="Primary"] [role="tab"]{ min-height:40px; padding-top:8px; paddin
 }
 .register-photo__preview{ max-width:100%; max-height:100%; object-fit:cover; border-radius:12px; }
 .register-photo__hint{ font-size:10px; color:var(--color-text-muted); margin-top:6px; }
-.register-remove{ font-size:12px; font-weight:600; color:var(--color-error); }
-
 /* Section icon: PNG glyph leads the section head (number discs retired) */
 .register-section__icon{
   width:20px; height:20px; flex-shrink:0;
@@ -1002,7 +1000,7 @@ html[data-theme="red-gradient"] .help {
 .kiosk-section__title{ font-family:var(--font-display); font-size:clamp(18px,3vw,22px); font-weight:800; letter-spacing:.01em; color:var(--color-text); margin:0; }
 
 /* Kiosk stat row — big numbers, always visible */
-.kiosk-stats{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); }
+.kiosk-stats{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; }
 .kiosk-stat{ display:flex; flex-direction:column; gap:4px; padding:22px 20px; border:2px solid var(--color-border); border-radius:16px; background:var(--color-surface); min-width:0; }
 .kiosk-stat:hover{ border-color:var(--color-border-strong); transform:translateY(-2px); box-shadow:var(--shadow-card); }
 .kiosk-stat:hover .kiosk-stat__icon{ filter:brightness(1.15); }
@@ -1081,7 +1079,7 @@ html[data-theme="red-gradient"] .help {
 .kiosk-tile:hover .kiosk-tile__arrow img{ filter:brightness(0) invert(1); }
 
 @media(max-width:640px){
-  .kiosk-stats{ grid-template-columns:1fr; }
+  .kiosk-stats{ grid-template-columns:1fr; gap:12px; }
   .kiosk-stat__value{ font-size:40px; }
   .kiosk-tiles{ grid-template-columns:1fr; }
   .kiosk-tile{ min-height:110px; padding:22px 24px; }
