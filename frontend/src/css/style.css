@@ -1029,9 +1029,6 @@ html[data-theme="red-gradient"] .help {
 /* Kiosk icons — downloaded PNG files from flaticon.com */
 .kiosk-stat__icon img{ width:24px; height:24px; object-fit:contain; }
 .kiosk-stat__head .kiosk-stat__icon img{ width:16px; height:16px; }
-.kiosk-section__badge{ display:inline-flex; align-items:center; justify-content:center; min-width:28px; height:28px; border-radius:8px; border:1px solid var(--color-border); background:var(--color-bg); font-size:14px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--color-text); }
-.kiosk-section__badge--navy{ border-color:var(--color-primary); color:var(--color-primary); background:rgba(15,43,94,.08); }
-.kiosk-section__badge--gold{ border-color:var(--color-accent); color:var(--color-accent); background:rgba(199,156,20,.08); }
 .kiosk-tile__icon img{ width:32px; height:32px; object-fit:contain; }
 .kiosk-tile__icon{ border-radius:16px; }
 .kiosk-tile--register .kiosk-tile__icon{ border-color:var(--color-success); }
