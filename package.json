@@ -7,7 +7,7 @@
     "tauri": "tauri",
     "check:css": "node tools/check-css.mjs",
     "stamp:css": "node tools/check-css.mjs --update",
-    "test": "node --test tests/smoke.test.js tests/regression.test.js tests/golden-card.test.js tests/bulk-progress.test.js tests/logic.test.js tests/structure.test.js"
+    "test": "node --test tests/smoke.test.js tests/regression.test.js tests/golden-card.test.js tests/bulk-progress.test.js tests/logic.test.js tests/structure.test.js tests/preview-window.test.js"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^1.5"
