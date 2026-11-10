@@ -17,7 +17,7 @@ This is an offline-first Tauri v1 desktop app for barangay ID registration (Wind
 
 **Frontend modules:** `app.core.js` (shared state + core methods), `residents/app.register.js`, `residents/app.search.js`, `residents/app.detail.js`, `settings/app.settings.js`, `dashboard/app.dashboard.js`, `app.js` (entry point), `shared/helpers.js`, `services/api.js`, `services/logger.js`, `bootstrap/verbose.js`. CSS: `style.css` + prebuilt `tailwind.css` (freshness-guarded by `tools/check-css.mjs`).
 
-**Launchers:** `run.ps1`/`run.bat` (dev), `build.ps1`/`build.bat` (release, NSIS-only), `tools/launcher-common.ps1` (shared env pins).
+**Launchers:** `build.ps1`/`build.bat` (release, NSIS-only), `tools/launcher-common.ps1` (shared env pins). `run.ps1`/`run.bat` dev launchers removed (2026-11-10).
 
 ---
 
@@ -32,14 +32,14 @@ No defects, security vulnerabilities, integration failures, or test gaps were fo
 | CSS freshness | `npm run check:css` → CSS fresh (markup unchanged since last stamp) | PASS |
 | npm audit | `npm audit --audit-level=moderate` → 0 vulnerabilities | PASS |
 | Rust compile | Blocked on this host (no `libsoup-2.4`, no MSVC `lib.exe`); CI-only via `.github/workflows/ci.yml`. `cargo fmt --all -- --check` clean (exit 0, 11 files); `cargo metadata --locked` exit 0 | BLOCKED (host env limit, documented) |
-| Portability | `run.ps1`/`-Fix`/`-Audit`/`-Logs`; `build.ps1` auto-version bump (repairs drifted manifests), warn-only WiX/NSIS (Tauri provisions its own), transcript logs inside `logs/` | PASS |
+| Portability | `build.ps1` auto-version bump (repairs drifted manifests), warn-only WiX/NSIS (Tauri provisions its own), transcript logs inside `logs/`; dev launchers `run.ps1`/`run.bat` removed (2026-11-10) | PASS |
 | Encryption at rest | AES-256-GCM for `data/residents.db` + `data/photos/*`; key at `.crypto-key/key.bin` (never committed); decrypt-on-read wired via `resolve_photo_bytes` | PASS |
 | Security hardening | Tauri CSP no `unsafe-eval`; fs/CSP allowlist; path-traversal rejection; escaped LIKE search; digit-search NULL bound (no table leak); FK orphan guard; DOB sanity cap (120 yrs); PII logs sanitized at char boundary | PASS |
 | Docs | `AGENTS.md` current; `DESIGN.md` token system current; annotated fixes table intact; no drift | PASS |
 
 ### Files inspected (baseline inventory)
 
-- Root: `package.json`, `package-lock.json`, `README.md`, `AGENTS.md`, `DESIGN.md`, `CODEBASE_REVIEW.md`, `PI_LOCAL_COMMIT_AND_MERGE.md`, `build.bat`, `build.ps1`, `run.bat`, `run.ps1`, `.gitignore`, `.npmrc`, `skills-lock.json`
+- Root: `package.json`, `package-lock.json`, `README.md`, `AGENTS.md`, `DESIGN.md`, `CODEBASE_REVIEW.md`, `PI_LOCAL_COMMIT_AND_MERGE.md`, `build.bat`, `build.ps1`, `.gitignore`, `.npmrc`, `skills-lock.json`
 - `tools/`: `check-css.mjs`, `css-fingerprint.txt`, `launcher-common.ps1`, `tokens.html`
 - `config/civic.json`
 - `backend/src/`: `Cargo.toml`, `Cargo.lock`, `build.rs`, `tauri.conf.json`, `src/{backup,config,crypto,db,encryption,export,id_card,logger,main,residents,scheduled}.rs`, `assets/`, `icons/`
@@ -78,7 +78,7 @@ None required. No file changes were made. No speculative features or unnecessary
 - `npm audit`: 0 vulnerabilities.
 - `cargo fmt --check`: clean (11 files).
 - `cargo metadata --locked`: exit 0.
-- Launcher env pins verified present in `run.ps1`/`build.ps1`/`tools/launcher-common.ps1`; portability contract intact.
+- Launcher env pins verified present in `build.ps1`/`tools/launcher-common.ps1`; dev launchers `run.ps1`/`run.bat` removed (2026-11-10); portability contract intact.
 - Encryption decrypt-on-read verified wired (`resolve_photo_bytes` → `decrypt_or_plaintext`).
 
 No regressions introduced (no changes made).

@@ -11,7 +11,7 @@
 - **Frontend:** Alpine.js 3 (vendored at `src/vendor/alpine.min.js`, no build step), static HTML (`src/index.html`, 648 lines), hand-maintained prebuilt Tailwind CSS (`src/css/tailwind.css`, freshness-fingerprinted by `tools/check-css.mjs`)
 - **No Vite, no bundler, no TypeScript, no linter.** `src/` is both `devPath` and `distDir`.
 - **Tests:** `node --test` (zero test deps, offline) + inline Rust `#[cfg(test)]` (~34 tests)
-- **Tooling:** `run.ps1/build.ps1` launchers, `.github/workflows/ci.yml` (4 jobs)
+- **Tooling:** `build.ps1`/`build.bat` launchers, `.github/workflows/ci.yml` (4 jobs)
 
 ## Architecture
 
