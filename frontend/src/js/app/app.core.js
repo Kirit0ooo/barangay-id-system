@@ -110,6 +110,9 @@ window.appState = {
     previousView: 'dashboard',
     detailResident: null,
     detailPhoto: null,
+    // Single card-preview window reference. Reused across previews so opening
+    // a resident's card preview never spawns multiple windows/tabs.
+    previewWindow: null,
     
     // Settings (F15: civic strings centralized; backend config/ is source of truth for QR/civic)
     settings: {

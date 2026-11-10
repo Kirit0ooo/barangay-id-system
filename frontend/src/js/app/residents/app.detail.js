@@ -300,8 +300,14 @@ Object.assign(window.appState, {
     async previewResidentCard(residentId) {
         try {
             const filled = await this.cardHtmlForResident(residentId);
-            const w = window.open('', '_blank');
-            if (!w) { this.showToast('Popup blocked — printing directly instead', 'info'); this.printFilledCard(filled); return; }
+            // Reuse a single preview window instead of opening a new one on
+            // every click. A closed or never-opened handle gets a fresh window.
+            let w = this.previewWindow;
+            if (!w || w.closed) {
+                w = window.open('', '_blank');
+                if (!w) { this.showToast('Popup blocked — printing directly instead', 'info'); this.printFilledCard(filled); return; }
+                this.previewWindow = w;
+            }
             w.document.open(); w.document.write(filled); w.document.close();
             // Preview must match the print preview design: hide screen chrome
             // (toolbar, page labels, cut lines, crop marks) and use the print
