@@ -31,8 +31,6 @@ try {
 }
 const cardTpl = readFileSync(join(root, 'frontend/src/card-template.html'), 'utf8');
 const buildPs1 = readFileSync(join(root, 'build.ps1'), 'utf8');
-const runPs1 = readFileSync(join(root, 'run.ps1'), 'utf8');
-const runBat = readFileSync(join(root, 'run.bat'), 'utf8');
 const buildBat = readFileSync(join(root, 'build.bat'), 'utf8');
 // Comment-stripped copy: historical notes may name deleted PDF items (allowed).
 const idCardCode = idCardRs.replace(/^\s*\/\/.*$/gm, '');
@@ -293,12 +291,9 @@ check('verify crypto deps pruned', !cargoToml.includes('ed25519-dalek') && !carg
 check('build gate probes MSVC linker', buildPs1.includes('link.exe') && buildPs1.includes('vswhere'), 'cargo would fail at link after a long compile');
 check('build gate probes NSIS', buildPs1.includes('makensis'), 'nsis leg unchecked');
 check('build gate is table-driven for future deps', buildPs1.includes('$Prereqs') && buildPs1.includes("FUTURE deps are a one-row addition"), 'gate not extensible');
-check('all launchers ASCII-only (PS 5.1 codepage-safe)', [runPs1, buildPs1, runBat, buildBat].every(s => [...s].every(ch => ch.codePointAt(0) < 0x80)), 'non-ASCII broke PS 5.1 parsing once');
+check('all launchers ASCII-only (PS 5.1 codepage-safe)', [buildPs1, buildBat].every(s => [...s].every(ch => ch.codePointAt(0) < 0x80)), 'non-ASCII broke PS 5.1 parsing once');
 
-// 35. run.ps1 dev gate mirrors build gate (dev compiles Rust too; no bundling tools needed)
-check('run.ps1 gate probes MSVC linker', runPs1.includes('link.exe'), 'tauri dev would fail at link after compiling');
-check('Node floor aligned at 20+ in both launchers', runPs1.includes('LTS 20+') && buildPs1.includes('20'), 'run says 18+, build requires 20+');
-check('bat wrappers forward flags to ps1', runBat.includes('%*') && buildBat.includes('%*'), 'flags silently dropped by wrapper');
+// 35. run.ps1 dev gate mirrors build gate — run launcher removed; build gate covers MSVC/NSIS
 
 // 38. Release hygiene: stale bundle outputs removed pre-build, patch version auto-increments
 check('build.ps1 cleans stale bundle dir before build', buildPs1.includes('Remove-Item') && buildPs1.includes('release\\bundle') && buildPs1.includes('NoClean'), 'no bundle clean step');

@@ -13,11 +13,11 @@
 | Rust backend | `main.rs`, `db.rs`, `residents.rs`, `config.rs`, `export.rs`, `backup.rs`, `id_card.rs`, `scheduled.rs`, `logger.rs` |
 | Frontend | `src/js/app.js`, `src/js/api.js`, `src/js/helpers.js`, `src/js/logger.js`, `src/js/verbose.js`, `src/card-template.html`, `src/index.html`, `src/css/style.css`, `src/css/tailwind.css` |
 | Tests | `smoke.test.js`, `regression.test.js`, `golden-card.test.js`, `bulk-progress.test.js`, `logic.test.js`, `structure.test.js` |
-| Build/config | `tauri.conf.json`, `Cargo.toml`, `package.json`, `.npmrc`, `run.bat`/`run.ps1`, `build.bat`/`build.ps1`, `view-logs.bat`, `tools/check-css.mjs`, `tools/css-fingerprint.txt` |
+| Build/config | `tauri.conf.json`, `Cargo.toml`, `package.json`, `.npmrc`, `build.bat`/`build.ps1`, `view-logs.bat`, `tools/check-css.mjs`, `tools/css-fingerprint.txt` |
 | Config | `config/civic.json` |
 | Docs tree | `README.md`, `UI_UX_AUDIT.md`, `UI_UX_CHANGELOG.md`, `Documents/README.md`, `Documents/QR_PII_README.md`, `Documents/Verify/README.md`, `docs/superpowers/plans/2026-10-13-phase2-hardening.md`, `docs/superpowers/plans/2026-10-10-verify-portal.md`, `docs/superpowers/specs/2026-10-10-verify-portal-design.md` |
 
-**Coverage notes:** `src/js/verbose.js`, `.npmrc`, and launchers (`run.bat`/`run.ps1`, `build.bat`/`build.ps1`, `view-logs.bat`) were reviewed for isolation/launch behavior; `src/css/tailwind.css` verified via `npm run check:css` freshness guard + regression pins rather than line-by-line read. `cargo test`/`cargo clippy` not executable on this Linux host (no `libsoup-2.4`/GTK; Windows-targeted project).
+**Coverage notes:** `src/js/verbose.js`, `.npmrc`, and launchers (`build.bat`/`build.ps1`, `view-logs.bat`) were reviewed for isolation/launch behavior; `src/css/tailwind.css` verified via `npm run check:css` freshness guard + regression pins rather than line-by-line read. `cargo test`/`cargo clippy` not executable on this Linux host (no `libsoup-2.4`/GTK; Windows-targeted project).
 
 **Architecture:** Tauri 1.5 desktop app (Windows 10/11 primary; Linux/WSL secondary dev). Rust backend (sqlx + SQLite WAL, 5-conn pool, `BEGIN IMMEDIATE` serialization) + Alpine.js 3 frontend (no build step, static `src/` served directly via `devPath`/`distDir`). Single-table `residents` DB; photos as `data/photos/{uuid}.jpg`; Excel import/export via `rust_xlsxwriter`; HTML-only CR100 ID-card print via `card-template.html` + hidden iframe; QR via `qrcode` crate (unsigned 7-key JSON). Strict file-isolation policy: every write path calls `validate_isolated_write_path()` which canonicalizes parent and asserts `starts_with(project_root)`.
 

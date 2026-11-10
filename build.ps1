@@ -7,7 +7,7 @@
       powershell -ExecutionPolicy Bypass -File .\build.ps1
     Output stays isolated: backend/src/target/x86_64-pc-windows-msvc/release/bundle/nsis\ + portable exe
     Transcript: logs\build-YYYYMMDD-HHmmss.log
-    Portable pins (same as run.ps1) before any npm/cargo:
+    Portable pins before any npm/cargo:
       NPM_CONFIG_CACHE=./.npm-cache CARGO_TARGET_DIR=./backend/src/target TMP/TEMP/TMPDIR=./tmp
     Build includes recent runtime commands: get_cards_batch (bulk print) + optimize_database
     (DB optimize, 7-day cadence) - plus E1 duplicate-person check and E4 10s photo budget.
@@ -167,7 +167,7 @@ function Invoke-PatchVersionBump {
     if ($wrong.Count -gt 0) { throw ("Auto-version: verification failed after write:`n" + ($wrong -join "`n")) }
 }
 
-# ---- -Audit: dependency audit, warn-only (parity with run.ps1 -Audit) ----
+# ---- -Audit: dependency audit, warn-only (parity with dev launcher) ----
 if ($Audit) {
     Write-Host '[Barangay ID] Dependency audit (isolated caches)...' -ForegroundColor Cyan
     $prevEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
@@ -301,7 +301,7 @@ try {
     } else {
         Write-Host '[Barangay ID] npm deps already installed' -ForegroundColor Green
     }
-    if (-not (Test-Path $tauriCmd)) { throw 'tauri.cmd still missing after install. Try: .\run.ps1 -Fix' }
+    if (-not (Test-Path $tauriCmd)) { throw 'tauri.cmd still missing after install. Run npm install manually or use -NoBump to skip version bump.' }
 
     $prevEap=$ErrorActionPreference; $ErrorActionPreference='Continue'
     # Tauri CLI must run from backend/src (where tauri.conf.json lives).

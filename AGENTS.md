@@ -230,6 +230,7 @@ npm run check:css
 | Source (backend) | `backend/src/src/` |
 | Tests | `tests/` |
 | Build scripts / tools | `tools/` |
+| Release launcher | `build.ps1` / `build.bat` |
 | Config | `config/civic.json` |
 | User database | `data/residents.db` |
 | Encryption key | `.crypto-key/key.bin` — 32-byte AES-256 key; sensitive, never commit to version control |
@@ -336,12 +337,9 @@ Applied robustness fixes to the Windows PowerShell/batch launchers, zero logic c
 
 | Fix | File | Detail |
 |-----|------|--------|
-| Inline fallbacks | `run.ps1`, `build.ps1` | When `tools/launcher-common.ps1` is missing, define stub `Set-PortableEnvPins`/`Restore-EnvPins`/`Invoke-SafeNative` so unconditional calls never hard-crash under `Set-StrictMode -Version Latest` |
+| Inline fallbacks | `build.ps1` | When `tools/launcher-common.ps1` is missing, define stub `Set-PortableEnvPins`/`Restore-EnvPins`/`Invoke-SafeNative` so unconditional calls never hard-crash under `Set-StrictMode -Version Latest` |
 | Flag docs | `build.bat` | Added `-EnableVerboseLogging` to the documented forwarded-flags header and `:NOPS` echo line (build.ps1 already accepts it via `%*`) |
-| MSVC gate | `build.ps1` | vswhere.exe existence alone no longer passes — now verifies VC.Tools.x86.x64 toolset is actually installed, matching run.ps1's strict check |
-| WiX gate | `build.ps1` | ~~Checked `WiX Toolset v3.11\bin\candle.exe` path first; `candle.exe` on PATH accepted only if `-version` reported v3.11~~ **superseded 2026-11-05** - WiX/NSIS are now warn-only because Tauri v1 provisions its own toolset (see "Installer toolchain provisioning" below) |
-| Stale comment | `tools/launcher-common.ps1` | `Ensure-DataDir` comment corrected: both run.ps1 and build.ps1 call it (was "run.ps1 only") |
-| -Logs narrative | `run.ps1` | `.SYNOPSIS` reworded from "replaces view-logs.bat" to "supersedes view-logs.bat logic; wrapper removed" since view-logs.bat was deleted (its logic lives in run.ps1 -Logs) |
+| MSVC gate | `build.ps1` | vswhere.exe existence alone no longer passes — now verifies VC.Tools.x86.x64 toolset is actually installed |
 
 Validation: `npm test` 57/0/6, `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
 

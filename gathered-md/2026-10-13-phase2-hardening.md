@@ -16,7 +16,7 @@
 - No writes to `%APPDATA%`, `%TEMP%`, drive root, or home.
 - Offline-only: no CDN, no new npm/cargo deps.
 - `npm test` (6 files via `node --test`) must stay green; `npm run check:css` must stay fresh (re-stamp after CSS/HTML/JS change).
-- ASCII-only in `run.ps1/run.bat/build.ps1/build.bat/view-logs.bat` (PS 5.1 codepage-safe).
+- ASCII-only in `build.ps1/build.bat` (PS 5.1 codepage-safe). `run.ps1`/`run.bat` dev launchers removed (2026-11-10).
 - No `git` available in this env — record progress in ledger file, no commit steps.
 - Minimal diffs; preserve intentional behaviors; no speculative features.
 

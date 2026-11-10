@@ -1,7 +1,7 @@
 # =============================================================================
 # launcher-common.ps1 — shared launcher primitives for Barangay ID System
 #
-# Dot-sourced by run.ps1 and build.ps1 so `Invoke-SafeNative` + portable env
+# Dot-sourced by build.ps1 so `Invoke-SafeNative` + portable env
 # pins live in ONE place (DRY). Byte-identical logic in both scripts reduces
 # drift risk when fixing the `npm notice` / `PipelineStopped` quirks.
 #
@@ -19,7 +19,7 @@
     Provides Invoke-SafeNative (native-call safety wrapper that filters npm
     notice stderr so it is not logged as ERROR under $ErrorActionPreference='Stop')
     and Set-PortableEnvPins (pins all caches/temp dirs inside the project).
-    Dot-source from run.ps1 / build.ps1:
+    Dot-source from build.ps1:
         . $PSScriptRoot\tools\launcher-common.ps1
 .NOTES
     All pins are relative to $Root (script root of the dot-sourcing script).
@@ -112,7 +112,7 @@ function Restore-EnvPins {
     $env:RUST_LOG                  = $script:ORIG_RUST_LOG
 }
 
-# ---- Ensure data dir exists (run.ps1 and build.ps1 both call it) ----
+# ---- Ensure data dir exists (build.ps1 calls it) ----
 function Ensure-DataDir {
     param([string]$Root)
     $p = Join-Path $Root 'data'

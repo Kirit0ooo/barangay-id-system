@@ -36,10 +36,10 @@ Target: **5,000–10,000 residents**, **Windows 10/11 primary** (Linux/WSL secon
 ## Quick Start
 
 ```bat
-:: Windows — double-click run.bat OR Powershell
-run.bat
-:: or
-powershell -ExecutionPolicy Bypass -File .\run.ps1
+:: Windows — double-click build.bat for installer, or dev via cmd:
+npx tauri dev
+:: or via PowerShell:
+pwsh -NoProfile -ExecutionPolicy Bypass -Command "npx tauri dev"
 :: then use build.bat for installer
 build.bat
 ```
@@ -102,9 +102,7 @@ npx tauri dev
       ├── tests\
       │    ├── smoke.test.js             # isolation checks (manifest, data/, tmp/, .npmrc)
       │    └── regression.test.js        # HIGH-fix + P0 regression checks (growing; see §33 for P0 pins)
-      ├── run.ps1                        # CANONICAL dev launcher (PowerShell 5.1+, -Logs/-Fix/-NoInstall/-Help/-Audit; transcript to logs/run-*.log)
-      ├── run.bat                        # thin wrapper -> run.ps1 %* (pins same env; minimal :NOPS hint+pause only if PowerShell absent)
-      ├── build.ps1 / build.bat          # release build -> backend/src/target/x86_64-pc-windows-msvc/release/bundle/msi/ + logs/build-*.log
+      ├── build.ps1 / build.bat          # release build -> backend/src/target/x86_64-pc-windows-msvc/release/bundle/ + logs/build-*.log
       └── README.md
 ```
 
@@ -137,15 +135,11 @@ npm install
 
 :: 2. dev (auto-detects free 127.0.0.1:14xx via TAURI_CONFIG env — see logs)
 :: Option A — cmd
-run.bat
-:: Option B — PowerShell (CANONICAL, transcript to logs/run-*.log)
-powershell -ExecutionPolicy Bypass -File .\run.ps1
-:: flags: .\run.ps1 -Logs (tail app.log.*+frontend.log+run/build) | -Fix (deep clean) | -NoInstall (fail fast) | -Help | -Audit (warn-only, parity with build.ps1)
-::          run.bat forwards all flags: run.bat -Logs / run.bat -Fix / run.bat -Audit
-:: Option C — direct (must pin env first — launchers do this for you)
 npx tauri dev
+:: Option B — PowerShell
+pwsh -NoProfile -ExecutionPolicy Bypass -Command "npx tauri dev"
 :: Tip: verbose backend
-set RUST_LOG=debug && run.bat
+set RUST_LOG=debug && npx tauri dev
 ```
 
 * `devPath: "../src"` + `withGlobalTauri: true` — no Vite; static files served directly. Hot reload not needed.
@@ -317,10 +311,9 @@ All logs stay inside `logs\` (isolated, never `%TEMP%`/`%APPDATA%` outside tree)
 |---|---|---|
 | `app.log.YYYY-MM-DD` | Rust `tracing` daily rolling | `tracing_appender::rolling::daily(logs,"app.log")` |
 | `frontend.log` | `frontend/src/js/logger.js → log_frontend` invoke | append `frontend [level] msg` + `tracing::info!` |
-| `run-YYYYMMDD-HHMMSS.log` | `run.bat` tee / `run.ps1` transcript | per launch |
 | `localStorage barangay_log_buffer` | frontend 500-entry ring | downloadable JSON via Settings → Download Frontend Logs |
 
-View: `logs/app.log.2026-09-09`, `logs/frontend.log`. Verbose: `set RUST_LOG=debug && run.bat`.
+View: `logs/app.log.2026-09-09`, `logs/frontend.log`. Verbose: `set RUST_LOG=debug && npx tauri dev`.
 
 ---
 
@@ -350,19 +343,16 @@ npm test                        :: runs all six suites via node --test (smoke, r
 
 ## Scripts Reference
 
-**Portable standard (2026-09-10 → updated 2026-09-10 R5/R6):** every launcher pins `NPM_CONFIG_CACHE=./.npm-cache`,
+**Portable standard:** `build.ps1` pins `NPM_CONFIG_CACHE=./.npm-cache`,
 `CARGO_TARGET_DIR=./backend/src/target`, `TMP/TEMP/TMPDIR=./tmp`,
-`WEBVIEW2_USER_DATA_FOLDER=./tmp/webview2` **before** any npm/cargo call, so no
-writes escape to `%APPDATA%`/`%TEMP%`. `run.ps1`/`build.ps1` require PowerShell 5.1+;
-`.bat` files are thin wrappers (`powershell -ExecutionPolicy Bypass -File .\*.ps1 %*`)
-with a legacy cmd fallback. `run.ps1` is canonical — `.bat` wrappers only forward `%*` and set the same env pins.
+`WEBVIEW2_USER_DATA_FOLDER=./tmp/webview2` before any npm/cargo call, so no
+writes escape to `%APPDATA%`/`%TEMP%`. `build.ps1` requires PowerShell 5.1+.
+`build.bat` is a thin wrapper (`powershell -ExecutionPolicy Bypass -File .\build.ps1 %*`).
 
 | Script | Purpose | Isolation |
 |---|---|---|
-| `run.ps1` *(canonical)* | prereq check (node/npm/rustc with clear msgs) → auto `npm ci`→`install` if `tauri.cmd` missing (reproducible via `package-lock.json`, covers R5 `scheduled.rs`/`photo_gc`/DOB helpers) → `npx tauri dev`; flags `-Logs` (tails `app.log.*`+`frontend.log`+latest `run/build-*.log` and exits) `-Fix` (deep clean `node_modules`+`.npm-cache` then `npm ci`→`install`) `-NoInstall` `-Help` `-Audit` (warn-only cargo audit + npm audit, parity with `build.ps1 -Audit`); `Start-Transcript` to `logs/run-*.log` | `logs/run-*.log` + env pins above |
-| `run.bat` | **thin wrapper** → `run.ps1 %*` (same env pins before `powershell`); minimal `:NOPS` hint+pause only if PowerShell absent; forwards all flags | same pins, `logs/run-*.log` |
-| `build.ps1` *(canonical)* | prereq check → `npm ci`→`install` if needed → `rustup target add` → `npx tauri build --target x86_64-pc-windows-msvc` → `bundle/msi/`+`bundle/nsis/`; transcript | `logs/build-*.log` + `backend/src/target` |
-| `build.bat` | **thin wrapper** → `build.ps1 %*` (same env pins); legacy `:NOPS` fallback only if PowerShell absent | same pins |
+| `build.ps1` *(canonical)* | prereq check → `npm ci`→`install` if needed → `npx tauri build --target x86_64-pc-windows-msvc` → `bundle/`; transcript | `logs/build-*.log` + `backend/src/target` |
+| `build.bat` | **thin wrapper** → `build.ps1 %*` (same env pins) | same pins |
 
 
 `main.rs` pins `TMP/TEMP/TMPDIR/WEBVIEW2_USER_DATA_FOLDER` to `tmp/` at startup (`tmp/webview2/`).
