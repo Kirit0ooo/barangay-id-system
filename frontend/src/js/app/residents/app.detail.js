@@ -1,3 +1,10 @@
+// Asset images (seal/emblem logos) served from the app distDir, converted to
+// data URLs so they render in srcdoc/print and about:blank preview contexts
+// where relative ./assets/ paths fail.
+async function assetAsDataUrl(name) {
+    return getPhotoAsDataUrl('./assets/' + name);
+}
+
 // Detail view methods (resident details, print, preview, renew, delete).
 // Extends window.appState (defined in app.core.js).
 Object.assign(window.appState, {
@@ -212,6 +219,8 @@ Object.assign(window.appState, {
             barangay: ((r.address_barangay || cBarangay || this.settings.barangayName || '').toUpperCase()),
             card_title: pick(civic && civic.card_title, "BARANGAY RESIDENT'S CARD"),
             photo,
+            seal: await assetAsDataUrl('BALUD.png'),
+            emblem: await assetAsDataUrl('bagong-pilipinas.png'),
             last_name: truncateCard((r.last_name || '').toUpperCase(), 12),
             first_name: truncateCard([r.first_name, r.suffix].filter(Boolean).join(' ').toUpperCase(), 12),
             middle_name: truncateCard(mid.toUpperCase(), 12),
