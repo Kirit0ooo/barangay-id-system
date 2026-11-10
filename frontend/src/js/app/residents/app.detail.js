@@ -302,7 +302,14 @@ Object.assign(window.appState, {
             const filled = await this.cardHtmlForResident(residentId);
             const w = window.open('', '_blank');
             if (!w) { this.showToast('Popup blocked — printing directly instead', 'info'); this.printFilledCard(filled); return; }
-            w.document.open(); w.document.write(filled); w.document.close(); w.focus();
+            w.document.open(); w.document.write(filled); w.document.close();
+            // Preview must match the print preview design: hide screen chrome
+            // (toolbar, page labels, cut lines, crop marks) and use the print
+            // bleed frame so the on-screen preview is identical to what prints.
+            const style = w.document.createElement('style');
+            style.textContent = '.toolbar,.page-label,.cutline{display:none !important;}.bleed .crop{display:none !important;}.bleed{padding:1.2mm !important;margin:0 auto !important;width:101.7mm !important;border:0.35mm dashed #4b5563 !important;background:#fff !important;}body{padding:0 !important;background:#fff !important;}';
+            w.document.head.appendChild(style);
+            w.focus();
             Logger.info('previewResidentCard', residentId);
         } catch (e) {
             this.showToast('Card preview failed: ' + e, 'error');
