@@ -127,10 +127,12 @@ check('checkpoint helper inspects the busy result', dbRs.includes('PRAGMA wal_ch
 check('Play CDN runtime unlinked', !indexHtml.includes('vendor/tailwindcss.js'), 'tailwindcss.js script still linked');
 check('prebuilt static CSS linked', indexHtml.includes('css/tailwind.css'), 'tailwind.css link missing');
 check('prebuilt CSS has utilities', tailwindCss.includes('.bg-white') && tailwindCss.includes('@media(min-width:640px)'), 'tailwind.css looks empty');
-check('CSP drops unsafe-eval', !tauriConf.tauri.security.csp.includes('unsafe-eval'), 'unsafe-eval still in CSP');
+check('CSP includes unsafe-eval for Alpine expressions', tauriConf.tauri.security.csp.includes('unsafe-eval'), 'Alpine needs unsafe-eval to evaluate x-show/x-text via new Function');
 // Alpine.js evaluates x-attributes via `new Function` (1 site in alpine.min.js),
-// so script-src keeps 'unsafe-inline'; style-src keeps 'unsafe-inline' for the
-// <style> blocks in index.html/card-template.html. No inline <script> exists.
+// so script-src keeps both 'unsafe-inline' (for Alpine bootstrap and inline
+// event handlers) and 'unsafe-eval' (for `new Function` expression evaluation).
+// style-src keeps 'unsafe-inline' for the <style> blocks in index.html/
+// card-template.html. No inline <script> exists.
 check('CSP keeps unsafe-inline for Alpine', tauriConf.tauri.security.csp.includes("'unsafe-inline'") && !indexHtml.match(/<script(?![^>]*src=)/), 'unsafe-inline rationale broken');
 
 // 11. barangay-impl-002 — M3 MSI perMachine robustness (no panic, writability probe)
