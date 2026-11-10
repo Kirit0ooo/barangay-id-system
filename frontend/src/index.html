@@ -53,15 +53,15 @@
          <div class="kiosk-stat__icon" aria-hidden="true"><img src="icons/person.png" alt="" aria-hidden="true"></div>
          <div class="kiosk-stat__label"><span>Total Residents</span></div>
        </div>
-       <div class="kiosk-stat__value" x-text="stats.total">0</div>
-       <div class="kiosk-stat__meta">Active records in registry</div>
+       <div class="kiosk-stat__value kiosk-stat__value--navy" x-text="stats.total">0</div>
+       <div class="kiosk-stat__meta">Every resident on record</div>
      </div>
      <div class="kiosk-stat kiosk-stat--gender" role="region" aria-label="By Gender">
        <div class="kiosk-stat__head">
          <div class="kiosk-stat__icon" aria-hidden="true"><img src="icons/users.png" alt="" aria-hidden="true"></div>
          <div class="kiosk-stat__label"><span>By Gender</span></div>
        </div>
-       <div class="kiosk-stat__bar">
+       <div class="kiosk-stat__bar" aria-hidden="true">
          <div class="kiosk-stat__bar-fill kiosk-stat__bar-fill--male" :style="'width:' + (stats.total ? (stats.male/stats.total*100) : 0) + '%'"></div>
          <div class="kiosk-stat__bar-fill kiosk-stat__bar-fill--female" :style="'width:' + (stats.total ? (stats.female/stats.total*100) : 0) + '%'"></div>
        </div>
@@ -81,7 +81,7 @@
          <div class="kiosk-stat__icon" aria-hidden="true"><img src="icons/calendar.png" alt="" aria-hidden="true"></div>
          <div class="kiosk-stat__label"><span>Registrations This Year</span></div>
        </div>
-       <div class="kiosk-stat__value" x-text="stats.thisYear">0</div>
+       <div class="kiosk-stat__value kiosk-stat__value--success" x-text="stats.thisYear">0</div>
        <div class="kiosk-stat__meta">Registered <span x-text="new Date().getFullYear()">2026</span> · current year</div>
      </div>
    </div>
@@ -98,7 +98,7 @@
            <div class="kiosk-stat__icon" aria-hidden="true"><img src="icons/check.png" alt="" aria-hidden="true"></div>
            <div class="kiosk-stat__label"><span>Active</span></div>
          </div>
-         <div class="kiosk-stat__value" x-text="stats.active">0</div>
+         <div class="kiosk-stat__value kiosk-stat__value--success" x-text="stats.active">0</div>
          <div class="kiosk-stat__meta">Valid cards in circulation</div>
        </div>
        <div class="kiosk-stat kiosk-stat--renew" role="region" aria-label="Renew cards — residents whose IDs are marked for renewal">
@@ -106,7 +106,7 @@
            <div class="kiosk-stat__icon" aria-hidden="true"><img src="icons/refresh.png" alt="" aria-hidden="true"></div>
            <div class="kiosk-stat__label"><span>Renew</span></div>
          </div>
-         <div class="kiosk-stat__value" x-text="stats.renew">0</div>
+         <div class="kiosk-stat__value kiosk-stat__value--navy" x-text="stats.renew">0</div>
          <div class="kiosk-stat__meta">Marked for renewal</div>
        </div>
        <div class="kiosk-stat kiosk-stat--lost" role="region" aria-label="Lost cards — IDs reported lost by residents">
@@ -114,7 +114,7 @@
            <div class="kiosk-stat__icon" aria-hidden="true"><img src="icons/badge.png" alt="" aria-hidden="true"></div>
            <div class="kiosk-stat__label"><span>Lost</span></div>
          </div>
-         <div class="kiosk-stat__value" x-text="stats.lost">0</div>
+         <div class="kiosk-stat__value kiosk-stat__value--error" x-text="stats.lost">0</div>
          <div class="kiosk-stat__meta">Reported lost</div>
        </div>
        <div class="kiosk-stat kiosk-stat--damage" role="region" aria-label="Damage cards — IDs reported damaged by residents">
@@ -122,7 +122,7 @@
            <div class="kiosk-stat__icon" aria-hidden="true"><img src="icons/alert.png" alt="" aria-hidden="true"></div>
            <div class="kiosk-stat__label"><span>Damage</span></div>
          </div>
-         <div class="kiosk-stat__value" x-text="stats.damage">0</div>
+         <div class="kiosk-stat__value kiosk-stat__value--damage" x-text="stats.damage">0</div>
          <div class="kiosk-stat__meta">Reported damaged</div>
        </div>
      </div>
@@ -136,7 +136,7 @@
      <h3 class="kiosk-section__title">Services</h3>
    </div>
    <div class="kiosk-tiles">
-   <button @click="clearForm(); currentView='register'" class="kiosk-tile kiosk-tile--register" aria-label="New Resident Registration — add a resident and create their ID card">
+   <button type="button" @click="clearForm(); currentView='register'" class="kiosk-tile kiosk-tile--register" aria-label="New Resident Registration — add a resident and create their ID card">
      <div class="kiosk-tile__icon" aria-hidden="true"><img src="icons/document.png" alt="" aria-hidden="true"></div>
      <div class="kiosk-tile__text">
        <div class="kiosk-tile__title">Start a registration</div>
@@ -145,7 +145,7 @@
      <div class="kiosk-tile__arrow" aria-hidden="true"><img src="icons/arrow.svg" alt=""></div>
    </button>
 
-   <button @click="searchResidents(); currentView='search'" class="kiosk-tile kiosk-tile--search" aria-label="Resident List &amp; Search — find, filter, edit &amp; print cards">
+   <button type="button" @click="searchResidents(); currentView='search'" class="kiosk-tile kiosk-tile--search" aria-label="Resident List &amp; Search — find, filter, edit &amp; print cards">
      <div class="kiosk-tile__icon" aria-hidden="true"><img src="icons/search.png" alt="" aria-hidden="true"></div>
      <div class="kiosk-tile__text">
        <div class="kiosk-tile__title">Find a resident</div>
@@ -154,7 +154,7 @@
      <div class="kiosk-tile__arrow" aria-hidden="true"><img src="icons/arrow.svg" alt=""></div>
    </button>
 
-   <button @click="await loadCivicConfig(); currentView='settings'" class="kiosk-tile kiosk-tile--settings" aria-label="Settings — barangay info, backup, database health">
+   <button type="button" @click="await loadCivicConfig(); currentView='settings'" class="kiosk-tile kiosk-tile--settings" aria-label="Settings — barangay info, backup, database health">
      <div class="kiosk-tile__icon" aria-hidden="true"><img src="icons/settings.png" alt="" aria-hidden="true"></div>
      <div class="kiosk-tile__text">
        <div class="kiosk-tile__title">Settings</div>
