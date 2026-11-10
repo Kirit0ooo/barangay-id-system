@@ -70,7 +70,8 @@ Usage:
   build.bat -NoClean    # keep previous bundle/ outputs
 Pre-build: stale bundle/ outputs removed (see -NoClean); patch version auto-increments
 x.y.z -> x.y.z+1 across package.json / package-lock.json / tauri.conf.json / Cargo.toml /
-Cargo.lock (see -NoBump) so the compiled binary and installers carry the new version. The highest
+Cargo.lock / frontend/src/index.html / README.md (see -NoBump) so the compiled binary
+and installers carry the new version. The highest
 version found in those files is the base and the others are synced to it, so a tree whose manifests
 disagree repairs itself instead of aborting the build.
 Output: backend/src/target/x86_64-pc-windows-msvc/release/bundle/nsis/ and bundle/msi/ + portable exe
@@ -119,7 +120,10 @@ function Invoke-PatchVersionBump {
            Write = '(name = "barangay-id-system"\r?\nversion = ")[^"]+(")' },
         @{ File = 'frontend/src/index.html'; Label = 'frontend/src/index.html (About Version)'
            Read = 'Version</div><div class="about-kv__value font-mono">([^<]+)</div>'
-           Write = '(Version</div><div class="about-kv__value font-mono">)[^<]+(</div>)' }
+           Write = '(Version</div><div class="about-kv__value font-mono">)[^<]+(</div>)' },
+        @{ File = 'README.md'; Label = 'README.md (About Version)'
+           Read = '\*\*Version:\*\* ([^ ]+)'
+           Write = '(\*\*Version:\*\* )[^ ]+(\*\*)' }
     )
 
     # 1. Resolve every slot. Highest version found is the base, so a tree whose
