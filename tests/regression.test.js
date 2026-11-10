@@ -34,7 +34,6 @@ const buildPs1 = readFileSync(join(root, 'build.ps1'), 'utf8');
 const runPs1 = readFileSync(join(root, 'run.ps1'), 'utf8');
 const runBat = readFileSync(join(root, 'run.bat'), 'utf8');
 const buildBat = readFileSync(join(root, 'build.bat'), 'utf8');
-const viewLogsBat = readFileSync(join(root, 'view-logs.bat'), 'utf8');
 // Comment-stripped copy: historical notes may name deleted PDF items (allowed).
 const idCardCode = idCardRs.replace(/^\s*\/\/.*$/gm, '');
 const cargoCode = cargoToml.replace(/^\s*#.*$/gm, '');
@@ -292,7 +291,7 @@ check('verify crypto deps pruned', !cargoToml.includes('ed25519-dalek') && !carg
 check('build gate probes MSVC linker', buildPs1.includes('link.exe') && buildPs1.includes('vswhere'), 'cargo would fail at link after a long compile');
 check('build gate probes NSIS', buildPs1.includes('makensis'), 'nsis leg unchecked');
 check('build gate is table-driven for future deps', buildPs1.includes('$Prereqs') && buildPs1.includes("FUTURE deps are a one-row addition"), 'gate not extensible');
-check('all launchers ASCII-only (PS 5.1 codepage-safe)', [runPs1, buildPs1, runBat, buildBat, viewLogsBat].every(s => [...s].every(ch => ch.codePointAt(0) < 0x80)), 'non-ASCII broke PS 5.1 parsing once');
+check('all launchers ASCII-only (PS 5.1 codepage-safe)', [runPs1, buildPs1, runBat, buildBat].every(s => [...s].every(ch => ch.codePointAt(0) < 0x80)), 'non-ASCII broke PS 5.1 parsing once');
 
 // 35. run.ps1 dev gate mirrors build gate (dev compiles Rust too; no bundling tools needed)
 check('run.ps1 gate probes MSVC linker', runPs1.includes('link.exe'), 'tauri dev would fail at link after compiling');

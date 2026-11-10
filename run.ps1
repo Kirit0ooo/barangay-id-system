@@ -6,13 +6,13 @@
     Double-click or run:
       powershell -ExecutionPolicy Bypass -File .\run.ps1
     Flags:
-      .\run.ps1 -Logs        # tail isolated logs (app.log.* + frontend.log + latest run/build) and exit - supersedes view-logs.bat logic; wrapper remains
+      .\run.ps1 -Logs        # tail isolated logs (app.log.* + frontend.log + latest run/build) and exit
       .\run.ps1 -Fix         # deep clean: remove node_modules + .npm-cache contents, npm ci->install, verify tauri.cmd (historical fix-tauri.bat folded in)
       .\run.ps1 -NoInstall   # skip auto npm install, fail fast if tauri.cmd missing
       .\run.ps1 -Help        # usage
       .\run.ps1 -Audit       # warn-only cargo audit + npm audit (parity with build.ps1 -Audit)
       .\run.ps1 -EnableVerboseLogging  # verbose console: RUST_LOG=debug + frontend debug
-    Thin wrappers (same env pins, forward %*): run.bat (dev), build.bat (build.ps1), view-logs.bat (run.ps1 -Logs + explorer).
+    Thin wrappers (same env pins, forward %*): run.bat (dev), build.bat (build.ps1).
     Portable contract: every artifact (npm cache, cargo target, tmp,
     WebView2 data, logs, SQLite) stays inside this project folder.
     No writes to %APPDATA%, %TEMP%, drive root, or home.
@@ -86,13 +86,13 @@ if ($Help) {
 Barangay ID System - run.ps1 (canonical portable launcher)
 Usage:
   powershell -ExecutionPolicy Bypass -File .\run.ps1            # dev (auto npm ci/install, tauri dev)
-  .\run.ps1 -Logs        # tail isolated logs (app.log.* + frontend.log + latest run/build) and exit - replaces view-logs.bat
+  .\run.ps1 -Logs        # tail isolated logs (app.log.* + frontend.log + latest run/build) and exit
   .\run.ps1 -Fix         # deep clean node_modules + .npm-cache, npm ci->install, verify tauri.cmd - historical fix-tauri.bat folded in
   .\run.ps1 -NoInstall   # fail fast if tauri.cmd missing
   .\run.ps1 -EnableVerboseLogging     # verbose console: RUST_LOG=debug + frontend debug (same as `$env:RUST_LOG='debug'; .\run.ps1`)
   .\run.ps1 -Audit       # warn-only cargo audit + npm audit (parity with build.ps1 -Audit)
   .\run.ps1 -Help        # this help
-  run.bat [flags]        # thin wrapper -> run.ps1 %* (same env pins); build.bat -> build.ps1; view-logs.bat -> run.ps1 -Logs
+  run.bat [flags]        # thin wrapper -> run.ps1 %* (same env pins); build.bat -> build.ps1
 
 Portable contract: all artifacts stay inside this folder (no writes to %APPDATA%/%TEMP%).
 Env pins BEFORE any npm/cargo: NPM_CONFIG_CACHE=./.npm-cache CARGO_TARGET_DIR=./backend/src/target TMP/TEMP/TMPDIR=./tmp WEBVIEW2_USER_DATA_FOLDER=./tmp/webview2
@@ -100,7 +100,7 @@ R5: scheduled backup (wal_checkpoint -> data/backups/scheduled_*) + photo GC run
 Runtime features (no launcher flags needed): get_cards_batch (P1 bulk print), duplicate-person check (E1),
 optimize_database (E2, 7-day cadence), 10s photo processing budget (E4).
 Transcript: logs/run-YYYYMMDD-HHmmss.log (isolated, never %TEMP%)
-Use -Logs to tail: .\run.ps1 -Logs   |   view-logs.bat adds Explorer open.
+Use -Logs to tail: .\run.ps1 -Logs
 Verbose: .\run.ps1 -EnableVerboseLogging  (or `$env:RUST_LOG='debug'; .\run.ps1)
 For comment-based help: Get-Help .\run.ps1 -Detailed
 "@
@@ -109,7 +109,7 @@ For comment-based help: Get-Help .\run.ps1 -Detailed
     exit 0
 }
 
-# ---- -Logs flag: tail isolated logs and exit (merges view-logs.bat) ----
+# ---- -Logs flag: tail isolated logs and exit ----
 if ($Logs) {
     Write-Host "=== Isolated Logs: $Root\logs ===" -ForegroundColor Cyan
     $logsDir = Join-Path $Root 'logs'
@@ -163,7 +163,7 @@ if ($Logs) {
     }
 
     Write-Host "`nFull logs folder: $Root\logs" -ForegroundColor Cyan
-    Write-Host "Tip: view-logs.bat (if present) also opens Explorer; or: explorer logs" -ForegroundColor DarkGray
+    Write-Host "Tip: or: explorer logs" -ForegroundColor DarkGray
     Restore-EnvPins
     exit 0
 }
@@ -372,7 +372,7 @@ try {
         Restore-EnvPins
         exit $LASTEXITCODE
     }
-    Write-Host "Tauri dev exited normally. Tail hint: .\run.ps1 -Logs  (or view-logs.bat if present)" -ForegroundColor Green
+    Write-Host "Tauri dev exited normally. Tail hint: .\run.ps1 -Logs" -ForegroundColor Green
 } catch [System.Management.Automation.PipelineStoppedException] {
     # Ctrl+C during any pipeline (tauri dev watch, Out-Host): expected stop, exit 0 so transcript shows clean end.
     Write-Host 'Stopped by user (Ctrl+C) - normal exit.' -ForegroundColor Yellow

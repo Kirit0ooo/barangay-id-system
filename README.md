@@ -105,7 +105,6 @@ npx tauri dev
       ├── run.ps1                        # CANONICAL dev launcher (PowerShell 5.1+, -Logs/-Fix/-NoInstall/-Help/-Audit; transcript to logs/run-*.log)
       ├── run.bat                        # thin wrapper -> run.ps1 %* (pins same env; minimal :NOPS hint+pause only if PowerShell absent)
       ├── build.ps1 / build.bat          # release build -> backend/src/target/x86_64-pc-windows-msvc/release/bundle/msi/ + logs/build-*.log
-      ├── view-logs.bat                  # thin wrapper -> run.ps1 -Logs + explorer logs\ (Explorer open is the double-click value; tail logic lives in run.ps1)
       └── README.md
 ```
 
@@ -141,7 +140,7 @@ npm install
 run.bat
 :: Option B — PowerShell (CANONICAL, transcript to logs/run-*.log)
 powershell -ExecutionPolicy Bypass -File .\run.ps1
-:: flags: .\run.ps1 -Logs (tail app.log.*+frontend.log+run/build, replaces view-logs.bat) | -Fix (deep clean) | -NoInstall (fail fast) | -Help | -Audit (warn-only, parity with build.ps1)
+:: flags: .\run.ps1 -Logs (tail app.log.*+frontend.log+run/build) | -Fix (deep clean) | -NoInstall (fail fast) | -Help | -Audit (warn-only, parity with build.ps1)
 ::          run.bat forwards all flags: run.bat -Logs / run.bat -Fix / run.bat -Audit
 :: Option C — direct (must pin env first — launchers do this for you)
 npx tauri dev
@@ -364,7 +363,6 @@ with a legacy cmd fallback. `run.ps1` is canonical — `.bat` wrappers only forw
 | `run.bat` | **thin wrapper** → `run.ps1 %*` (same env pins before `powershell`); minimal `:NOPS` hint+pause only if PowerShell absent; forwards all flags | same pins, `logs/run-*.log` |
 | `build.ps1` *(canonical)* | prereq check → `npm ci`→`install` if needed → `rustup target add` → `npx tauri build --target x86_64-pc-windows-msvc` → `bundle/msi/`+`bundle/nsis/`; transcript | `logs/build-*.log` + `backend/src/target` |
 | `build.bat` | **thin wrapper** → `build.ps1 %*` (same env pins); legacy `:NOPS` fallback only if PowerShell absent | same pins |
-| `view-logs.bat` | **thin wrapper** → `run.ps1 -Logs` + `explorer logs\` (Explorer open is the double-click value; tail logic lives in `run.ps1`) | read-only, no env writes |
 
 
 `main.rs` pins `TMP/TEMP/TMPDIR/WEBVIEW2_USER_DATA_FOLDER` to `tmp/` at startup (`tmp/webview2/`).

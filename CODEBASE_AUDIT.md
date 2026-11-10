@@ -17,7 +17,7 @@ This is an offline-first Tauri v1 desktop app for barangay ID registration (Wind
 
 **Frontend modules:** `app.core.js` (shared state + core methods), `residents/app.register.js`, `residents/app.search.js`, `residents/app.detail.js`, `settings/app.settings.js`, `dashboard/app.dashboard.js`, `app.js` (entry point), `shared/helpers.js`, `services/api.js`, `services/logger.js`, `bootstrap/verbose.js`. CSS: `style.css` + prebuilt `tailwind.css` (freshness-guarded by `tools/check-css.mjs`).
 
-**Launchers:** `run.ps1`/`run.bat` (dev), `build.ps1`/`build.bat` (release, NSIS-only), `tools/launcher-common.ps1` (shared env pins: `NPM_CONFIG_CACHE=./.npm-cache`, `CARGO_TARGET_DIR=./backend/src/target`, `TMP/TEMP/TMPDIR=./tmp`, `WEBVIEW2_USER_DATA_FOLDER=./tmp/webview2`), `view-logs.bat` (wrapper).
+**Launchers:** `run.ps1`/`run.bat` (dev), `build.ps1`/`build.bat` (release, NSIS-only), `tools/launcher-common.ps1` (shared env pins).
 
 ---
 
@@ -39,7 +39,7 @@ No defects, security vulnerabilities, integration failures, or test gaps were fo
 
 ### Files inspected (baseline inventory)
 
-- Root: `package.json`, `package-lock.json`, `README.md`, `AGENTS.md`, `DESIGN.md`, `CODEBASE_REVIEW.md`, `PI_LOCAL_COMMIT_AND_MERGE.md`, `build.bat`, `build.ps1`, `run.bat`, `run.ps1`, `view-logs.bat`, `.gitignore`, `.npmrc`, `skills-lock.json`
+- Root: `package.json`, `package-lock.json`, `README.md`, `AGENTS.md`, `DESIGN.md`, `CODEBASE_REVIEW.md`, `PI_LOCAL_COMMIT_AND_MERGE.md`, `build.bat`, `build.ps1`, `run.bat`, `run.ps1`, `.gitignore`, `.npmrc`, `skills-lock.json`
 - `tools/`: `check-css.mjs`, `css-fingerprint.txt`, `launcher-common.ps1`, `tokens.html`
 - `config/civic.json`
 - `backend/src/`: `Cargo.toml`, `Cargo.lock`, `build.rs`, `tauri.conf.json`, `src/{backup,config,crypto,db,encryption,export,id_card,logger,main,residents,scheduled}.rs`, `assets/`, `icons/`

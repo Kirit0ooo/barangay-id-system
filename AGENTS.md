@@ -340,7 +340,7 @@ Applied robustness fixes to the Windows PowerShell/batch launchers, zero logic c
 | MSVC gate | `build.ps1` | vswhere.exe existence alone no longer passes — now verifies VC.Tools.x86.x64 toolset is actually installed, matching run.ps1's strict check |
 | WiX gate | `build.ps1` | ~~Checked `WiX Toolset v3.11\bin\candle.exe` path first; `candle.exe` on PATH accepted only if `-version` reported v3.11~~ **superseded 2026-11-05** - WiX/NSIS are now warn-only because Tauri v1 provisions its own toolset (see "Installer toolchain provisioning" below) |
 | Stale comment | `tools/launcher-common.ps1` | `Ensure-DataDir` comment corrected: both run.ps1 and build.ps1 call it (was "run.ps1 only") |
-| -Logs narrative | `run.ps1` | `.SYNOPSIS` reworded from "replaces view-logs.bat" to "supersedes view-logs.bat logic; wrapper remains" since view-logs.bat still exists as a live Explorer wrapper |
+| -Logs narrative | `run.ps1` | `.SYNOPSIS` reworded from "replaces view-logs.bat" to "supersedes view-logs.bat logic; wrapper removed" since view-logs.bat was deleted (its logic lives in run.ps1 -Logs) |
 
 Validation: `npm test` 57/0/6, `npm run check:css` CSS fresh, `npm audit` 0 vulnerabilities.
 
