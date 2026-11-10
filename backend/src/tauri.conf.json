@@ -8,7 +8,7 @@
   },
   "package": {
     "productName": "Barangay-ID-Registration-System",
-    "version": "1.0.11"
+    "version": "1.0.12"
   },
   "tauri": {
     "allowlist": {
