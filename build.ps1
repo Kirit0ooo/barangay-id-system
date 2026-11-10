@@ -123,7 +123,10 @@ function Invoke-PatchVersionBump {
            Write = '(Version</div><div class="about-kv__value font-mono">)[^<]+(</div>)' },
         @{ File = 'README.md'; Label = 'README.md (About Version)'
            Read = '\*\*Version:\*\* ([^ ]+)'
-           Write = '(\*\*Version:\*\* )[^ ]+(\*\*)' }
+           # The About line is '**Version:** 1.0.10 · Identifier: ...' — the
+           # version token is followed by ' ·', not '**', so match only the
+           # token (what Read captures) and replace it in place.
+           Write = '(\*\*Version:\*\* )[^ ]+' }
     )
 
     # 1. Resolve every slot. Highest version found is the base, so a tree whose
@@ -160,7 +163,15 @@ function Invoke-PatchVersionBump {
     foreach ($s in $slots) {
         $fp = Join-Path $Root $s.File
         $current = [IO.File]::ReadAllText($fp, [System.Text.Encoding]::UTF8)
-        [IO.File]::WriteAllText($fp, [regex]::Replace($current, $s.Write, ('${1}' + $newVer + '${2}')), $noBom)
+        # Only slots whose Write pattern defines a 2nd capture group get '${2}':
+        # README's About line only replaces the version token in place (1 group),
+        # everything else preserves a closing delimiter (2 groups). Skipping '${2}'
+        # for a 1-group pattern avoids the literal '${2}' leak .NET emits.
+        $mCount = [regex]::Match($s.Text, $s.Write)
+        $hasGroup2 = ($mCount.Success -and $mCount.Groups.Count -ge 3)
+        $suffix = if ($hasGroup2) { '${2}' } else { '' }
+        $replacement = '${1}' + $newVer + $suffix
+        [IO.File]::WriteAllText($fp, [regex]::Replace($current, $s.Write, $replacement), $noBom)
     }
     $wrong = @()
     foreach ($m in $manifests) {
