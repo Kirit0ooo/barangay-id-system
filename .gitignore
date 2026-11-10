@@ -47,3 +47,6 @@ data/.last_optimize
 # Pi agent state (task output / session artifacts — not project source)
 .pi/
 .superpowers/
+# Agent session artifacts (not project source)
+PI_LOCAL_COMMIT_AND_MERGE.md
+CODEBASE_REVIEW.md
