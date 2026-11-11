@@ -304,7 +304,7 @@ Object.assign(window.appState, {
             // every click. A closed or never-opened handle gets a fresh window.
             let w = this.previewWindow;
             if (!w || w.closed) {
-                w = window.open('', '_blank');
+                w = window.open('about:blank', '_blank');
                 if (!w) { this.showToast('Popup blocked — printing directly instead', 'info'); this.printFilledCard(filled); return; }
                 this.previewWindow = w;
             }
@@ -312,9 +312,7 @@ Object.assign(window.appState, {
             // Preview must match the print preview design: hide screen chrome
             // (toolbar, page labels, cut lines, crop marks) and use the print
             // bleed frame so the on-screen preview is identical to what prints.
-            const style = w.document.createElement('style');
-            style.textContent = '.toolbar,.page-label,.cutline{display:none !important;}.bleed .crop{display:none !important;}.bleed{padding:1.2mm !important;margin:0 auto !important;width:101.7mm !important;border:0.35mm dashed #4b5563 !important;background:#fff !important;}body{padding:0 !important;background:#fff !important;}';
-            w.document.head.appendChild(style);
+            w.document.body.classList.add('card-preview');
             w.focus();
             Logger.info('previewResidentCard', residentId);
         } catch (e) {

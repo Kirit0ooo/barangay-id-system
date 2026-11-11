@@ -24,7 +24,7 @@ function loadAppState() {
   const body = [
     'const window = globalThis;',
     // Minimal DOM stub — only read at call time inside detail methods.
-    'globalThis.document = globalThis.document || { documentElement: { dataset: {} }, querySelectorAll: () => [], createElement: () => ({}) };',
+    'globalThis.document = globalThis.document || { documentElement: { dataset: {} }, querySelectorAll: () => [], createElement: () => ({}), body: { classList: { add: () => {} } } };',
     'const Logger = { info() {}, warn() {}, error() {} };',
     'const API = {};',
     helpers,
@@ -38,21 +38,21 @@ function loadAppState() {
 
 function fakeWindow(closed = false) {
   const writes = [];
-  const styleAppends = [];
+  const classAdds = [];
   return {
     closed,
     writes,
-    styleAppends,
+    classAdds,
     document: {
       open: () => {},
       write: (html) => { writes.push(html); },
       close: () => {},
       createElement: () => ({ textContent: '' }),
-      head: { appendChild: (el) => { styleAppends.push(el.textContent); } },
+      body: { classList: { add: (cls) => { classAdds.push(cls); } } },
     },
     focus: () => {},
     __writes: () => writes,
-    __styleAppends: () => styleAppends,
+    __classAdds: () => classAdds,
   };
 }
 
@@ -62,7 +62,8 @@ describe('previewResidentCard single-window reuse', () => {
     const win = fakeWindow(false);
 
     let openCount = 0;
-    globalThis.open = () => { openCount += 1; return win; };
+    let openedUrl = null;
+    globalThis.open = (url) => { openCount += 1; openedUrl = url; return win; };
 
     appState.cardHtmlForResident = async (id) => `<html>card:${id}</html>`;
     appState.showToast = () => {};
@@ -72,9 +73,10 @@ describe('previewResidentCard single-window reuse', () => {
     await appState.previewResidentCard('R2');
 
     assert.equal(openCount, 1, 'window.open called only once');
+    assert.equal(openedUrl, 'about:blank', 'window.open uses about:blank target');
     assert.equal(appState.previewWindow, win, 'previewWindow cached and reused');
     assert.equal(win.__writes().length, 2, 'both cards rendered into the same window');
-    assert.equal(win.__styleAppends().length, 2, 'print-matching style injected each time');
+    assert.equal(win.__classAdds().length, 2, 'preview class added each time');
   });
 
   it('reopens a fresh window when the cached one has been closed', async () => {
