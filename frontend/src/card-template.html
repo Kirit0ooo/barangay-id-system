@@ -322,11 +322,15 @@
     </div>
   </div>
 
-<!-- CSP safeguard: the inline JS block below has its SHA-256 hash listed in
-     backend/src/tauri.conf.json security.csp script-src. ANY edit to that
-     block changes the hash and silently blocks the inline script under CSP,
-     breaking toolbar buttons (addEventListener wiring) and card rendering.
-     Recompute the hash after any change and update tauri.conf.json accordingly. -->
+<!-- CSP safeguard: the inline script block immediately below this comment,
+     from its opening tag to its closing tag, has its SHA-256 hash listed in
+     backend/src/tauri.conf.json security.csp script-src. ANY edit to the
+     content between those tags changes the hash and silently blocks the
+     inline script under CSP, breaking toolbar buttons (addEventListener
+     wiring) and card rendering. To recompute after an edit, hash the bytes
+     between the script open tag and close tag as base64-encoded SHA-256,
+     then update both sha256-* entries in tauri.conf.json security.csp
+     accordingly. -->
 <script>
 /* Data-injection bridge — no external deps, no network calls.
    window.__renderCard(payload): fills every [data-field] slot.
