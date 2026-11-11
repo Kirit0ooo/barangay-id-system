@@ -298,22 +298,59 @@ Object.assign(window.appState, {
         }
     },
 
+    __applyZoom(win, mode) {
+        const sheet = win.document.querySelector('.sheet');
+        if (!sheet) {
+            return;
+        }
+        if (mode === 1) {
+            sheet.style.transform = '';
+            return;
+        }
+        const sheetWidth = sheet.scrollWidth || 794;
+        const avail = win.document.documentElement.clientWidth - 20;
+        const scale = Math.min(1, avail / sheetWidth);
+        sheet.style.transformOrigin = 'top center';
+        sheet.style.transform = 'scale(' + scale + ')';
+    },
+
     async previewResidentCard(residentId) {
         try {
             const filled = await this.cardHtmlForResident(residentId);
-            // Reuse a single preview window instead of opening a new one on
-            // every click. A closed or never-opened handle gets a fresh window.
             let w = this.previewWindow;
             if (!w || w.closed) {
                 w = window.open('about:blank', '_blank');
-                if (!w) { this.showToast('Popup blocked — printing directly instead', 'info'); this.printFilledCard(filled); return; }
+                if (!w) {
+                    this.showToast('Popup blocked — printing directly instead', 'info');
+                    this.printFilledCard(filled);
+                    return;
+                }
                 this.previewWindow = w;
             }
             w.document.open(); w.document.write(filled); w.document.close();
-            // Preview must match the print preview design: hide screen chrome
-            // (toolbar, page labels, cut lines, crop marks) and use the print
-            // bleed frame so the on-screen preview is identical to what prints.
             w.document.body.classList.add('card-preview');
+            const wirePreviewButton = (id, fn) => {
+                const el = w.document.getElementById(id);
+                if (el) {
+                    el.addEventListener('click', fn);
+                }
+            };
+            wirePreviewButton('toolbar-print', () => {
+                try {
+                    w.print();
+                } catch (err) {
+                    Logger.error('preview print failed', err);
+                }
+            });
+            wirePreviewButton('toolbar-zoom-100', () => { this.__applyZoom(w, 1); });
+            wirePreviewButton('toolbar-zoom-fit', () => { this.__applyZoom(w, 0); });
+            wirePreviewButton('toolbar-close', () => {
+                try {
+                    w.close();
+                } catch (err) {
+                    Logger.error('preview close failed', err);
+                }
+            });
             w.focus();
             Logger.info('previewResidentCard', residentId);
         } catch (e) {

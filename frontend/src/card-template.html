@@ -186,7 +186,11 @@
   .toolbar{max-width:210mm; margin:0 auto 14px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap;}
   .toolbar button{font:600 13px/1 "Segoe UI",Arial,sans-serif; padding:9px 18px; border-radius:9px;
     border:1px solid #cbd5e1; background:#fff; color:#0f172a; cursor:pointer;}
+  .toolbar button:hover{background:#f1f5f9; border-color:#94a3b8;}
+  .toolbar button:focus{outline:2px solid #0f172a; outline-offset:2px;}
+  .toolbar button:active{background:#e2e8f0;}
   .toolbar button.primary{background:#0f172a; color:#fff; border-color:#0f172a;}
+  .toolbar button.primary:hover{background:#1e293b;}
 
   @media print{
     @page{size:A4 portrait; margin:25.4mm 0 0;}
