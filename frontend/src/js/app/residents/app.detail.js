@@ -221,6 +221,7 @@ Object.assign(window.appState, {
             photo,
             seal: await assetAsDataUrl('BALUD.png'),
             emblem: await assetAsDataUrl('bagong-pilipinas.png'),
+            watermark: await assetAsDataUrl('BALUD.png'),
             last_name: truncateCard((r.last_name || '').toUpperCase(), 12),
             first_name: truncateCard([r.first_name, r.suffix].filter(Boolean).join(' ').toUpperCase(), 12),
             middle_name: truncateCard(mid.toUpperCase(), 12),
@@ -241,7 +242,7 @@ Object.assign(window.appState, {
     },
 
     fillTemplate(el, payload) {
-        const IMG = { photo: 1, qr: 1, seal: 1, emblem: 1 };
+        const IMG = { photo: 1, qr: 1, seal: 1, emblem: 1, watermark: 1 };
         el.querySelectorAll('[data-field]').forEach((el2) => {
             const k = el2.getAttribute('data-field');
             if (!(k in payload) || payload[k] == null || payload[k] === '') return;

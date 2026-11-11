@@ -318,6 +318,24 @@ try {
     }
     if (-not (Test-Path $tauriCmd)) { throw 'tauri.cmd still missing after install. Run npm install manually or use -NoBump to skip version bump.' }
 
+    # ---- Clear any stale product-named EXE so Tauri's in-build rename
+    #      (barangay-id-system.exe -> Barangay-ID-Registration-System.exe,
+    #       per package.productName in tauri.conf.json) has an unlocked
+    #      target. A still-running instance of the app holds its own exe
+    #      locked, and Windows refuses the rename with "Access is denied
+    #      (os error 5)". Never kill the process silently - that risks
+    #      user data; surface a clear close-the-app instruction instead.
+    $releaseDir = Join-Path $Root 'backend/src/target/x86_64-pc-windows-msvc/release'
+    $productExe = Join-Path $releaseDir 'Barangay-ID-Registration-System.exe'
+    if (Test-Path $productExe) {
+        try {
+            Remove-Item $productExe -Force -ErrorAction Stop
+            Write-Host '[Barangay ID] Removed stale product EXE before build.' -ForegroundColor Green
+        } catch {
+            throw "Barangay-ID-Registration-System.exe is in use (a running instance of the app holds it locked). Close the app and re-run .\build.ps1"
+        }
+    }
+
     $prevEap=$ErrorActionPreference; $ErrorActionPreference='Continue'
     # Tauri CLI must run from backend/src (where tauri.conf.json lives).
     Push-Location (Join-Path $Root 'backend\src') | Out-Null

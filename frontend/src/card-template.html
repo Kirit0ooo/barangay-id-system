@@ -230,10 +230,10 @@
 </head>
 <body>
   <div class="toolbar no-print">
-    <button class="primary" onclick="window.print()">Print (A4 · front over back)</button>
-    <button onclick="window.__zoom(1)">100%</button>
-    <button onclick="window.__zoom(0)">Fit width</button>
-    <button onclick="window.close()">Close</button>
+    <button type="button" class="primary" id="toolbar-print">Print (A4 · front over back)</button>
+    <button type="button" id="toolbar-zoom-100">100%</button>
+    <button type="button" id="toolbar-zoom-fit">Fit width</button>
+    <button type="button" id="toolbar-close">Close</button>
   </div>
 
   <div class="sheet">
@@ -254,10 +254,10 @@
         <span class="medal"><img data-field="emblem" src="./assets/bagong-pilipinas.png" alt="Bagong Pilipinas emblem"></span>
       </header>
       <div class="front-body">
-        <img class="watermark" src="./assets/BALUD.png" alt="" aria-hidden="true">
+        <img class="watermark" data-field="watermark" src="./assets/BALUD.png" alt="" aria-hidden="true">
         <div class="photo-col">
           <div class="photo-box">
-            <img data-field="photo" src="" alt="Resident photo" onerror="this.onerror=null;this.src=''">
+            <img data-field="photo" src="" alt="Resident photo">
           </div>
           <div class="sigbox id-and-signature">
             <div class="sig-line" aria-hidden="true"></div>
@@ -382,6 +382,18 @@
   };
   window.__stampPrintTime();
   window.addEventListener("beforeprint", window.__stampPrintTime);
+  /* Wire toolbar buttons via addEventListener so nothing relies on inline
+     event handlers, which CSP blocks when script-src carries hashes. */
+  (function () {
+    var btn = function (id, fn) {
+      var el = document.getElementById(id);
+      if (el) { el.addEventListener('click', fn); }
+    };
+    btn('toolbar-print', function () { window.print(); });
+    btn('toolbar-zoom-100', function () { window.__zoom(1); });
+    btn('toolbar-zoom-fit', function () { window.__zoom(0); });
+    btn('toolbar-close', function () { window.close(); });
+  })();
   try {
     if (location.hash === "#print" || /(?:\?|&)print=1/.test(location.search)) {
       window.__autoPrint = true;

@@ -1,117 +1,73 @@
-# CODEBASE_AUDIT.md — Barangay ID Registration System
+# CODEBASE_AUDIT.md — Initial Assessment Report (Phase 4)
 
-**Project:** /mnt/d/Barangay/barangay-id-system
-**Assessment date:** 2026-11-11
-**Completed by:** Pi coding agent
-**Specification:** CODEBASE_REVIEW.md (full workflow: inventory → audit → repair → validate → reassess → report)
-**Status:** COMPLETE — one real defect found and fixed; all acceptance criteria now met.
-
----
-
-## 1. Initial inspection (baseline)
-
-This is an offline-first Tauri v1 desktop app for barangay ID registration (Windows-primary; WSL/Linux CI only).
-
-**Data flow:** Alpine SPA (`frontend/src/js/app/app.core.js` → view modules → `app.js`) → `frontend/src/js/services/api.js` (Tauri invoke wrappers) → Tauri commands (`backend/src/src/*.rs`) → sqlx SQLite (`data/residents.db`) → JSON response back to frontend. Photos stored base64→JPEG under `data/photos/` (max 6 MB binary). Bulk ID printing is HTML-only via `frontend/src/card-template.html` + hidden iframe (no PDF generation). Data isolated to project tree: `data/residents.db`, `data/photos/`, `data/backups/`, `config/civic.json`, `Documents/Excel/`, `logs/`, `tmp/`. Never `%APPDATA%/%TEMP%/AppData`.
-
-**Backend commands** (registered in `main.rs`): `generate_next_id`, `search_residents`, `save_resident`, `update_resident`, `delete_resident`, `get_qr_data_url`, `get_cards_batch`, `backup_database`, `restore_database`, `export_excel`, `import_excel`, `optimize_database_cmd`, `encryption_generate_key`, `encryption_status`, `encryption_encrypt_database`, `encryption_decrypt_database`, `encryption_encrypt_photos`, `encryption_decrypt_photos`, `log_frontend`, `download_frontend_logs`.
-
-**Frontend modules:** `app.core.js` (shared state + core methods), `residents/app.register.js`, `residents/app.search.js`, `residents/app.detail.js`, `settings/app.settings.js`, `dashboard/app.dashboard.js`, `app.js` (entry point), `shared/helpers.js`, `services/api.js`, `services/logger.js`, `bootstrap/verbose.js`. CSS: `style.css` + prebuilt `tailwind.css` (freshness-guarded by `tools/check-css.mjs`).
-
-**Launchers:** `build.ps1`/`build.bat` (release, NSIS-only), `tools/launcher-common.ps1` (shared env pins). Dev launchers `run.ps1`/`run.bat` removed (2026-11-10).
-
-**Git baseline:** master, HEAD e6985f8 ("Merge branch 'fix/card-preview-design-system'"), clean working tree, 1 commit ahead of origin/main. No stashes.
+**Framework:** CODEBASE_REVIEW.md v2.0 (14-phase evidence-based audit)
+**Status:** Phase 1–2 complete (inventory + architecture), Phase 3 verification done, Phase 4 report below
+**Repo:** `/mnt/d/Barangay/barangay-id-system`
+**Branch:** `master` @ `abd4015` (chore(version): bump all manifests to 1.0.16), working tree clean, ahead of origin/master by 1
+**Assessed:** 2026-11-11
 
 ---
 
-## 2. Audit findings
+## 1. Verified green gates (baseline)
 
-### 2.1 Baseline validation (pre-repair)
+| Gate | Result | Evidence |
+|---|---|---|
+| `npm test` | 60 pass / 0 fail / 13 suites / 7 files | `m00154` (smoke, regression, golden-card, bulk-progress, logic, structure, preview-window) |
+| `npm run check:css` | CSS fresh, exit 0 | `m00155` |
+| `npm audit` | 0 vulnerabilities | documented in AGENTS.md quality gates |
+| `cargo fmt --all -- --check` | clean, exit 0, all 11 files | AGENTS.md (2026-11-06) |
+| `cargo metadata --locked` | exit 0 (manifest + lockfile integrity) | AGENTS.md |
+| Rust compile / test / clippy / doc | BLOCKED on this host | no `libsoup-2.4`, no MSVC `lib.exe`; CI-only via `.github/workflows/ci.yml` |
 
-| Command | Result |
-|---------|--------|
-| `npm test` | 59 pass / **1 fail** / 13 suites — RED (regression.test.js) |
-| `npm run check:css` | CSS fresh |
-| `npm audit --audit-level=moderate` | 0 vulnerabilities |
-| `cargo fmt --all -- --check` | clean (exit 0, 11 files) |
-| `cargo metadata --locked` | exit 0 |
-| `cargo check`/`test`/`clippy`/`doc` | NOT RUN on this host — blocked (no `libsoup-2.4`, no MSVC `lib.exe`); CI-only |
+**Note — AGENTS.md test-count staleness:** AGENTS.md repeatedly states "57 pass / 0 fail / 6 suites" but the live suite runs **60 pass / 0 fail / 13 suites / 7 files** (`tests/preview-window.test.js` is the 7th file; AGENTS.md lists only 6). AGENTS.md is out of date on this point and should be restated to 60/0/13/7.
 
-### 2.2 Findings by severity
-
-**CRITICAL — none.**
-
-**HIGH — none.**
-
-**MEDIUM — 1 finding (FIXED):**
-
-| # | ID | File(s) | Finding | Fix |
-|---|----|---------|---------|-----|
-| M1 | LAUNCHER-NONASCII | `build.ps1` | `build.ps1` contained two non-ASCII characters in comments: `·` (U+00B7 middle dot) and `—` (U+2014 em dash). The regression test `all launchers ASCII-only (PS 5.1 codepage-safe)` requires every char in `build.ps1` and `build.bat` to be < 0x80, because non-ASCII broke PowerShell 5.1 parsing once. | Replaced both with ASCII hyphens (`-`) in `build.ps1:126-127`. Verified zero non-ASCII remain. |
-
-**LOW — none.**
-**INFORMATIONAL — none.**
-
-### 2.3 Investigated but NOT defects (files do not exist in this tree)
-
-During triage, several suspected surfaces were checked and confirmed absent — no action needed:
-
-- `tools/scan-scripts.sh` / `tools/check_ocpp_adapter.sh` — not present (`tools/` holds only `check-css.mjs`, `css-fingerprint.txt`, `launcher-common.ps1`, `tokens.html`). No OCPP adapter scripts exist.
-- `frontend/src/js/core/index.js` — not present; frontend modules live under `app/` per AGENTS.md. No empty auth stub.
-- `frontend/src/js/bridge/` — not present; no bridge UI surface.
-- `config.rs` references to `verify_base_url` / `VerifyTrust` — not present; config already carries `emergency_defaults` and `photo_gc_dry_run` consistently with `config/civic.json`.
-
-### 2.4 Data confinement
-
-All data, caches, logs, temp files, and build output remain inside the project root. `.gitignore` excludes `node_modules/`, `.npm-cache/`, `backend/src/target/`, `tmp/`, `logs/*.log`, `data/*`, `.crypto-key/`, `.pi/`. No data written to `/tmp`, `~/`, or AppData. — PASS
+**Version drift:** AGENTS.md's launcher-rework section references a historical split state (`package.json` 1.0.3 vs others 1.0.1). The live tree is fully in sync at **1.0.16** across `package.json`, `package-lock.json`, `backend/src/tauri.conf.json`, `backend/src/Cargo.toml`, `backend/src/Cargo.lock`, `frontend/src/index.html` (About card), and `README.md`. No action needed.
 
 ---
 
-## 3. Repair executed
+## 2. Advisor findings investigated (primary-source verification)
 
-**File changed:** `build.ps1` (2 character substitutions, comments only — no logic change)
+CODEBASE_REVIEW.md requires evidence tied to file:line; advisor output is not treated as evidence. Three "critical/high" claims were checked and **dismissed** — each is already soundly defended in the shipped code:
 
-- `build.ps1:126`: `' · Identifier: ...' — the` → `'- Identifier: ...' - the`
-- `build.ps1:127`: `followed by ' ·', not '**'` → `followed by ' -', not '**'`
+| Claim | Advisor location | Primary-source reality | Verdict |
+|---|---|---|---|
+| CB-006 SQL injection via `VACUUM INTO '{}'` string interpolation | `scheduled.rs` `scheduled_backup` fallback | The interpolated `tmp_str` derives from `Local::now()` (`scheduled_YYYYMMDD_HHMMSS.db`), is gated by `is_machine_backup_name()` (strict 15-char digit+underscore pattern, scheduled.rs:33-45), and single quotes are escaped `'\''`→`"''"` before interpolation (scheduled.rs:193-194). Not attacker-controlled. | **Dismissed — already defended** |
+| CB-002 "strict YYYY-MM-DD only" date parsing rejecting valid formats | `residents.rs` `normalize_valid_until` | `parse_any_date` accepts YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY (residents.rs:249-278). Unit tests cover all three formats plus invalid inputs (residents.rs:2013-2022). | **Dismissed — already supported** |
+| CB-005 path traversal bypass in `validate_isolated_write_path` | `db.rs` | Function performs lexical normalization + `..` rejection + null-byte rejection + canonical-parent check + symlink escape check (db.rs:477-546). Unit tests reject `..\..\Windows\System32\evil.txt`, `Documents/../../evil.txt`, and relative traversal variants (db.rs:889-1091). | **Dismissed — already defended** |
 
-No data deleted, no config overwritten, no dependencies added, no speculative features.
-
----
-
-## 4. Validation results (post-repair)
-
-| Command | Result |
-|---------|--------|
-| `npm test` | **60 pass / 0 fail / 13 suites** — GREEN (regression check now passes) |
-| `npm run check:css` | CSS fresh |
-| `npm audit --audit-level=moderate` | 0 vulnerabilities |
-| `grep -nP '[^\x00-\x7F]' build.ps1 build.bat` | no matches — launchers are ASCII-only |
-| `cargo fmt --check` | clean (unchanged; build.ps1/build.bat not Rust) |
-| `cargo metadata --locked` | exit 0 (unchanged) |
+No finding was accepted without a file:line quote from the actual source.
 
 ---
 
-## 5. Post-repair audit
+## 3. Genuine observations (not defects — documentation / process gaps)
 
-Fresh whole-project review complete after the fix:
-- No regressions: all 60 tests pass (was 59/1 pre-fix).
-- CSS fresh; npm audit 0.
-- The single MEDIUM finding (launcher non-ASCII) is resolved.
-- No new findings introduced by the one-character comment edit.
-- Acceptance criteria in CODEBASE_REVIEW.md all met or explicitly blocked by documented host limits (Rust compile is CI-only).
+These are not regressions or security defects; they are noted so the next agent doesn't mistake "undocumented" for "broken":
 
----
-
-## 6. Remaining risks / known boundaries (documented in AGENTS.md, not defects)
-
-1. Rust `cargo check/test/clippy/doc` cannot run on this host — CI is the compiler gate. Backend changes are statically reviewed only here.
-2. Pre-existing plaintext backups (created before the encryption switch) remain readable.
-3. Photos encrypted individually; new photos added while DB is unencrypted remain plaintext until explicitly encrypted.
-4. Network needed on first build for WiX/NSIS provisioning (~40 MB) and WebView2 offline installer (~150 MB); app itself is offline-first.
-5. `.crypto-key/key.bin` is never committed; loss of the key means encrypted data is unrecoverable.
+1. **Rust changes are not compiler-verifiable on this host.** `cargo check/test/clippy/doc` are blocked (no `libsoup-2.4`, no MSVC `lib.exe`). CI (`cargo test --manifest-path backend/src/Cargo.toml`) is the compiler gate. Any Rust edit must be reviewed statically and validated in CI before merge.
+2. **Encryption key sits beside data** (`.crypto-key/key.bin` next to `data/residents.db`). This is the documented threat-model boundary (AGENTS.md "Encryption at rest"): protects against file-copy-only attackers, not against an attacker with both key and data. Pre-existing plaintext backups and plaintext photos added while the DB is unencrypted remain readable — documented as known boundary gaps.
+3. **`tmp/` is gitignored** and used for throwaway harness probes (e.g. the `Invoke-PatchVersionBump` harness was run there and deleted). Keep it out of commits.
 
 ---
 
-## 7. Conclusion
+## 4. What was NOT done (scope boundary, per CODEBASE_REVIEW.md)
 
-**Workflow complete.** One real defect found (non-ASCII characters in `build.ps1` comments breaking the PS 5.1 codepage-safe regression check) and fixed with a two-character comment edit. All acceptance criteria now met: tests 60/0/13 green, CSS fresh, npm audit 0, data confinement intact, launchers ASCII-safe. No speculative features or unnecessary dependencies introduced. No further action required.
+- No files were written, edited, deleted, or moved (read-only assessment).
+- No user data touched: `data/residents.db`, `data/photos/`, `data/backups/`, `config/civic.json`, `.crypto-key/` preserved untouched.
+- No network, no push, no deploy, no privileged operations, no secrets printed.
+- No fabrication: every claim above tied to a file:line or a live command result.
+
+---
+
+## 5. Recommended next steps (Phase 5 remediation plan)
+
+If the user wants remediation work, the smallest complete plan is:
+
+1. **Update AGENTS.md test-count line** (57/0/6 → 60/0/13/7) and remove the outdated launcher-rework version-drift paragraph (tree is at 1.0.16, fully synced). One `docs` branch.
+2. **Re-verify after any change:** `npm test` (60/0/13/7), `npm run check:css` (CSS fresh), `npm audit` (0), plus `cargo fmt --check` for any Rust edit.
+3. **Rust edits** (if any): static review only locally; validate in CI. Never claim compiler-verified on this host.
+
+No security fix is required from the advisor's three headline claims — all three are already defended in the shipped code with tests.
+
+---
+
+**End of Phase 4 initial assessment.** Ready for user direction on whether to proceed to Phase 5 (remediation plan) and any specific defect to fix.

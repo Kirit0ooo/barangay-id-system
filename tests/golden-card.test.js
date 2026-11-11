@@ -237,6 +237,7 @@ check('backend short barangay full-string fallback intact', configRs.includes('b
 check('frontend truncateCard intact (ellipsis guard)', appJs.includes('truncateCard') && helpersJs.includes('max - 3'));
 check('assetAsDataUrl helper converts local logo to data URL', appJs.includes('async function assetAsDataUrl(name)'), 'assetAsDataUrl helper missing');
 check('card payload seals emblem as data URLs', appJs.includes("seal: await assetAsDataUrl('BALUD.png')") && appJs.includes("emblem: await assetAsDataUrl('bagong-pilipinas.png')"), 'seal/emblem missing from card payload');
+check('card payload seals watermark as data URL', appJs.includes("watermark: await assetAsDataUrl('BALUD.png')"), 'watermark missing from card payload');
 check('single render path: payload + template fill, no backend preview', appJs.includes('buildCardPayloadForRow') && appJs.includes('fillTemplateHtml') && appJs.includes('cardHtmlForResident') && !appJs.includes('previewIdCardHtml'));
 check('print path funnels through cardHtmlForResident (CR100 single template)', appJs.includes('this.printFilledCard(await this.cardHtmlForResident(residentId))'));
 check('preview path funnels through cardHtmlForResident (CR100 single template)', appJs.includes("const filled = await this.cardHtmlForResident(residentId)"));
