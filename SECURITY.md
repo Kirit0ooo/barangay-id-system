@@ -133,6 +133,25 @@ The `zip` crate appears as a **transitive dependency** (not a direct dependency)
 
 **Action:** No code change required. When the Rust toolchain becomes available on this host (currently blocked — no `libsoup-2.4`, no MSVC `lib.exe`), run `cargo update -p zip` to pull in patched versions (`zip >= 9.0.0` for the symlink DoS, `zip >= 9.0.5` for the dual-header conflict) as a precaution.
 
+### `glib` crate (Rust) — investigated, not applicable
+
+The `glib` crate appears as a **transitive dependency** (not a direct dependency) of this project:
+
+| Direct dependency | Uses `glib` | `glib` version | Affected (>= 0.15.0, < 0.20.0)? |
+|-------------------|-------------|----------------|-----------------------------------|
+| GTK/webkit2gtk stack (via Tauri, Linux GUI) | Yes | `0.15.12` | Yes |
+
+`glib-sys` is also present at version `0.15.10` as a transitive dependency of `glib`.
+
+**Finding:** `glib 0.15.12` is within the affected range (`>= 0.15.0, < 0.20.0`, patched in `0.20.0`). The `VariantStrIter::impl_get` function is unsound: it passes an immutable reference `&p` to a `*mut libc::c_char` initialized to NULL as an out-argument to the variadic C function `glib_sys::g_variant_get_child`, which mutates the pointer behind `&p` in-place. Under optimization this is undefined behaviour and can cause NULL pointer dereference crashes.
+
+**Not exploitable in this project:** The unsoundness is triggered only when iterating `glib::Variant` strings via `VariantStrIter` (Iterator / DoubleEndedIterator implementations). This project:
+- Does **not** declare `glib` as a direct dependency.
+- Does **not** call `glib::Variant`, `VariantStrIter`, or any `g_variant_get*` function in any source file.
+- Uses the GTK/webkit2gtk crates only as part of Tauri's Linux GUI stack; the project targets Windows primarily (webview2), where these crates are not compiled.
+
+**Action:** No code change required. When the Rust toolchain becomes available on this host (currently blocked — no `libsoup-2.4`, no MSVC `lib.exe`), run `cargo update -p glib` to pull in `glib >= 0.20.0` as a precaution.
+
 ## Disclosure Policy
 
 - Vulnerability reports are acknowledged within 72 hours.
