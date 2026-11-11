@@ -116,25 +116,22 @@ File-level AES-256-GCM encryption for `data/residents.db` and `data/photos/*`:
 
 The `zip` crate appears as a **transitive dependency** (not a direct dependency) of this project:
 
-| Direct dependency | Uses `zip` | `zip` version | Affected (<= 9.0.4)? |
-|-------------------|------------|---------------|---------------------|
-| `calamine 0.24.0` (Excel import) | Yes | `0.6.6` | Yes |
-| `rust_xlsxwriter 0.78.0` (Excel export) | Yes | `2.6.1` | Yes |
+| Direct dependency | Uses `zip` | `zip` version | Dual-header (<= 9.0.4)? | Symlink DoS (>= 1.3.0, < 9.0.0)? |
+|-------------------|------------|---------------|-------------------------|-----------------------------------|
+| `calamine 0.24.0` (Excel import) | Yes | `0.6.6` | Yes | No |
+| `rust_xlsxwriter 0.78.0` (Excel export) | Yes | `2.6.1` | Yes | Yes |
 
-**Finding:** The `zip` crate versions in the dependency tree are within the affected range (<= 9.0.4) for CWE-436 interpretation conflict between `ZipArchive` (CDFH-first) and `ZipStreamReader` (LFH-first) parsing.
+**Finding:** Both transitive `zip` versions fall within at least one affected range:
+- `zip 0.6.6` (via `calamine`) is affected by the dual-header CWE-436 interpretation conflict (<= 9.0.4).
+- `zip 2.6.1` (via `rust_xlsxwriter`) is affected by both the dual-header conflict (<= 9.0.4) and the symlink `Vec::with_capacity()` DoS (>= 1.3.0, < 9.0.0).
 
-**Not exploitable in this project:** The vulnerability's exploit chain requires all of:
-1. A security gateway inspecting archives via `ZipArchive` (CDFH-first),
-2. A backend extracting user-submitted ZIP archives via `ZipStreamReader` (LFH-first),
-3. Differential trust where one component inspects CDFH and another extracts via LFH.
-
-This project does **none** of those:
+**Not exploitable in this project:** Both vulnerabilities require `ZipArchive::extract()` (or `ZipStreamReader::extract()`) to be called on attacker-supplied input, triggering symlink extraction or dual-header parsing with a security gateway differential. This project does **none** of those:
 - It does **not** accept user-submitted ZIP files for extraction.
-- It does **not** call `ZipArchive` or `ZipStreamReader` directly in any source file.
-- `calamine` reads `.xlsx` cell data into memory — it does not extract files to the filesystem.
+- It does **not** call `ZipArchive::extract()`, `ZipStreamReader::extract()`, or `ZipArchive`/`ZipStreamReader` directly in any source file.
+- `calamine` reads `.xlsx` cell data into memory — it does not extract files to the filesystem and does not process symlinks.
 - `rust_xlsxwriter` only **writes** `.xlsx` files; it never reads or extracts archives.
 
-**Action:** No code change required. When the Rust toolchain becomes available on this host (currently blocked — no `libsoup-2.4`, no MSVC `lib.exe`), run `cargo update -p zip` to pull in patched versions (`zip >= 9.0.5`) as a precaution.
+**Action:** No code change required. When the Rust toolchain becomes available on this host (currently blocked — no `libsoup-2.4`, no MSVC `lib.exe`), run `cargo update -p zip` to pull in patched versions (`zip >= 9.0.0` for the symlink DoS, `zip >= 9.0.5` for the dual-header conflict) as a precaution.
 
 ## Disclosure Policy
 
