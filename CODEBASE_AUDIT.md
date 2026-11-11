@@ -3,8 +3,9 @@
 **Framework:** CODEBASE_REVIEW.md v2.0 (14-phase evidence-based audit)
 **Status:** Phase 1–2 complete (inventory + architecture), Phase 3 verification done, Phase 4 report below
 **Repo:** `/mnt/d/Barangay/barangay-id-system`
-**Branch:** `master` @ `abd4015` (chore(version): bump all manifests to 1.0.16), working tree clean, ahead of origin/master by 1
+**Branch:** `master` @ `11903a3` (fix(csp): sharpen card-template.html safeguard comment), working tree clean, ahead of origin/master by 1
 **Assessed:** 2026-11-11
+**Version:** 1.0.20 (all manifests synced)
 
 ---
 
