@@ -1,13 +1,14 @@
 # CODEBASE_AUDIT.md — Barangay ID Registration System
 
 **Project:** /mnt/d/Barangay/barangay-id-system
-**Assessment date:** 2026-11-10
-**Completed by:** Pi coding agent (ponytail mode, lite)
-**Status:** Baseline audit complete — project is compliant; no repairs required.
+**Assessment date:** 2026-11-11
+**Completed by:** Pi coding agent
+**Specification:** CODEBASE_REVIEW.md (full workflow: inventory → audit → repair → validate → reassess → report)
+**Status:** COMPLETE — one real defect found and fixed; all acceptance criteria now met.
 
 ---
 
-## 1. Initial assessment
+## 1. Initial inspection (baseline)
 
 This is an offline-first Tauri v1 desktop app for barangay ID registration (Windows-primary; WSL/Linux CI only).
 
@@ -17,88 +18,100 @@ This is an offline-first Tauri v1 desktop app for barangay ID registration (Wind
 
 **Frontend modules:** `app.core.js` (shared state + core methods), `residents/app.register.js`, `residents/app.search.js`, `residents/app.detail.js`, `settings/app.settings.js`, `dashboard/app.dashboard.js`, `app.js` (entry point), `shared/helpers.js`, `services/api.js`, `services/logger.js`, `bootstrap/verbose.js`. CSS: `style.css` + prebuilt `tailwind.css` (freshness-guarded by `tools/check-css.mjs`).
 
-**Launchers:** `build.ps1`/`build.bat` (release, NSIS-only), `tools/launcher-common.ps1` (shared env pins). `run.ps1`/`run.bat` dev launchers removed (2026-11-10).
+**Launchers:** `build.ps1`/`build.bat` (release, NSIS-only), `tools/launcher-common.ps1` (shared env pins). Dev launchers `run.ps1`/`run.bat` removed (2026-11-10).
+
+**Git baseline:** master, HEAD e6985f8 ("Merge branch 'fix/card-preview-design-system'"), clean working tree, 1 commit ahead of origin/main. No stashes.
 
 ---
 
 ## 2. Audit findings
 
-No defects, security vulnerabilities, integration failures, or test gaps were found. All acceptance criteria from `CODEBASE_REVIEW.md` are met.
-
-| Area | Finding | Status |
-|------|---------|--------|
-| Data confinement | All data/caches/logs/target inside project root; `.gitignore` excludes `node_modules/`, `.npm-cache/`, `backend/src/target/`, `tmp/`, `logs/*.log`, `data/*`, `.crypto-key/`, `.pi/` | PASS |
-| Tests | `npm test` → 57 pass / 0 fail / 12 suites | PASS |
-| CSS freshness | `npm run check:css` → CSS fresh (markup unchanged since last stamp) | PASS |
-| npm audit | `npm audit --audit-level=moderate` → 0 vulnerabilities | PASS |
-| Rust compile | Blocked on this host (no `libsoup-2.4`, no MSVC `lib.exe`); CI-only via `.github/workflows/ci.yml`. `cargo fmt --all -- --check` clean (exit 0, 11 files); `cargo metadata --locked` exit 0 | BLOCKED (host env limit, documented) |
-| Portability | `build.ps1` auto-version bump (repairs drifted manifests), warn-only WiX/NSIS (Tauri provisions its own), transcript logs inside `logs/`; dev launchers `run.ps1`/`run.bat` removed (2026-11-10) | PASS |
-| Encryption at rest | AES-256-GCM for `data/residents.db` + `data/photos/*`; key at `.crypto-key/key.bin` (never committed); decrypt-on-read wired via `resolve_photo_bytes` | PASS |
-| Security hardening | Tauri CSP no `unsafe-eval`; fs/CSP allowlist; path-traversal rejection; escaped LIKE search; digit-search NULL bound (no table leak); FK orphan guard; DOB sanity cap (120 yrs); PII logs sanitized at char boundary | PASS |
-| Docs | `AGENTS.md` current; `DESIGN.md` token system current; annotated fixes table intact; no drift | PASS |
-
-### Files inspected (baseline inventory)
-
-- Root: `package.json`, `package-lock.json`, `README.md`, `AGENTS.md`, `DESIGN.md`, `CODEBASE_REVIEW.md`, `PI_LOCAL_COMMIT_AND_MERGE.md`, `build.bat`, `build.ps1`, `.gitignore`, `.npmrc`, `skills-lock.json`
-- `tools/`: `check-css.mjs`, `css-fingerprint.txt`, `launcher-common.ps1`, `tokens.html`
-- `config/civic.json`
-- `backend/src/`: `Cargo.toml`, `Cargo.lock`, `build.rs`, `tauri.conf.json`, `src/{backup,config,crypto,db,encryption,export,id_card,logger,main,residents,scheduled}.rs`, `assets/`, `icons/`
-- `frontend/src/`: `index.html`, `card-template.html`, `css/{style.css,tailwind.css}`, `js/{app.js,app.core.js,residents/{app.register,app.search,app.detail}.js,settings/app.settings.js,dashboard/app.dashboard.js,shared/helpers.js,services/{api.js,logger.js},bootstrap/verbose.js}`, `fonts/`, `icons/`, `assets/`
-- `tests/`: `smoke.test.js`, `regression.test.js`, `golden-card.test.js`, `bulk-progress.test.js`, `logic.test.js`, `structure.test.js`
-- `data/`: `residents.db` (+ `-wal`, `-shm`), `photos/` (empty), `backups/` (empty)
-- `.git/`: 37 local branches + main; all feature branches integrated; HEAD `7d7918053d...`, 1 commit ahead of origin/main, working tree clean.
-
-### Commands executed
+### 2.1 Baseline validation (pre-repair)
 
 | Command | Result |
 |---------|--------|
-| `npm test` | 57 pass / 0 fail / 12 suites |
+| `npm test` | 59 pass / **1 fail** / 13 suites — RED (regression.test.js) |
+| `npm run check:css` | CSS fresh |
 | `npm audit --audit-level=moderate` | 0 vulnerabilities |
-| `node tools/check-css.mjs` | CSS fresh |
-| `cargo fmt --all -- --check` (via skill) | clean, exit 0 |
+| `cargo fmt --all -- --check` | clean (exit 0, 11 files) |
 | `cargo metadata --locked` | exit 0 |
-| `cargo check`/`cargo test`/`cargo clippy`/`cargo doc` | NOT RUN — blocked on this host (no `libsoup-2.4`, no MSVC `lib.exe`); CI-only |
+| `cargo check`/`test`/`clippy`/`doc` | NOT RUN on this host — blocked (no `libsoup-2.4`, no MSVC `lib.exe`); CI-only |
 
-### Existing annotated fixes (verified present, no regressions)
+### 2.2 Findings by severity
 
-D5 search table-leak, D6 status precedence, P2 explicit column list, P0 FK orphan guard, P2-7 photo_gc on schedule, P2-7b photo_gc_dry_run toggle, P2-8 DOB sanity cap, T1 test/dummy data removal, dashboard kiosk remodel, UI/UX consistency pass, frontend modularization, launcher alignment fixes, installer toolchain provisioning, MSI leg deferred (NSIS-only), settings page card redesign, fonts, icons, accessibility & focus polish, Rust codebase quality pass, build launcher rework.
+**CRITICAL — none.**
+
+**HIGH — none.**
+
+**MEDIUM — 1 finding (FIXED):**
+
+| # | ID | File(s) | Finding | Fix |
+|---|----|---------|---------|-----|
+| M1 | LAUNCHER-NONASCII | `build.ps1` | `build.ps1` contained two non-ASCII characters in comments: `·` (U+00B7 middle dot) and `—` (U+2014 em dash). The regression test `all launchers ASCII-only (PS 5.1 codepage-safe)` requires every char in `build.ps1` and `build.bat` to be < 0x80, because non-ASCII broke PowerShell 5.1 parsing once. | Replaced both with ASCII hyphens (`-`) in `build.ps1:126-127`. Verified zero non-ASCII remain. |
+
+**LOW — none.**
+**INFORMATIONAL — none.**
+
+### 2.3 Investigated but NOT defects (files do not exist in this tree)
+
+During triage, several suspected surfaces were checked and confirmed absent — no action needed:
+
+- `tools/scan-scripts.sh` / `tools/check_ocpp_adapter.sh` — not present (`tools/` holds only `check-css.mjs`, `css-fingerprint.txt`, `launcher-common.ps1`, `tokens.html`). No OCPP adapter scripts exist.
+- `frontend/src/js/core/index.js` — not present; frontend modules live under `app/` per AGENTS.md. No empty auth stub.
+- `frontend/src/js/bridge/` — not present; no bridge UI surface.
+- `config.rs` references to `verify_base_url` / `VerifyTrust` — not present; config already carries `emergency_defaults` and `photo_gc_dry_run` consistently with `config/civic.json`.
+
+### 2.4 Data confinement
+
+All data, caches, logs, temp files, and build output remain inside the project root. `.gitignore` excludes `node_modules/`, `.npm-cache/`, `backend/src/target/`, `tmp/`, `logs/*.log`, `data/*`, `.crypto-key/`, `.pi/`. No data written to `/tmp`, `~/`, or AppData. — PASS
 
 ---
 
-## 3. Repairs
+## 3. Repair executed
 
-None required. No file changes were made. No speculative features or unnecessary dependencies introduced.
+**File changed:** `build.ps1` (2 character substitutions, comments only — no logic change)
+
+- `build.ps1:126`: `' · Identifier: ...' — the` → `'- Identifier: ...' - the`
+- `build.ps1:127`: `followed by ' ·', not '**'` → `followed by ' -', not '**'`
+
+No data deleted, no config overwritten, no dependencies added, no speculative features.
 
 ---
 
-## 4. Validation results
+## 4. Validation results (post-repair)
 
-- `npm test`: 57 pass / 0 fail — green.
-- `npm run check:css`: CSS fresh.
-- `npm audit`: 0 vulnerabilities.
-- `cargo fmt --check`: clean (11 files).
-- `cargo metadata --locked`: exit 0.
-- Launcher env pins verified present in `build.ps1`/`tools/launcher-common.ps1`; dev launchers `run.ps1`/`run.bat` removed (2026-11-10); portability contract intact.
-- Encryption decrypt-on-read verified wired (`resolve_photo_bytes` → `decrypt_or_plaintext`).
-
-No regressions introduced (no changes made).
+| Command | Result |
+|---------|--------|
+| `npm test` | **60 pass / 0 fail / 13 suites** — GREEN (regression check now passes) |
+| `npm run check:css` | CSS fresh |
+| `npm audit --audit-level=moderate` | 0 vulnerabilities |
+| `grep -nP '[^\x00-\x7F]' build.ps1 build.bat` | no matches — launchers are ASCII-only |
+| `cargo fmt --check` | clean (unchanged; build.ps1/build.bat not Rust) |
+| `cargo metadata --locked` | exit 0 (unchanged) |
 
 ---
 
 ## 5. Post-repair audit
 
-Fresh whole-project review complete. No new findings. Acceptance criteria in `CODEBASE_REVIEW.md` all met or explicitly blocked by documented host environment limits (Rust compile is CI-only).
+Fresh whole-project review complete after the fix:
+- No regressions: all 60 tests pass (was 59/1 pre-fix).
+- CSS fresh; npm audit 0.
+- The single MEDIUM finding (launcher non-ASCII) is resolved.
+- No new findings introduced by the one-character comment edit.
+- Acceptance criteria in CODEBASE_REVIEW.md all met or explicitly blocked by documented host limits (Rust compile is CI-only).
 
-### Remaining risks / known boundaries (documented in AGENTS.md, not defects)
+---
+
+## 6. Remaining risks / known boundaries (documented in AGENTS.md, not defects)
 
 1. Rust `cargo check/test/clippy/doc` cannot run on this host — CI is the compiler gate. Backend changes are statically reviewed only here.
-2. Pre-existing plaintext backups created before the encryption switch remain readable (key sits beside data by design per operator request; does not protect against an attacker with both key and data).
+2. Pre-existing plaintext backups (created before the encryption switch) remain readable.
 3. Photos encrypted individually; new photos added while DB is unencrypted remain plaintext until explicitly encrypted.
 4. Network needed on first build for WiX/NSIS provisioning (~40 MB) and WebView2 offline installer (~150 MB); app itself is offline-first.
 5. `.crypto-key/key.bin` is never committed; loss of the key means encrypted data is unrecoverable.
 
 ---
 
-## 6. Conclusion
+## 7. Conclusion
 
-**The project is complete and compliant.** All acceptance criteria met: tests green (57/0), CSS fresh, npm audit 0, data confinement enforced, portability contract honored, encryption at rest implemented, security hardening in place, documentation current. No repairs were necessary — the codebase was already in good shape. No further action required unless the user requests new functionality.
+**Workflow complete.** One real defect found (non-ASCII characters in `build.ps1` comments breaking the PS 5.1 codepage-safe regression check) and fixed with a two-character comment edit. All acceptance criteria now met: tests 60/0/13 green, CSS fresh, npm audit 0, data confinement intact, launchers ASCII-safe. No speculative features or unnecessary dependencies introduced. No further action required.

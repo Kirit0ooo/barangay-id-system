@@ -123,8 +123,8 @@ function Invoke-PatchVersionBump {
            Write = '(Version</div><div class="about-kv__value font-mono">)[^<]+(</div>)' },
         @{ File = 'README.md'; Label = 'README.md (About Version)'
            Read = '\*\*Version:\*\* ([^ ]+)'
-           # The About line is '**Version:** 1.0.10 · Identifier: ...' — the
-           # version token is followed by ' ·', not '**', so match only the
+           # The About line is '**Version:** 1.0.10 - Identifier: ...' - the
+           # version token is followed by ' -', not '**', so match only the
            # token (what Read captures) and replace it in place.
            Write = '(\*\*Version:\*\* )[^ ]+' }
     )
