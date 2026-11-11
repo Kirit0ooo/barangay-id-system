@@ -1,0 +1,19 @@
+# Line endings
+# -------------
+# Default: every text file uses LF in the repository (Linux / macOS / Unix).
+# Working-tree checkouts on Windows stay LF unless a rule below overrides.
+* text=auto eol=lf
+
+# Windows-specific scripts — CRLF line endings, checked out as CRLF on Windows.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files — do not touch line endings or run text normalization.
+*.ico binary
+*.png binary
+*.ttf binary
+*.svg binary
+*.db binary
+*.bin binary
+*.lock binary
