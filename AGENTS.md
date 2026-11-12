@@ -193,7 +193,7 @@ Validation: `npm test` 60/0/13, `npm run check:css` CSS fresh, `npm audit` 0 vul
 npm test
 ```
 - 7 suites: smoke, regression, golden-card, bulk-progress, logic, structure, preview-window
-- Must be **60 pass / 0 fail** before declaring any change complete.
+- Must be **64 pass / 0 fail / 15 suites / 7 files** before declaring any change complete.
 - `tests/logic.test.js` evaluates `frontend/src/js/shared/helpers.js` in a Function scope (real source, not a copy).
 - `tests/regression.test.js` reads project files by path — if you move a markdown/doc file, update the reference there too.
 
