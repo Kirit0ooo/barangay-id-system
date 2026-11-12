@@ -13,11 +13,11 @@
 !define APP_VERSION "1.0.22"
 !endif
 !define PACKAGE_NAME "com.barangay.idsystem"
-!define INSTALLER_ICON "../../barangay.ico"
+!define INSTALLER_ICON "../../../barangay.ico"
 
 RequestExecutionLevel admin
 InstallDir "$PROGRAMFILES64\${APP_NAME}"
-OutFile "..\..\target\x86_64-pc-windows-msvc\release\bundle\nsis\${APP_NAME} Setup ${APP_VERSION}.exe"
+OutFile "..\target\x86_64-pc-windows-msvc\release\bundle\nsis\${APP_NAME} Setup ${APP_VERSION}.exe"
 
 ; WebView2 Runtime constants
 !define WEBVIEW2_GUID "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
@@ -38,7 +38,7 @@ Var HasInternet
 !define MUI_UNICON "${INSTALLER_ICON}"
 
 !insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_LICENSE "LICENSE"
+!insertmacro MUI_PAGE_LICENSE "../../../LICENSE"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES
@@ -94,7 +94,7 @@ SectionEnd
 
 Section "Application" AppSec
     SetOutPath "$INSTDIR"
-    File "..\..\target\x86_64-pc-windows-msvc\release\${APP_EXE}"
+    File "..\target\x86_64-pc-windows-msvc\release\${APP_EXE}"
 
     ; Create shortcuts
     CreateShortCut "$SMPROGRAMS\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_EXE}" 0
