@@ -66,7 +66,7 @@ Section "WebView2 Runtime" WebView2Sec
 
             ; Download WebView2 bootstrapper using PowerShell
             FileOpen $R1 "$TEMP\Download-WebView2.ps1" w
-            FileWrite $R1 "$client = New-Object System.Net.WebClient$\r$\n$client.DownloadFile('${WEBVIEW2_BOOTSTRAPPER_URL}', '${WEBVIEW2_INSTALLER}')$\r$\n"
+            FileWrite $R1 "$$client = New-Object System.Net.WebClient$\r$\n$$client.DownloadFile('${WEBVIEW2_BOOTSTRAPPER_URL}', '${WEBVIEW2_INSTALLER}')$\r$\n"
             FileClose $R1
 
             ExecWait 'powershell -NoProfile -ExecutionPolicy Bypass -File "$TEMP\Download-WebView2.ps1"' $R0
@@ -83,12 +83,18 @@ Section "WebView2 Runtime" WebView2Sec
             Delete "${WEBVIEW2_INSTALLER}"
         ${Else}
             ; No internet - prompt user
-            MessageBox MB_YESNO|MB_ICONEXCLAMATION "WebView2 Runtime is not installed and no internet connection was detected."$\r$\n"$\r$\n"Barangay ID System requires WebView2 to render its user interface.$\r$\n"Without WebView2, the application may not start or function correctly.$\r$\n"$\r$\n"Do you want to continue installation without WebView2?" IDYES ContinueWithoutWebView IDNO AbortInstall
+            MessageBox MB_YESNO|MB_ICONEXCLAMATION "WebView2 Runtime is not installed and no internet connection was detected.$\r$\n$\r$\nBarangay ID System requires WebView2 to render its user interface.$\r$\nWithout WebView2, the application may not start or function correctly.$\r$\n$\r$\nDo you want to continue installation without WebView2?" IDYES ContinueWithoutWebView IDNO AbortInstall
 
 ContinueWithoutWebView:
             DetailPrint "User chose to continue without WebView2 Runtime."
+            Goto WebView2SecEnd
         ${EndIf}
     ${EndIf}
+
+AbortInstall:
+    SetErrorLevel 730
+
+WebView2SecEnd:
 SectionEnd
 
 Section "Application" AppSec
@@ -143,8 +149,10 @@ FoundSysDll:
     StrCpy $IsWebView2Installed true
     Goto DoneWebView2
 CheckReg:
-    ; Check 64-bit registry (NSIS is 32-bit, use x64.nsh macro)
-    ${RegReadHKLM64} $R0 "${WEBVIEW2_REG_KEY}" "pv"
+    ; Check 64-bit registry (NSIS is 32-bit, switch to 64-bit view)
+    SetRegView 64
+    ReadRegStr $R0 HKLM "${WEBVIEW2_REG_KEY}" "pv"
+    SetRegView 32
     ${If} $R0 != ""
         StrCpy $IsWebView2Installed true
     ${Else}
@@ -172,10 +180,6 @@ DoneWebView2:
             StrCpy $HasInternet false
         ${EndIf}
     ${EndIf}
-FunctionEnd
-
-Function AbortInstall
-    SetErrorLevel 730
 FunctionEnd
 
 ; ------------------------------------------------------------
