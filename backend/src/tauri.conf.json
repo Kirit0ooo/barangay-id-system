@@ -8,7 +8,7 @@
   },
   "package": {
     "productName": "Barangay-ID-Registration-System",
-    "version": "1.0.21"
+    "version": "1.0.22"
   },
   "tauri": {
     "allowlist": {
@@ -63,7 +63,7 @@
         "digestAlgorithm": "sha256",
         "timestampUrl": "",
         "webviewInstallMode": {
-          "type": "embedBootstrapper"
+          "type": "skip"
         },
         "nsis": {
           "installerIcon": "../../barangay.ico"

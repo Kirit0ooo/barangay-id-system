@@ -366,8 +366,40 @@ try {
         Write-Host '[Barangay ID] Removed portable EXE (NSIS-only output).' -ForegroundColor Green
     }
 
-    Write-Host "`n[Barangay ID] NSIS installer EXE output (bundle/nsis/):" -ForegroundColor Green
-    Get-ChildItem (Join-Path $Root 'backend/src\target\x86_64-pc-windows-msvc\release\bundle') -Recurse -File -ErrorAction SilentlyContinue |
+    # Replace Tauri's generated NSIS installer with our custom installer that
+    # performs WebView2 Runtime detection and conditional installation.
+    $nsisDir = Join-Path $Root 'backend/src\target\x86_64-pc-windows-msvc\release\bundle\nsis'
+    if (Test-Path $nsisDir) {
+        $tauriInstallers = @(Get-ChildItem $nsisDir -Filter '*.exe' -ErrorAction SilentlyContinue)
+        if ($tauriInstallers.Count -gt 0) {
+            Write-Host "[Barangay ID] Removing $($tauriInstallers.Count) Tauri-generated NSIS installer(s)..." -ForegroundColor Yellow
+            $tauriInstallers | Remove-Item -Force -ErrorAction Stop
+        }
+    }
+
+    # Read the current version from tauri.conf.json (already bumped by Invoke-PatchVersionBump).
+    $tauriConf = Join-Path $Root 'backend\src\tauri.conf.json'
+    $confText = [IO.File]::ReadAllText($tauriConf, [System.Text.Encoding]::UTF8)
+    $verMatch = [regex]::Match($confText, '"version": "([^"]+)"')
+    $appVersion = if ($verMatch.Success) { $verMatch.Groups[1].Value } else { '1.0.22' }
+
+    # Compile the custom NSIS installer with WebView2 detection logic.
+    $makensis = Join-Path $Root 'backend/src\target\.tauri\NSIS\Bin\makensis.exe'
+    $nsiScript = Join-Path $Root 'backend\src\installer\Barangay-Installer.nsi'
+    if (-not (Test-Path $makensis)) {
+        throw "makensis.exe not found at $makensis - NSIS tools missing, cannot build custom installer"
+    }
+    if (-not (Test-Path $nsiScript)) {
+        throw "Custom NSIS script not found at $nsiScript"
+    }
+
+    Write-Host '[Barangay ID] Compiling custom NSIS installer with WebView2 detection...' -ForegroundColor Cyan
+    $makensisArgs = @("/DAPP_VERSION=$appVersion", "/O$nsisDir", $nsiScript)
+    Invoke-SafeNative $makensis @makensisArgs | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw "makensis failed (exit $LASTEXITCODE) - custom NSIS installer could not be compiled" }
+
+    Write-Host "`n[Barangay ID] Custom NSIS installer output (bundle/nsis/):" -ForegroundColor Green
+    Get-ChildItem $nsisDir -Recurse -File -ErrorAction SilentlyContinue |
         Where-Object { $_.Extension -eq '.exe' } | Select-Object FullName, Length, LastWriteTime | Format-Table -AutoSize
 } catch [System.Management.Automation.PipelineStoppedException] {
     Write-Host 'Stopped by user (Ctrl+C) - normal exit.' -ForegroundColor Yellow
