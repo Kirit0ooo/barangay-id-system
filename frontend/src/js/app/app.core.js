@@ -4,6 +4,7 @@
 // the global app() function which returns window.appState.
 
 // Module-level helpers
+// eslint-disable-next-line no-unused-vars -- used in app.detail.js
 async function getPhotoAsDataUrl(src) {
   if (!src || src.trim() === '') return '';
   if (src.startsWith('data:')) return src;
@@ -25,11 +26,13 @@ async function getPhotoAsDataUrl(src) {
 // Mirrors backend residents.rs::SEARCH_RESULT_LIMIT — single source for the
 // search-cap toast and the bulk-print large-job warning. Do NOT hardcode
 // 2000 elsewhere; tests/regression.test.js pins equality with the backend.
+// eslint-disable-next-line no-unused-vars -- used by regression.test.js via search_context
 const SEARCH_RESULT_CAP = 2000;
 
 // M6: image-slot scheme allowlist (mirrors card-template.html SAFE_IMG).
 // Only offline-safe schemes may become an <img src>; anything else
 // (notably javascript:) is dropped instead of setAttribute'd.
+// eslint-disable-next-line no-unused-vars -- used in app.detail.js
 function isSafeImgSrc(v) {
     return typeof v === 'string' && /^(data:image\/|asset:|http:\/\/asset\.localhost|blob:|https?:\/\/)/.test(v);
 }
@@ -344,6 +347,59 @@ window.appState = {
             await API.openPath(logsDir);
             Logger.info('openLogsFolder', logsDir);
         } catch(e) { this.showToast('Failed to open logs folder: ' + e, 'error'); Logger.error('openLogsFolder failed', e); }
+    },
+    
+    // ─── Card Preview Modal ───────────────────────────────────────────
+    // Zoom configuration
+    PREVIEW_ZOOM_MIN: 50,
+    PREVIEW_ZOOM_MAX: 200,
+    PREVIEW_ZOOM_STEP: 25,
+    PREVIEW_ZOOM_DEFAULT: 100,
+    
+    openPreview(resident, filledHtml) {
+        this.previewResident = resident;
+        this.previewZoom = this.PREVIEW_ZOOM_DEFAULT;
+        this.previewOpen = true;
+        // Write the filled HTML to the iframe after the modal opens
+        this.$nextTick(() => {
+            const iframe = this.$refs.previewIframe;
+            if (iframe) {
+                iframe.contentDocument.open();
+                iframe.contentDocument.write(filledHtml);
+                iframe.contentDocument.close();
+            }
+        });
+        Logger.info('preview opened', resident?.resident_id);
+    },
+    
+    closePreview() {
+        this.previewOpen = false;
+        this.previewResident = null;
+        this.previewZoom = this.PREVIEW_ZOOM_DEFAULT;
+        Logger.info('preview closed');
+    },
+    
+    previewZoomIn() {
+        if (this.previewZoom < this.PREVIEW_ZOOM_MAX) {
+            this.previewZoom += this.PREVIEW_ZOOM_STEP;
+        }
+    },
+    
+    previewZoomOut() {
+        if (this.previewZoom > this.PREVIEW_ZOOM_MIN) {
+            this.previewZoom -= this.PREVIEW_ZOOM_STEP;
+        }
+    },
+    
+    previewZoomReset() {
+        this.previewZoom = this.PREVIEW_ZOOM_DEFAULT;
+    },
+    
+    printPreviewCard() {
+        const iframe = this.$refs.previewIframe;
+        if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.print();
+        }
     },
     
     // ─── Toast ─────────────────────────────────────────────────────────

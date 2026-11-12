@@ -316,42 +316,11 @@ Object.assign(window.appState, {
 
     async previewResidentCard(residentId) {
         try {
+            const resident = this.detailResident && this.detailResident.id === residentId
+                ? this.detailResident
+                : (this.searchResults && this.searchResults.find(r => r.id === residentId));
             const filled = await this.cardHtmlForResident(residentId);
-            let w = this.previewWindow;
-            if (!w || w.closed) {
-                w = window.open('about:blank', '_blank');
-                if (!w) {
-                    this.showToast('Popup blocked — printing directly instead', 'info');
-                    this.printFilledCard(filled);
-                    return;
-                }
-                this.previewWindow = w;
-            }
-            w.document.open(); w.document.write(filled); w.document.close();
-            w.document.body.classList.add('card-preview');
-            const wirePreviewButton = (id, fn) => {
-                const el = w.document.getElementById(id);
-                if (el) {
-                    el.addEventListener('click', fn);
-                }
-            };
-            wirePreviewButton('toolbar-print', () => {
-                try {
-                    w.print();
-                } catch (err) {
-                    Logger.error('preview print failed', err);
-                }
-            });
-            wirePreviewButton('toolbar-zoom-100', () => { this.__applyZoom(w, 1); });
-            wirePreviewButton('toolbar-zoom-fit', () => { this.__applyZoom(w, 0); });
-            wirePreviewButton('toolbar-close', () => {
-                try {
-                    w.close();
-                } catch (err) {
-                    Logger.error('preview close failed', err);
-                }
-            });
-            w.focus();
+            this.openPreview(resident, filled);
             Logger.info('previewResidentCard', residentId);
         } catch (e) {
             this.showToast('Card preview failed: ' + e, 'error');
