@@ -181,10 +181,3 @@ DoneWebView2:
         ${EndIf}
     ${EndIf}
 FunctionEnd
-
-; ------------------------------------------------------------
-; Uninstall functions
-; ------------------------------------------------------------
-Function .onUninit
-    ; Nothing special
-FunctionEnd
