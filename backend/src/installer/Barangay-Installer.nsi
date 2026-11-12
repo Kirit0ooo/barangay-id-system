@@ -66,9 +66,7 @@ Section "WebView2 Runtime" WebView2Sec
 
             ; Download WebView2 bootstrapper using PowerShell
             FileOpen $R1 "$TEMP\Download-WebView2.ps1" w
-            FileWrite $R1 "$client = New-Object System.Net.WebClient$$
-$client.DownloadFile('${WEBVIEW2_BOOTSTRAPPER_URL}', '${WEBVIEW2_INSTALLER}')$$
-"
+            FileWrite $R1 "$client = New-Object System.Net.WebClient$\r$\n$client.DownloadFile('${WEBVIEW2_BOOTSTRAPPER_URL}', '${WEBVIEW2_INSTALLER}')$\r$\n"
             FileClose $R1
 
             ExecWait 'powershell -NoProfile -ExecutionPolicy Bypass -File "$TEMP\Download-WebView2.ps1"' $R0
