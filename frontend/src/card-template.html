@@ -230,6 +230,9 @@
   body.card-preview .bleed .crop { display: none; }
   body.card-preview .bleed { padding: 1.2mm; margin: 0 auto; width: 101.7mm; border: .35mm dashed #4b5563; background: #fff; }
   body.card-preview { padding: 0; background: #fff; }
+  /* Two card boxes stack in one preview sheet — separate them so front and
+     back cards never touch on screen; print keeps its own page breaks. */
+  body.card-preview .sheet{display:flex; flex-direction:column; gap:5mm;}
 </style>
 </head>
 <body>
