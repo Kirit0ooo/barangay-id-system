@@ -5,7 +5,10 @@
 .DESCRIPTION
     Run:
       powershell -ExecutionPolicy Bypass -File .\build.ps1
-    Output stays isolated: backend/src/target/x86_64-pc-windows-msvc/release/bundle/nsis\ + portable exe
+    Output stays isolated: backend/src/target/x86_64-pc-windows-msvc/release/bundle/nsis\
+    The NSIS installer file is named Barangay ID System Setup <version>.exe
+    (e.g. Barangay ID System Setup 1.0.22.exe), per APP_NAME / APP_VERSION in
+    backend\src\installer\Barangay-Installer.nsi.
     Transcript: logs\build-YYYYMMDD-HHmmss.log
     Portable pins before any npm/cargo:
       NPM_CONFIG_CACHE=./.npm-cache CARGO_TARGET_DIR=./backend/src/target TMP/TEMP/TMPDIR=./tmp
@@ -74,11 +77,11 @@ Cargo.lock / frontend/src/index.html / README.md (see -NoBump) so the compiled b
 and installers carry the new version. The highest
 version found in those files is the base and the others are synced to it, so a tree whose manifests
 disagree repairs itself instead of aborting the build.
-Output: backend/src/target/x86_64-pc-windows-msvc/release/bundle/nsis/ and bundle/msi/ + portable exe
+Output: backend/src/target/x86_64-pc-windows-msvc/release/bundle/nsis/
 Transcript: logs/build-YYYYMMDD-HHmmss.log (isolated)
 Prereqs (fail-fast gate): Node 20+, npm, Rust MSVC, MSVC linker. Optional (warn-only, no action
 needed): NSIS 3 (Tauri downloads it into backend/src\target\.tauri on first build) and rustup.
-Future deps = one row in the $Prereqs table (Name/Level/Test/Fix). The MSI leg also downloads the WebView2 offline installer at build time (network needed).
+Future deps = one row in the $Prereqs table (Name/Level/Test/Fix).
 Portable pins BEFORE any npm/cargo: NPM_CONFIG_CACHE=./.npm-cache CARGO_TARGET_DIR=./backend/src/target TMP/TEMP/TMPDIR=./tmp
 Build includes get_cards_batch (bulk print) + optimize_database (E2) - no extra flags needed.
 For comment-based help: Get-Help .\build.ps1 -Detailed
