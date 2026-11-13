@@ -613,44 +613,6 @@
   </div>
  </div>
 
-  <!-- Card Preview Modal -->
-  <div x-show="previewOpen" x-cloak
-       class="preview-modal-overlay"
-       @keydown.escape.window="closePreview()"
-       role="dialog"
-       aria-modal="true"
-       aria-labelledby="preview-title"
-       aria-describedby="preview-desc">
-    <div class="preview-modal" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95">
-      <header class="preview-modal__header">
-        <div class="preview-modal__title-block">
-          <h2 id="preview-title" class="preview-modal__title">Card Preview</h2>
-          <p id="preview-desc" class="preview-modal__desc">Review the ID card before printing. Press <kbd>Ctrl</kbd>+<kbd>P</kbd> to print, <kbd>Esc</kbd> to close.</p>
-        </div>
-        <div class="preview-modal__controls">
-          <div class="preview-zoom" aria-label="Zoom controls">
-            <button @click="previewZoomOut" class="preview-zoom__btn" aria-label="Zoom out" :disabled="previewZoom <= 50" title="Zoom out (Ctrl+-)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
-            <span class="preview-zoom__value" x-text="previewZoom + '%'"></span>
-            <button @click="previewZoomIn" class="preview-zoom__btn" aria-label="Zoom in" :disabled="previewZoom >= 200" title="Zoom in (Ctrl+=)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
-            <button @click="previewZoomReset" class="preview-zoom__btn preview-zoom__btn--reset" aria-label="Reset zoom" title="Reset zoom (Ctrl+0)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg></button>
-          </div>
-          <button @click="closePreview" class="preview-modal__close" aria-label="Close preview"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-        </div>
-      </header>
-      <div class="preview-modal__toolbar">
-        <div class="preview-toolbar__left">
-          <span class="preview-toolbar__resident" x-text="previewResident ? (previewResident.last_name + ', ' + previewResident.first_name + (previewResident.suffix ? ' ' + previewResident.suffix : '')) : ''"></span>
-          <span class="preview-toolbar__id" x-text="previewResident ? previewResident.resident_id : ''"></span>
-        </div>
-        <div class="preview-toolbar__right">
-          <button @click="printPreviewCard" class="action-btn action-btn--primary preview-toolbar__btn" aria-label="Open print dialog"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Print</button>
-        </div>
-      </div>
-      <div class="preview-modal__canvas" :style="'transform: scale(' + (previewZoom / 100) + '); transform-origin: top center;'">
-        <iframe ref="previewIframe" class="preview-iframe" title="Card preview" sandbox="allow-scripts allow-same-origin" loading="lazy"></iframe>
-      </div>
-    </div>
-  </div>
  </template>
 
  <div x-show="!detailResident" class="card" x-cloak>
@@ -664,6 +626,44 @@
  </div>
  </div>
 
+
+ <!-- Dedicated Preview Page — elegant card preview with print toolbar and zoom -->
+ <div x-show="currentView === 'preview'" x-cloak class="preview-page flex flex-col h-full overflow-hidden">
+   <header class="preview-page__head flex items-center justify-between gap-4 px-6 py-4 border-b border-border bg-bg flex-shrink-0">
+     <button @click="closePreviewPage" class="preview-page__back action-btn action-btn--secondary" :aria-label="'Close preview for ' + (previewResident?.resident_id || '')">
+       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><line x1="12" y1="19" x2="5" y2="12"/></svg>
+       <span>Close</span>
+     </button>
+     <div class="preview-page__title-block flex flex-col min-w-0 flex-1">
+       <h2 class="preview-page__title font-extrabold tracking-tight text-slate-900">Card Preview</h2>
+       <p class="preview-page__subtitle font-mono text-xs text-slate-500" x-text="previewResident ? (previewResident.last_name + ', ' + previewResident.first_name + (previewResident.suffix ? ' ' + previewResident.suffix : '') + '  •  ' + previewResident.resident_id) : ''"></p>
+     </div>
+     <div class="preview-page__head-spacer"></div>
+   </header>
+
+   <div class="preview-page__toolbar flex items-center justify-between gap-4 px-6 py-3 border-b border-border bg-bg flex-shrink-0 flex-wrap">
+     <div class="preview-page__zoom inline-flex items-center gap-8 bg-surface border border-border rounded-md px-3 py-2">
+       <button @click="previewZoomOut" class="preview-page__zoom-btn" :disabled="previewZoom <= 50" aria-label="Zoom out" title="Zoom out (Ctrl+scroll down)">
+         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+       </button>
+       <span class="preview-page__zoom-value font-mono text-xs text-slate-900" x-text="previewZoom + '%'">100%</span>
+       <button @click="previewZoomIn" class="preview-page__zoom-btn" :disabled="previewZoom >= 200" aria-label="Zoom in" title="Zoom in (Ctrl+scroll up)">
+         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+       </button>
+       <button @click="previewZoomReset" class="preview-page__zoom-btn preview-page__zoom-btn--reset" aria-label="Reset zoom" title="Reset zoom (100%)">
+         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>
+       </button>
+     </div>
+     <div class="preview-page__actions inline-flex items-center gap-3">
+       <button @click="closePreviewPage" class="preview-page__close-btn action-btn action-btn--secondary" aria-label="Close preview">Close</button>
+       <button @click="printPreviewPage" class="preview-page__print-btn action-btn action-btn--primary" aria-label="Print preview card">Print Preview</button>
+     </div>
+   </div>
+
+   <div class="preview-page__canvas flex-1 overflow-auto bg-paper flex items-center justify-center p-6" :style="'transform: scale(' + (previewZoom / 100) + '); transform-origin: top center;'">
+     <iframe ref="previewIframe" class="preview-page__iframe" title="Card preview" sandbox="allow-scripts allow-same-origin" loading="lazy"></iframe>
+   </div>
+ </div>
  </main>
 
  <!-- Toast — semantic, no emoji -->

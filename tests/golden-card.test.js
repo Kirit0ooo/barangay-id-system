@@ -241,7 +241,7 @@ check('card payload seals watermark as data URL', appJs.includes("watermark: awa
 check('single render path: payload + template fill, no backend preview', appJs.includes('buildCardPayloadForRow') && appJs.includes('fillTemplateHtml') && appJs.includes('cardHtmlForResident') && !appJs.includes('previewIdCardHtml'));
 check('print path funnels through cardHtmlForResident (CR100 single template)', appJs.includes('this.printFilledCard(await this.cardHtmlForResident(residentId))'));
 check('preview path funnels through cardHtmlForResident (CR100 single template)', appJs.includes("const filled = await this.cardHtmlForResident(residentId)"));
-check('preview uses in-app modal with iframe (no popup window)', appJs.includes('this.openPreview(resident, filled)') && !appJs.includes('window.open'));
+check('preview uses dedicated page with iframe (no popup window)', appJs.includes('this.openPreviewPage(resident, filled)') && !appJs.includes('window.open'));
 check('no hardcoded card markup in app.js (template file is single source)', !appJs.includes('front-hdr') && !appJs.includes('qr-box') && !appJs.includes('valid-bar') && !appJs.includes('back-bleed') && !appJs.includes('sigbox'));
 check('bulk print loops with page breaks + counter', appJs.includes('printAllCards') && appJs.includes('page-break-after') && appJs.includes('bulkProgress.current'));
 check('no stale navy #050D78 anywhere', !idCardRs.includes('050D78') && !appJs.includes('050D78'));

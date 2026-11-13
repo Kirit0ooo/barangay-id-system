@@ -320,7 +320,7 @@ Object.assign(window.appState, {
                 ? this.detailResident
                 : (this.searchResults && this.searchResults.find(r => r.id === residentId));
             const filled = await this.cardHtmlForResident(residentId);
-            this.openPreview(resident, filled);
+            this.openPreviewPage(resident, filled);
             Logger.info('previewResidentCard', residentId);
         } catch (e) {
             this.showToast('Card preview failed: ' + e, 'error');

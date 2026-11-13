@@ -113,6 +113,9 @@ window.appState = {
     previousView: 'dashboard',
     detailResident: null,
     detailPhoto: null,
+    // Card-preview page state
+    previewHtml: '',
+    previewResident: null,
     // Single card-preview window reference. Reused across previews so opening
     // a resident's card preview never spawns multiple windows/tabs.
     previewWindow: null,
@@ -221,7 +224,8 @@ window.appState = {
             register: '#resident-id',
             search: '#search-input',
             settings: '.hub-back',
-            detail: '.hub-back'
+            detail: '.hub-back',
+            preview: '.preview-page__close-btn'
         }[view];
         if (!firstFocusable) return;
 
@@ -244,7 +248,8 @@ window.appState = {
             register: 'New Registration',
             search: 'Search Residents',
             settings: 'Settings',
-            detail: 'Resident Details'
+            detail: 'Resident Details',
+            preview: 'Card Preview'
         };
         return VIEW_TITLES[this.currentView] || 'Dashboard';
     },
@@ -267,6 +272,15 @@ window.appState = {
             // Wire keyboard focus management to view switches so the user's
             // place is never lost when Alpine toggles views via x-show.
             this.$watch('currentView', () => this.focusView());
+
+            // Ctrl+scroll zooms the card preview page (Ctrl+scroll up = in,
+            // down = out). Only active while on the preview view.
+            window.addEventListener('wheel', (e) => {
+                if (!e.ctrlKey || this.currentView !== 'preview') return;
+                e.preventDefault();
+                if (e.deltaY < 0) this.previewZoomIn();
+                else if (e.deltaY > 0) this.previewZoomOut();
+            }, { passive: false });
         } catch(e) {
             Logger.error('init failed:', e);
         }
@@ -356,11 +370,17 @@ window.appState = {
     PREVIEW_ZOOM_STEP: 25,
     PREVIEW_ZOOM_DEFAULT: 100,
     
-    openPreview(resident, filledHtml) {
+    // Open the dedicated card-preview page for a resident. Writes the filled
+    // card HTML into the iframe after the preview page mounts so the card
+    // renders inside the elegant preview shell.
+    openPreviewPage(resident, filledHtml) {
         this.previewResident = resident;
+        this.previewHtml = filledHtml;
         this.previewZoom = this.PREVIEW_ZOOM_DEFAULT;
-        this.previewOpen = true;
-        // Write the filled HTML to the iframe after the modal opens
+        this.previousView = this.currentView;
+        this.currentView = 'preview';
+        // Write the filled HTML into the iframe once Alpine has rendered the
+        // preview page (the iframe is only in the DOM when preview is visible).
         this.$nextTick(() => {
             const iframe = this.$refs.previewIframe;
             if (iframe) {
@@ -369,14 +389,15 @@ window.appState = {
                 iframe.contentDocument.close();
             }
         });
-        Logger.info('preview opened', resident?.resident_id);
+        Logger.info('preview page opened', resident?.resident_id);
     },
     
-    closePreview() {
-        this.previewOpen = false;
+    closePreviewPage() {
+        this.currentView = this.previousView || 'dashboard';
+        this.previewHtml = '';
         this.previewResident = null;
         this.previewZoom = this.PREVIEW_ZOOM_DEFAULT;
-        Logger.info('preview closed');
+        Logger.info('preview page closed');
     },
     
     previewZoomIn() {
@@ -395,11 +416,11 @@ window.appState = {
         this.previewZoom = this.PREVIEW_ZOOM_DEFAULT;
     },
     
-    printPreviewCard() {
-        const iframe = this.$refs.previewIframe;
-        if (iframe && iframe.contentWindow) {
-            iframe.contentWindow.print();
+    printPreviewPage() {
+        if (this.currentView !== 'preview') {
+            return;
         }
+        window.print();
     },
     
     // ─── Toast ─────────────────────────────────────────────────────────

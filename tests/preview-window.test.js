@@ -65,7 +65,7 @@ describe('previewResidentCard in-app modal', () => {
 
     await appState.previewResidentCard('R1');
 
-    assert.equal(appState.previewOpen, true, 'previewOpen is true');
+    assert.equal(appState.currentView, 'preview', 'preview page is open');
     assert.equal(appState.previewResident, undefined, 'previewResident is undefined when resident not found');
     assert.equal(appState.previewZoom, 100, 'previewZoom reset to 100');
     assert.equal(iframe.__writes().length, 1, 'card HTML written to iframe');
@@ -105,15 +105,16 @@ describe('previewResidentCard in-app modal', () => {
 });
 
 describe('preview modal controls', () => {
-  it('closePreview resets all preview state', () => {
+  it('closePreviewPage returns to previous view and resets state', () => {
     const appState = loadAppState();
-    appState.previewOpen = true;
+    appState.currentView = 'preview';
+    appState.previousView = 'dashboard';
     appState.previewResident = { id: 'R1' };
     appState.previewZoom = 150;
 
-    appState.closePreview();
+    appState.closePreviewPage();
 
-    assert.equal(appState.previewOpen, false, 'previewOpen is false');
+    assert.equal(appState.currentView, 'dashboard', 'returns to previous view');
     assert.equal(appState.previewResident, null, 'previewResident is null');
     assert.equal(appState.previewZoom, 100, 'previewZoom reset to 100');
   });
@@ -147,28 +148,30 @@ describe('preview modal controls', () => {
     assert.equal(appState.previewZoom, 100, 'zoom reset to 100');
   });
 
-  it('printPreviewCard calls iframe.contentWindow.print', () => {
+  it('printPreviewPage calls window.print', () => {
     const appState = loadAppState();
+    appState.currentView = 'preview';
     let printed = false;
-    const iframe = {
-      contentWindow: {
-        print: () => { printed = true; },
-      },
-    };
-    appState.$refs = { previewIframe: iframe };
+    const origPrint = globalThis.print;
+    globalThis.print = () => { printed = true; };
 
-    appState.printPreviewCard();
+    appState.printPreviewPage();
 
-    assert.equal(printed, true, 'iframe.contentWindow.print called');
+    assert.equal(printed, true, 'globalThis.print called');
+    globalThis.print = origPrint;
   });
 
-  it('printPreviewCard does nothing when iframe not ready', () => {
+  it('printPreviewPage does nothing when not on preview page', () => {
     const appState = loadAppState();
-    appState.$refs = { previewIframe: null };
+    let printed = false;
+    const origPrint = globalThis.print;
+    globalThis.print = () => { printed = true; };
 
-    // Should not throw
-    appState.printPreviewCard();
-    assert.ok(true, 'no error when iframe not ready');
+    appState.currentView = 'dashboard';
+    appState.printPreviewPage();
+
+    assert.equal(printed, false, 'globalThis.print not called when not on preview page');
+    globalThis.print = origPrint;
   });
 });
 
