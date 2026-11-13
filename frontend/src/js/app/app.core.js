@@ -420,6 +420,16 @@ window.appState = {
         if (this.currentView !== 'preview') {
             return;
         }
+        // Print only the card (card-template.html rendered in the iframe), not
+        // the preview shell. card-template.html's @media print hides the toolbar
+        // and shows the print note with the reminders list plus a timestamp
+        // (__stampPrintTime runs on beforeprint), so this yields clean printable
+        // CR100 output just like the previous print path.
+        const iframe = this.$refs.previewIframe;
+        if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.print();
+            return;
+        }
         window.print();
     },
     
