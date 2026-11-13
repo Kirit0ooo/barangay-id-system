@@ -3,7 +3,7 @@
 **Offline-first desktop app for registering Barangay residents, printing CR100 ID cards, and exporting Excel — built with Rust + Tauri + SQLite + Alpine.js.**  
 Target: **5,000–10,000 residents**, **Windows 10/11 primary** (Linux/WSL secondary), **100% offline**, portable on any local folder with zero cloud dependencies.
 
-> **Version:** 1.0.32 · **Identifier:** `com.barangay.idsystem` · **Edition:** Tauri 1.5
+> **Version:** 1.0.33 · **Identifier:** `com.barangay.idsystem` · **Edition:** Tauri 1.5
 
 ---
 
